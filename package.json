@@ -12,7 +12,9 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc",
     "start": "node dist/main.js",
-    "test": "tsc && node --test test/smoke.mjs"
+    "pretest": "tsc",
+    "test": "node --test test/smoke.mjs test/api.test.mjs test/batching.test.mjs test/relations.test.mjs test/validation.test.mjs test/generic-relations.test.mjs test/computed.test.mjs test/auth.test.mjs test/contract.test.mjs",
+    "test:mariadb": "node --test test/smoke-mariadb.mjs"
   },
   "dependencies": {
     "ajv": "^8.20.0",

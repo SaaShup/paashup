@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (SQLite)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build + run SQLite test suite
+        run: npm test
+
+  test-mariadb:
+    name: Test (MariaDB)
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: paasbox
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: '3306'
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_NAME: paasbox
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npm run build
+      - name: Install migration driver
+        run: pip install pymysql
+      - name: Apply migrations
+        run: >-
+          python3 migrations/migrate.py --dialect mariadb --database "$DB_NAME"
+          --host "$DB_HOST" --port "$DB_PORT" --user "$DB_USER" --password "$DB_PASSWORD"
+      - name: Run MariaDB repository tests
+        run: npm run test:mariadb
+
+  security:
+    name: Security (dependency CVEs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+
+      # 1) Native advisory check — fails on high/critical npm CVEs.
+      - name: npm audit
+        run: npm audit --audit-level=high
+
+      # 2) Trivy — broader CVE scan of the dependency tree (lockfile + node_modules).
+      - name: Install Trivy
+        run: curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b "$RUNNER_TEMP/bin"
+      - name: Trivy dependency scan
+        run: >-
+          "$RUNNER_TEMP/bin/trivy" fs --scanners vuln
+          --severity HIGH,CRITICAL --ignore-unfixed
+          --exit-code 1 --no-progress .

@@ -60,16 +60,60 @@ npm test                # build + SQLite test suite
 ruff check . && ruff format --check .   # Python scripts
 ```
 
-`npm run ci` ([scripts/ci.sh](scripts/ci.sh)) runs lint, tests, security, the
-Docker image smoke test, and the MariaDB suite (spinning an ephemeral container).
-Stages whose tools aren't installed (Docker, Ruff, Trivy) are **skipped** with a
-hint rather than failing. Run a subset with e.g. `scripts/ci.sh lint test`, or
-`SKIP_DOCKER=1 npm run ci` to skip the container stages.
+## Local CI
 
-CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs five jobs:
-**test** (SQLite), **test-mariadb** (service container), **lint** (ESLint +
-Prettier + Ruff), **security** (`npm audit` + Trivy CVE scan), and **build**
-(uploads the `dist/` artifact and builds + smoke-tests the Docker image).
+[`scripts/ci.sh`](scripts/ci.sh) (aliased as `npm run ci`) runs the **same five
+stages** as the GitHub Actions pipeline, so you can validate everything before you
+push — no GitHub round-trip needed.
+
+```bash
+npm run ci                     # run the whole pipeline
+scripts/ci.sh lint test        # run only specific stages
+SKIP_DOCKER=1 npm run ci       # skip the Docker / MariaDB stages
+```
+
+### Stages
+
+| Stage | What it runs | Requires |
+|-------|--------------|----------|
+| `lint` | Prettier `--check`, ESLint, Ruff (`format --check` + `check`) | Node; Ruff optional |
+| `test` | `npm test` — `tsc` build + the SQLite `node:test` suite | Node |
+| `security` | `npm audit --audit-level=high`, Trivy CVE scan | Node; Trivy optional |
+| `build` | `tsc`, then `docker build` + container smoke test (boot → migrate → POST/GET) | Node; Docker optional |
+| `test-mariadb` | ephemeral `mariadb:11` container, applies migrations, runs the MariaDB suite | Docker |
+
+### Behaviour
+
+- **Graceful skips.** A stage whose tool isn't installed (Docker, Ruff, Trivy) is
+  reported as `SKIP` with an install hint instead of failing — so the script runs
+  on any machine. Force-skip the container stages with `SKIP_DOCKER=1`.
+- **Subset runs.** Pass stage names as arguments: `scripts/ci.sh lint`,
+  `scripts/ci.sh test test-mariadb`, etc. With no arguments it runs all five.
+- **Self-contained MariaDB.** Migrations are applied by piping the `.mariadb.sql`
+  files into the container's own client (`docker exec`), so no host MariaDB client
+  or Python driver is needed. The ephemeral containers are removed on exit (even on
+  failure) via a cleanup trap.
+- **Honest result.** Each stage prints `✓` / `✗` / `SKIP`; the run ends with a
+  `passed / skipped / failed` summary and exits non-zero **only** on a real failure
+  (skips never fail the run).
+- **Dependencies.** Installs npm deps with `npm ci` only if `node_modules` is
+  missing; otherwise it uses what's already there.
+
+Example output:
+
+```text
+== summary ==
+passed:  prettier eslint ruff-format ruff-check test (sqlite) npm-audit build (tsc) docker-image test (mariadb)
+skipped: trivy
+CI PASSED
+```
+
+### GitHub Actions
+
+The same stages run in CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) as
+five jobs: **test** (SQLite), **test-mariadb** (service container), **lint**
+(ESLint + Prettier + Ruff), **security** (`npm audit` + Trivy CVE scan), and
+**build** (uploads the `dist/` artifact and builds + smoke-tests the Docker image).
 
 ## Features
 

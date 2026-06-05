@@ -20,7 +20,10 @@ const api = (m, p, b, token) =>
       ...(token ? { Authorization: `Token ${token}` } : {}),
     },
     body: b ? JSON.stringify(b) : undefined,
-  }).then(async (r) => ({ status: r.status, body: await r.text().then((t) => (t ? JSON.parse(t) : undefined)) }));
+  }).then(async (r) => ({
+    status: r.status,
+    body: await r.text().then((t) => (t ? JSON.parse(t) : undefined)),
+  }));
 
 before(async () => {
   rmSync(DB_FILE, { force: true });
@@ -38,7 +41,11 @@ before(async () => {
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${server.address().port}`;
 });
-after(async () => { await new Promise((r) => server.close(r)); await db.close(); rmSync(DB_FILE, { force: true }); });
+after(async () => {
+  await new Promise((r) => server.close(r));
+  await db.close();
+  rmSync(DB_FILE, { force: true });
+});
 
 test('no token -> 403', async () => {
   const r = await api('GET', '/api/dcim/manufacturers/');
@@ -54,7 +61,12 @@ test('invalid token -> 403', async () => {
 test('valid token -> 200 read and 201 write', async () => {
   const list = await api('GET', '/api/dcim/manufacturers/', null, rwKey);
   assert.equal(list.status, 200);
-  const created = await api('POST', '/api/dcim/manufacturers/', { name: 'Acme', slug: 'acme' }, rwKey);
+  const created = await api(
+    'POST',
+    '/api/dcim/manufacturers/',
+    { name: 'Acme', slug: 'acme' },
+    rwKey,
+  );
   assert.equal(created.status, 201);
 });
 

@@ -25,11 +25,25 @@ before(async () => {
   // One shared manufacturer/role/site/type, then N devices referencing them.
   const mfr = await repository(db, 'dcim_manufacturer').create({ name: 'Acme', slug: 'acme' });
   const role = await repository(db, 'dcim_device_role').create({ name: 'Leaf', slug: 'leaf' });
-  const site = await repository(db, 'dcim_site').create({ name: 'DC1', slug: 'dc1', status: 'active' });
-  const dt = await repository(db, 'dcim_device_type').create({ manufacturer: mfr.id, model: 'X', slug: 'x' });
+  const site = await repository(db, 'dcim_site').create({
+    name: 'DC1',
+    slug: 'dc1',
+    status: 'active',
+  });
+  const dt = await repository(db, 'dcim_device_type').create({
+    manufacturer: mfr.id,
+    model: 'X',
+    slug: 'x',
+  });
   const devices = repository(db, 'dcim_device');
   for (let i = 0; i < N; i++) {
-    await devices.create({ name: `dev${i}`, device_type: dt.id, role: role.id, site: site.id, status: 'active' });
+    await devices.create({
+      name: `dev${i}`,
+      device_type: dt.id,
+      role: role.id,
+      site: site.id,
+      status: 'active',
+    });
   }
 });
 
@@ -72,7 +86,8 @@ test('batched output is identical to per-row serialization', async () => {
   // Serialize each row with its own fresh serializer (no shared cache) = the
   // unbatched path; results must match the batched ones exactly.
   const perRow = [];
-  for (const r of page.results) perRow.push(await new Serializer(db, 'http://t').object('dcim_device', r));
+  for (const r of page.results)
+    perRow.push(await new Serializer(db, 'http://t').object('dcim_device', r));
 
   assert.deepEqual(batched, perRow);
 });

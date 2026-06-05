@@ -1,0 +1,5 @@
+dist/
+node_modules/
+# generated
+src/model/metadata.ts
+src/model/types.ts

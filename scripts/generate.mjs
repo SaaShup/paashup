@@ -12,11 +12,32 @@ const ENTITIES = model.entities;
 
 // Mirror of build_schema.py COMPUTED + TIMESTAMPS
 const COMPUTED = new Set([
-  'url', 'display', 'display_url', 'id', '_depth', 'family', 'children', 'depth',
-  'device_count', 'prefix_count', 'vlan_count', 'rack_count', 'ipaddress_count',
-  'virtualmachine_count', 'allocated_vcpus', 'allocated_memory', 'allocated_disk',
-  'cable_count', 'tenant_count', 'circuit_count', 'site_count', 'vrf_count',
-  'cluster_count', 'tagged_items', 'permissions', 'groups',
+  'url',
+  'display',
+  'display_url',
+  'id',
+  '_depth',
+  'family',
+  'children',
+  'depth',
+  'device_count',
+  'prefix_count',
+  'vlan_count',
+  'rack_count',
+  'ipaddress_count',
+  'virtualmachine_count',
+  'allocated_vcpus',
+  'allocated_memory',
+  'allocated_disk',
+  'cable_count',
+  'tenant_count',
+  'circuit_count',
+  'site_count',
+  'vrf_count',
+  'cluster_count',
+  'tagged_items',
+  'permissions',
+  'groups',
 ]);
 const TIMESTAMPS = new Set(['created', 'last_updated']);
 
@@ -45,8 +66,12 @@ function persistedColumns(ent) {
     const writable = !!f.writable && !f.read_only && !TIMESTAMPS.has(f.name);
     const required = !!f.required_on_create && !f.nullable;
     const meta = {
-      name: f.name, column, tsKind: tsKind(f),
-      nullable: !!f.nullable, writable, required,
+      name: f.name,
+      column,
+      tsKind: tsKind(f),
+      nullable: !!f.nullable,
+      writable,
+      required,
     };
     if (f.references) meta.references = f.references;
     if (f.kind === 'generic_type') meta.genericRel = f.name.replace(/_type$/, '');
@@ -118,10 +143,13 @@ tlines.push('export interface TableTypeMap {');
 for (const ent of Object.values(ENTITIES)) {
   const table = tableOf(ent);
   const ro = ent.origin === 'core' && !ent.write_schema;
-  const hasWrite = !ro && (persistedColumns(ent).some((c) => c.writable) || (ent.relations ?? []).length > 0);
+  const hasWrite =
+    !ro && (persistedColumns(ent).some((c) => c.writable) || (ent.relations ?? []).length > 0);
   const create = hasWrite ? `${ent.model}Create` : 'never';
   const update = hasWrite ? `${ent.model}Update` : 'never';
-  tlines.push(`  ${JSON.stringify(table)}: { row: ${ent.model}; create: ${create}; update: ${update} };`);
+  tlines.push(
+    `  ${JSON.stringify(table)}: { row: ${ent.model}; create: ${create}; update: ${update} };`,
+  );
 }
 tlines.push('}');
 tlines.push('');
@@ -140,12 +168,18 @@ for (const ent of Object.values(ENTITIES)) {
   const ro = ent.origin === 'core' && !ent.write_schema;
   mlines.push(`  ${JSON.stringify(table)}: {`);
   mlines.push(`    model: ${JSON.stringify(ent.model)}, table: ${JSON.stringify(table)},`);
-  mlines.push(`    section: ${JSON.stringify(ent.section)}, endpoint: ${JSON.stringify(ent.endpoint)},`);
+  mlines.push(
+    `    section: ${JSON.stringify(ent.section)}, endpoint: ${JSON.stringify(ent.endpoint)},`,
+  );
   mlines.push(`    origin: ${JSON.stringify(ent.origin)}, pk: 'id', readOnly: ${ro},`);
   mlines.push(`    objectType: ${JSON.stringify(ent.object_type)},`);
   const rels = (ent.relations ?? []).map((r) => {
-    const parts = [`name: ${JSON.stringify(r.name)}`, `kind: ${JSON.stringify(r.kind)}`,
-      `target: ${JSON.stringify(r.target)}`, `targetTable: ${JSON.stringify(r.target_table)}`];
+    const parts = [
+      `name: ${JSON.stringify(r.name)}`,
+      `kind: ${JSON.stringify(r.kind)}`,
+      `target: ${JSON.stringify(r.target)}`,
+      `targetTable: ${JSON.stringify(r.target_table)}`,
+    ];
     if (r.kind === 'm2m') {
       parts.push(`joinTable: ${JSON.stringify(r.join_table)}`);
       parts.push(`selfColumn: ${JSON.stringify(r.self_column)}`);
@@ -153,11 +187,16 @@ for (const ent of Object.values(ENTITIES)) {
     }
     return `{ ${parts.join(', ')} }`;
   });
-  mlines.push(`    relations: [${rels.length ? '\n      ' + rels.join(',\n      ') + ',\n    ' : ''}],`);
-  const counts = (ent.counts ?? []).map(
-    (c) => `{ name: ${JSON.stringify(c.name)}, table: ${JSON.stringify(c.table)}, column: ${JSON.stringify(c.column)} }`,
+  mlines.push(
+    `    relations: [${rels.length ? '\n      ' + rels.join(',\n      ') + ',\n    ' : ''}],`,
   );
-  mlines.push(`    counts: [${counts.length ? '\n      ' + counts.join(',\n      ') + ',\n    ' : ''}],`);
+  const counts = (ent.counts ?? []).map(
+    (c) =>
+      `{ name: ${JSON.stringify(c.name)}, table: ${JSON.stringify(c.table)}, column: ${JSON.stringify(c.column)} }`,
+  );
+  mlines.push(
+    `    counts: [${counts.length ? '\n      ' + counts.join(',\n      ') + ',\n    ' : ''}],`,
+  );
   mlines.push('    columns: [');
   for (const c of cols) {
     const parts = [

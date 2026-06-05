@@ -9,7 +9,11 @@ export type FieldErrors = Record<string, string[]>;
  * so clients get clear field-level errors instead of opaque constraint failures.
  * `partial` (PATCH) skips the required-field check.
  */
-export function validateWrite(meta: TableMeta, data: Record<string, unknown>, partial: boolean): void {
+export function validateWrite(
+  meta: TableMeta,
+  data: Record<string, unknown>,
+  partial: boolean,
+): void {
   const errors: FieldErrors = {};
   const add = (field: string, msg: string) => (errors[field] ??= []).push(msg);
   const byName = new Map(meta.columns.map((c) => [c.name, c]));
@@ -40,7 +44,8 @@ export function validateWrite(meta: TableMeta, data: Record<string, unknown>, pa
     }
     switch (col.tsKind) {
       case 'number':
-        if (typeof value !== 'number' || !Number.isFinite(value)) add(key, 'A valid number is required.');
+        if (typeof value !== 'number' || !Number.isFinite(value))
+          add(key, 'A valid number is required.');
         break;
       case 'boolean':
         if (typeof value !== 'boolean') add(key, 'Must be a valid boolean.');

@@ -10,7 +10,12 @@ const CHUNK = 900;
 const ident = (n: string) => '`' + n.replace(/`/g, '``') + '`';
 
 function slugify(s: string): string {
-  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100);
+  return s
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 100);
 }
 
 /** Accepted forms for a relation value in a request body. */
@@ -60,7 +65,11 @@ export async function readRelations(
 }
 
 /** Resolve request items to target ids (creating tags by name when missing). */
-async function resolveTargetIds(db: Db, rel: RelationMeta, items: RelationInput): Promise<number[]> {
+async function resolveTargetIds(
+  db: Db,
+  rel: RelationMeta,
+  items: RelationInput,
+): Promise<number[]> {
   const ids: number[] = [];
   for (const item of items) {
     if (typeof item === 'number') {
@@ -81,10 +90,10 @@ async function resolveTargetIds(db: Db, rel: RelationMeta, items: RelationInput)
       if (found) {
         ids.push(found.id);
       } else if (rel.kind === 'tags' && item.name) {
-        const res = await db.execute(
-          `INSERT INTO ${ident(TAG_TABLE)} (name, slug) VALUES (?, ?)`,
-          [item.name, slugify(item.name)],
-        );
+        const res = await db.execute(`INSERT INTO ${ident(TAG_TABLE)} (name, slug) VALUES (?, ?)`, [
+          item.name,
+          slugify(item.name),
+        ]);
         ids.push(res.insertId);
       } else {
         throw new ApiError(400, `Related ${rel.target} "${val}" does not exist`);
@@ -106,10 +115,10 @@ export async function syncRelation(
 ): Promise<void> {
   const targetIds = await resolveTargetIds(db, rel, items);
   if (rel.kind === 'tags') {
-    await db.execute(
-      `DELETE FROM ${ident(TAGGED_ITEM)} WHERE object_type = ? AND object_id = ?`,
-      [owner.objectType, ownerId],
-    );
+    await db.execute(`DELETE FROM ${ident(TAGGED_ITEM)} WHERE object_type = ? AND object_id = ?`, [
+      owner.objectType,
+      ownerId,
+    ]);
     for (const tagId of targetIds) {
       await db.execute(
         `INSERT INTO ${ident(TAGGED_ITEM)} (tag_id, object_type, object_id) VALUES (?, ?, ?)`,
@@ -117,7 +126,9 @@ export async function syncRelation(
       );
     }
   } else {
-    await db.execute(`DELETE FROM ${ident(rel.joinTable!)} WHERE ${ident(rel.selfColumn!)} = ?`, [ownerId]);
+    await db.execute(`DELETE FROM ${ident(rel.joinTable!)} WHERE ${ident(rel.selfColumn!)} = ?`, [
+      ownerId,
+    ]);
     for (const targetId of targetIds) {
       await db.execute(
         `INSERT INTO ${ident(rel.joinTable!)} (${ident(rel.selfColumn!)}, ${ident(rel.targetColumn!)}) VALUES (?, ?)`,

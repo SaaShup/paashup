@@ -28,12 +28,18 @@ export class SqliteDb implements Db {
     this.db.exec(sql);
   }
 
-  async query<T = Record<string, unknown>>(sql: string, params: readonly Param[] = []): Promise<T[]> {
+  async query<T = Record<string, unknown>>(
+    sql: string,
+    params: readonly Param[] = [],
+  ): Promise<T[]> {
     this.queries++;
     return this.db.prepare(sql).all(...bind(params)) as T[];
   }
 
-  async get<T = Record<string, unknown>>(sql: string, params: readonly Param[] = []): Promise<T | undefined> {
+  async get<T = Record<string, unknown>>(
+    sql: string,
+    params: readonly Param[] = [],
+  ): Promise<T | undefined> {
     this.queries++;
     return this.db.prepare(sql).get(...bind(params)) as T | undefined;
   }

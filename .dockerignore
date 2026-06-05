@@ -1,0 +1,11 @@
+.git
+node_modules
+dist
+test
+.github
+openapi
+datamodel
+*.sqlite
+*.sqlite-*
+*.db
+**/__pycache__

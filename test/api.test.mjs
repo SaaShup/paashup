@@ -51,7 +51,13 @@ test('POST creates and returns NetBox-shaped object', async () => {
 
 test('FK expands to a nested brief on read', async () => {
   const m = (await api('POST', '/api/dcim/manufacturers/', { name: 'Cisco', slug: 'cisco' })).body;
-  const dt = (await api('POST', '/api/dcim/device-types/', { manufacturer: m.id, model: 'C9300', slug: 'c9300' })).body;
+  const dt = (
+    await api('POST', '/api/dcim/device-types/', {
+      manufacturer: m.id,
+      model: 'C9300',
+      slug: 'c9300',
+    })
+  ).body;
   assert.equal(dt.status ?? 201, dt.status ?? 201);
   const got = (await api('GET', `/api/dcim/device-types/${dt.id}/`)).body;
   assert.equal(typeof got.manufacturer, 'object');
@@ -61,7 +67,13 @@ test('FK expands to a nested brief on read', async () => {
 });
 
 test('choice field renders as {value,label}', async () => {
-  const p = (await api('POST', '/api/ipam/prefixes/', { prefix: '10.0.0.0/8', status: 'active', is_pool: true })).body;
+  const p = (
+    await api('POST', '/api/ipam/prefixes/', {
+      prefix: '10.0.0.0/8',
+      status: 'active',
+      is_pool: true,
+    })
+  ).body;
   assert.deepEqual(p.status, { value: 'active', label: 'Active' });
   assert.equal(p.is_pool, true);
 });
@@ -92,8 +104,11 @@ test('filters and lookups work', async () => {
 });
 
 test('PATCH updates, DELETE removes', async () => {
-  const role = (await api('POST', '/api/ipam/roles/', { name: 'Loopbacks', slug: 'loopbacks' })).body;
-  const patched = await api('PATCH', `/api/ipam/roles/${role.id}/`, { description: 'Loopback prefixes' });
+  const role = (await api('POST', '/api/ipam/roles/', { name: 'Loopbacks', slug: 'loopbacks' }))
+    .body;
+  const patched = await api('PATCH', `/api/ipam/roles/${role.id}/`, {
+    description: 'Loopback prefixes',
+  });
   assert.equal(patched.status, 200);
   assert.equal(patched.body.description, 'Loopback prefixes');
   assert.equal(patched.body.name, 'Loopbacks');
@@ -105,7 +120,11 @@ test('PATCH updates, DELETE removes', async () => {
 });
 
 test('validation + constraint errors map to 4xx', async () => {
-  const badFk = await api('POST', '/api/dcim/device-types/', { manufacturer: 999999, model: 'X', slug: 'x' });
+  const badFk = await api('POST', '/api/dcim/device-types/', {
+    manufacturer: 999999,
+    model: 'X',
+    slug: 'x',
+  });
   assert.equal(badFk.status, 400);
   assert.match(badFk.body.detail, /Related object/);
 

@@ -26,9 +26,16 @@ after(async () => {
 });
 
 test('mariadb: create + retrieve with FK', async () => {
-  const m = await repository(db, 'dcim_manufacturer').create({ name: `Acme-${suffix}`, slug: `acme-${suffix}` });
+  const m = await repository(db, 'dcim_manufacturer').create({
+    name: `Acme-${suffix}`,
+    slug: `acme-${suffix}`,
+  });
   assert.equal(typeof m.id, 'number');
-  const dt = await repository(db, 'dcim_device_type').create({ manufacturer: m.id, model: 'Box', slug: `box-${suffix}` });
+  const dt = await repository(db, 'dcim_device_type').create({
+    manufacturer: m.id,
+    model: 'Box',
+    slug: `box-${suffix}`,
+  });
   assert.equal(dt.manufacturer, m.id);
 });
 
@@ -62,7 +69,12 @@ test('mariadb: update + destroy', async () => {
 
 test('mariadb: FK violation rejected', async () => {
   await assert.rejects(
-    () => repository(db, 'dcim_device_type').create({ manufacturer: 999999, model: 'Ghost', slug: `ghost-${suffix}` }),
+    () =>
+      repository(db, 'dcim_device_type').create({
+        manufacturer: 999999,
+        model: 'Ghost',
+        slug: `ghost-${suffix}`,
+      }),
     /foreign key|constraint/i,
   );
 });

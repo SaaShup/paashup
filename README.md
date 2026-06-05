@@ -38,6 +38,32 @@ PB_DIALECT=mariadb DB_NAME=paasbox DB_USER=paasbox DB_PASSWORD=secret npm start
 
 Then e.g. `curl localhost:8000/api/dcim/manufacturers/`.
 
+### Docker
+
+```bash
+docker build -t paasbox .
+# SQLite, auto-migrated on startup (data persisted in a volume):
+docker run -p 8000:8000 -e PB_MIGRATE=1 -v paasbox-data:/data paasbox
+```
+
+The image is multi-stage and runs as a non-root user. `PB_MIGRATE=1` applies the
+bundled SQLite migrations on boot (via `scripts/migrate-sqlite.mjs`, no Python in
+the image); for MariaDB, run migrations separately.
+
+### Development
+
+```bash
+npm run lint            # ESLint (TS/JS)
+npm run format          # Prettier write  (format:check in CI)
+npm test                # build + SQLite test suite
+ruff check . && ruff format --check .   # Python scripts
+```
+
+CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs five jobs:
+**test** (SQLite), **test-mariadb** (service container), **lint** (ESLint +
+Prettier + Ruff), **security** (`npm audit` + Trivy CVE scan), and **build**
+(uploads the `dist/` artifact and builds + smoke-tests the Docker image).
+
 ## Features
 
 - **82 entities → 94 tables** (DCIM/IPAM/Virtualization + the external entities they

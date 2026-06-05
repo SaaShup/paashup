@@ -24,8 +24,19 @@ export interface ListOptions {
 }
 
 /** Columns searched by the `q` parameter, when present on the entity. */
-const SEARCH_FIELDS = ['name', 'slug', 'description', 'comments', 'label', 'model',
-  'ssid', 'address', 'prefix', 'rd', 'dns_name'];
+const SEARCH_FIELDS = [
+  'name',
+  'slug',
+  'description',
+  'comments',
+  'label',
+  'model',
+  'ssid',
+  'address',
+  'prefix',
+  'rd',
+  'dns_name',
+];
 
 export interface Page<T> {
   results: T[];
@@ -105,13 +116,21 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
         `ORDER BY ${orderBy} LIMIT ${limit} OFFSET ${offset}`,
       params,
     );
-    return { results: rows.map((r) => this.rowOut(r) as TRow), count: Number(countRow?.n ?? 0), limit, offset };
+    return {
+      results: rows.map((r) => this.rowOut(r) as TRow),
+      count: Number(countRow?.n ?? 0),
+      limit,
+      offset,
+    };
   }
 
   private buildOrderBy(opts: ListOptions): string {
     const terms: string[] = [];
     if (opts.ordering) {
-      for (const raw of opts.ordering.split(',').map((s) => s.trim()).filter(Boolean)) {
+      for (const raw of opts.ordering
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)) {
         const desc = raw.startsWith('-');
         const name = desc ? raw.slice(1) : raw;
         const col = name === this.meta.pk ? this.meta.pk : this.byName.get(name)?.column;
@@ -119,7 +138,8 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
         terms.push(`${ident(col)} ${desc ? 'DESC' : 'ASC'}`);
       }
     } else if (opts.orderBy) {
-      const col = opts.orderBy === this.meta.pk ? this.meta.pk : this.byName.get(opts.orderBy)?.column;
+      const col =
+        opts.orderBy === this.meta.pk ? this.meta.pk : this.byName.get(opts.orderBy)?.column;
       if (!col) throw new ApiError(400, `Unknown ordering field: ${opts.orderBy}`);
       terms.push(`${ident(col)} ${opts.descending ? 'DESC' : 'ASC'}`);
     }
@@ -167,7 +187,8 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
   /** INSERT scalar columns only; returns the new id. */
   private async insertScalar(data: Record<string, unknown>): Promise<number> {
     const { columns, values } = this.writeColumns(data);
-    if (!columns.length) throw new ApiError(400, `No writable fields supplied for ${this.meta.model}`);
+    if (!columns.length)
+      throw new ApiError(400, `No writable fields supplied for ${this.meta.model}`);
     const placeholders = columns.map(() => '?').join(', ');
     const res = await this.db.execute(
       `INSERT INTO ${ident(this.meta.table)} (${columns.map(ident).join(', ')}) VALUES (${placeholders})`,
@@ -203,43 +224,70 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
     const params: Param[] = [];
     for (const [key, value] of Object.entries(opts.filters ?? {})) {
       const [name, lookup = ''] = key.split('__', 2) as [string, string?];
-      const col = name === this.meta.pk
-        ? ({ column: this.meta.pk, tsKind: 'number' } as ColumnMeta)
-        : this.byName.get(name);
+      const col =
+        name === this.meta.pk
+          ? ({ column: this.meta.pk, tsKind: 'number' } as ColumnMeta)
+          : this.byName.get(name);
       if (!col) throw new ApiError(400, `Unknown filter field "${name}" for ${this.meta.model}`);
       const c = ident(col.column);
       switch (lookup) {
         case '':
           if (value === null) clauses.push(`${c} IS NULL`);
-          else { clauses.push(`${c} = ?`); params.push(this.valueIn(col, value as Param)); }
+          else {
+            clauses.push(`${c} = ?`);
+            params.push(this.valueIn(col, value as Param));
+          }
           break;
         case 'n':
-          clauses.push(`${c} <> ?`); params.push(this.valueIn(col, value as Param)); break;
+          clauses.push(`${c} <> ?`);
+          params.push(this.valueIn(col, value as Param));
+          break;
         case 'in': {
           const arr = Array.isArray(value) ? value : String(value).split(',');
-          if (!arr.length) { clauses.push('1 = 0'); break; }
+          if (!arr.length) {
+            clauses.push('1 = 0');
+            break;
+          }
           clauses.push(`${c} IN (${arr.map(() => '?').join(', ')})`);
           for (const v of arr) params.push(this.valueIn(col, v as Param));
           break;
         }
-        case 'gt': case 'gte': case 'lt': case 'lte': {
+        case 'gt':
+        case 'gte':
+        case 'lt':
+        case 'lte': {
           const op = { gt: '>', gte: '>=', lt: '<', lte: '<=' }[lookup]!;
-          clauses.push(`${c} ${op} ?`); params.push(this.valueIn(col, value as Param)); break;
+          clauses.push(`${c} ${op} ?`);
+          params.push(this.valueIn(col, value as Param));
+          break;
         }
-        case 'ic': clauses.push(`${c} LIKE ?`); params.push(`%${value}%`); break;
-        case 'isw': clauses.push(`${c} LIKE ?`); params.push(`${value}%`); break;
-        case 'iew': clauses.push(`${c} LIKE ?`); params.push(`%${value}`); break;
+        case 'ic':
+          clauses.push(`${c} LIKE ?`);
+          params.push(`%${value}%`);
+          break;
+        case 'isw':
+          clauses.push(`${c} LIKE ?`);
+          params.push(`${value}%`);
+          break;
+        case 'iew':
+          clauses.push(`${c} LIKE ?`);
+          params.push(`%${value}`);
+          break;
         case 'empty':
-          clauses.push(String(value) === 'true' ? `(${c} IS NULL OR ${c} = '')` : `(${c} IS NOT NULL AND ${c} <> '')`);
+          clauses.push(
+            String(value) === 'true'
+              ? `(${c} IS NULL OR ${c} = '')`
+              : `(${c} IS NOT NULL AND ${c} <> '')`,
+          );
           break;
         default:
           throw new ApiError(400, `Unknown lookup "${lookup}" on field "${name}"`);
       }
     }
     if (opts.q) {
-      const cols = SEARCH_FIELDS
-        .map((n) => this.byName.get(n))
-        .filter((col): col is ColumnMeta => !!col && col.tsKind === 'string' && !col.enum);
+      const cols = SEARCH_FIELDS.map((n) => this.byName.get(n)).filter(
+        (col): col is ColumnMeta => !!col && col.tsKind === 'string' && !col.enum,
+      );
       if (cols.length) {
         clauses.push('(' + cols.map((col) => `${ident(col.column)} LIKE ?`).join(' OR ') + ')');
         for (const _ of cols) params.push(`%${opts.q}%`);

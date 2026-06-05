@@ -39,7 +39,9 @@ after(async () => {
 
 test('tags auto-create by name and serialize as briefs', async () => {
   const created = await api('POST', '/api/dcim/manufacturers/', {
-    name: 'Acme', slug: 'acme', tags: [{ name: 'Core' }, { name: 'Edge' }],
+    name: 'Acme',
+    slug: 'acme',
+    tags: [{ name: 'Core' }, { name: 'Edge' }],
   });
   assert.equal(created.status, 201);
   assert.equal(created.body.tags.length, 2);
@@ -54,13 +56,23 @@ test('tags auto-create by name and serialize as briefs', async () => {
 
 test('tags can be attached by existing id and slug, and replaced', async () => {
   const t1 = (await api('POST', '/api/extras/tags/', { name: 'Prod', slug: 'prod' })).body;
-  const m = (await api('POST', '/api/dcim/manufacturers/', { name: 'Beta', slug: 'beta', tags: [t1.id] })).body;
-  assert.deepEqual(m.tags.map((t) => t.id), [t1.id]);
+  const m = (
+    await api('POST', '/api/dcim/manufacturers/', { name: 'Beta', slug: 'beta', tags: [t1.id] })
+  ).body;
+  assert.deepEqual(
+    m.tags.map((t) => t.id),
+    [t1.id],
+  );
 
   // PATCH replaces the whole set (NetBox semantics)
   const t2 = (await api('POST', '/api/extras/tags/', { name: 'Stage', slug: 'stage' })).body;
-  const patched = await api('PATCH', `/api/dcim/manufacturers/${m.id}/`, { tags: [{ slug: 'stage' }] });
-  assert.deepEqual(patched.body.tags.map((t) => t.id), [t2.id]);
+  const patched = await api('PATCH', `/api/dcim/manufacturers/${m.id}/`, {
+    tags: [{ slug: 'stage' }],
+  });
+  assert.deepEqual(
+    patched.body.tags.map((t) => t.id),
+    [t2.id],
+  );
 
   // clearing with []
   const cleared = await api('PATCH', `/api/dcim/manufacturers/${m.id}/`, { tags: [] });
@@ -68,7 +80,13 @@ test('tags can be attached by existing id and slug, and replaced', async () => {
 });
 
 test('PATCH without tags leaves them untouched', async () => {
-  const m = (await api('POST', '/api/dcim/manufacturers/', { name: 'Gamma', slug: 'gamma', tags: [{ name: 'Keep' }] })).body;
+  const m = (
+    await api('POST', '/api/dcim/manufacturers/', {
+      name: 'Gamma',
+      slug: 'gamma',
+      tags: [{ name: 'Keep' }],
+    })
+  ).body;
   const patched = await api('PATCH', `/api/dcim/manufacturers/${m.id}/`, { description: 'x' });
   assert.equal(patched.body.tags.length, 1);
   assert.equal(patched.body.tags[0].display, 'Keep');
@@ -77,7 +95,9 @@ test('PATCH without tags leaves them untouched', async () => {
 test('generic M2M attach (VRF.import_targets) with briefs', async () => {
   const rtA = (await api('POST', '/api/ipam/route-targets/', { name: '65000:1' })).body;
   const rtB = (await api('POST', '/api/ipam/route-targets/', { name: '65000:2' })).body;
-  const vrf = (await api('POST', '/api/ipam/vrfs/', { name: 'blue', import_targets: [rtA.id, rtB.id] })).body;
+  const vrf = (
+    await api('POST', '/api/ipam/vrfs/', { name: 'blue', import_targets: [rtA.id, rtB.id] })
+  ).body;
   assert.equal(vrf.import_targets.length, 2);
   assert.deepEqual(vrf.import_targets.map((r) => r.display).sort(), ['65000:1', '65000:2']);
   assert.deepEqual(vrf.export_targets, []);
@@ -87,26 +107,46 @@ test('generic M2M attach (VRF.import_targets) with briefs', async () => {
 });
 
 test('bidirectional M2M: ASN.sites and Site.asns share one table', async () => {
-  const site = (await api('POST', '/api/dcim/sites/', { name: 'DC9', slug: 'dc9', status: 'active' })).body;
-  const asn = (await api('POST', '/api/ipam/asns/', { asn: 64512, rir: null, sites: [site.id] })).body;
-  assert.deepEqual(asn.sites.map((s) => s.id), [site.id]);
+  const site = (
+    await api('POST', '/api/dcim/sites/', { name: 'DC9', slug: 'dc9', status: 'active' })
+  ).body;
+  const asn = (await api('POST', '/api/ipam/asns/', { asn: 64512, rir: null, sites: [site.id] }))
+    .body;
+  assert.deepEqual(
+    asn.sites.map((s) => s.id),
+    [site.id],
+  );
 
   // reading from the reverse side reflects the same link
   const siteGot = await api('GET', `/api/dcim/sites/${site.id}/`);
-  assert.deepEqual(siteGot.body.asns.map((a) => a.id), [asn.id]);
+  assert.deepEqual(
+    siteGot.body.asns.map((a) => a.id),
+    [asn.id],
+  );
 });
 
 test('invalid relation input is rejected', async () => {
-  const badArr = await api('POST', '/api/dcim/manufacturers/', { name: 'E1', slug: 'e1', tags: 'nope' });
+  const badArr = await api('POST', '/api/dcim/manufacturers/', {
+    name: 'E1',
+    slug: 'e1',
+    tags: 'nope',
+  });
   assert.equal(badArr.status, 400);
 
-  const missingRt = await api('POST', '/api/ipam/vrfs/', { name: 'red', import_targets: [{ slug: 'does-not-exist' }] });
+  const missingRt = await api('POST', '/api/ipam/vrfs/', {
+    name: 'red',
+    import_targets: [{ slug: 'does-not-exist' }],
+  });
   assert.equal(missingRt.status, 400);
 });
 
 test('list endpoint serializes relations in bounded queries', async () => {
   for (let i = 0; i < 20; i++) {
-    await api('POST', '/api/ipam/roles/', { name: `R${i}`, slug: `r${i}`, tags: [{ name: 'Shared' }] });
+    await api('POST', '/api/ipam/roles/', {
+      name: `R${i}`,
+      slug: `r${i}`,
+      tags: [{ name: 'Shared' }],
+    });
   }
   db.queries = 0;
   const r = await api('GET', '/api/ipam/roles/?limit=50');

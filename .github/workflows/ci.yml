@@ -68,6 +68,30 @@ jobs:
       - name: Run MariaDB repository tests
         run: npm run test:mariadb
 
+  lint:
+    name: Lint & format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - name: Prettier (format check)
+        run: npm run format:check
+      - name: ESLint
+        run: npm run lint
+      - name: Install Ruff
+        run: pip install ruff
+      - name: Ruff format check
+        run: ruff format --check .
+      - name: Ruff lint
+        run: ruff check .
+
   security:
     name: Security (dependency CVEs)
     runs-on: ubuntu-latest
@@ -91,3 +115,42 @@ jobs:
           "$RUNNER_TEMP/bin/trivy" fs --scanners vuln
           --severity HIGH,CRITICAL --ignore-unfixed
           --exit-code 1 --no-progress .
+
+  build:
+    name: Build artifact + Docker image
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Build (tsc)
+        run: npm run build
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+      - name: Build Docker image
+        run: docker build -t paasbox:ci .
+      - name: Smoke-test image (migrate + serve + request)
+        run: |
+          docker run -d --name pbx -e PB_MIGRATE=1 -p 8000:8000 paasbox:ci
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" localhost:8000/api/dcim/manufacturers/ || echo 000)
+            if [ "$code" = "200" ]; then echo "API up (HTTP $code)"; break; fi
+            sleep 1
+          done
+          test "$code" = "200" || { echo "image smoke test failed"; docker logs pbx; exit 1; }
+          curl -sf -X POST localhost:8000/api/dcim/manufacturers/ \
+            -H 'Content-Type: application/json' -d '{"name":"Acme","slug":"acme"}' >/dev/null
+          curl -sf "localhost:8000/api/dcim/manufacturers/?limit=1" | grep -q '"count":1'
+          echo "Docker image smoke test passed"
+      - name: Container logs (always)
+        if: always()
+        run: docker logs pbx 2>/dev/null || true

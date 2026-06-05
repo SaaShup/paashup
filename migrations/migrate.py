@@ -23,7 +23,12 @@ Usage:
 
 Environment fallbacks: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, DB_SOCKET.
 """
-import argparse, os, re, sys, subprocess, glob
+
+import argparse
+import glob
+import os
+import subprocess
+import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -41,11 +46,14 @@ def discover(dialect):
 # --------------------------------------------------------------------- SQLite
 def run_sqlite(args):
     import sqlite3
+
     con = sqlite3.connect(args.database)
     con.execute("PRAGMA foreign_keys = ON")
-    con.execute("CREATE TABLE IF NOT EXISTS schema_migrations ("
-                "version TEXT PRIMARY KEY, "
-                "applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))")
+    con.execute(
+        "CREATE TABLE IF NOT EXISTS schema_migrations ("
+        "version TEXT PRIMARY KEY, "
+        "applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))"
+    )
     con.commit()
     applied = {r[0] for r in con.execute("SELECT version FROM schema_migrations")}
     migs = discover(args.dialect)
@@ -85,25 +93,34 @@ def _maria_conn_params(args):
 def run_mariadb(args):
     p = _maria_conn_params(args)
     try:
-        import pymysql                      # optional, cleaner path
+        import pymysql  # optional, cleaner path
+
         driver = "pymysql"
     except ImportError:
         driver = "cli"
 
     def ensure_and_applied():
-        ddl = ("CREATE TABLE IF NOT EXISTS schema_migrations ("
-               "version VARCHAR(255) PRIMARY KEY, "
-               "applied_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)"
-               ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
+        ddl = (
+            "CREATE TABLE IF NOT EXISTS schema_migrations ("
+            "version VARCHAR(255) PRIMARY KEY, "
+            "applied_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)"
+            ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
+        )
         if driver == "pymysql":
-            cn = pymysql.connect(host=p["host"], port=p["port"], user=p["user"],
-                                 password=p["password"], database=p["database"],
-                                 unix_socket=p["socket"])
+            cn = pymysql.connect(
+                host=p["host"],
+                port=p["port"],
+                user=p["user"],
+                password=p["password"],
+                database=p["database"],
+                unix_socket=p["socket"],
+            )
             with cn.cursor() as c:
                 c.execute(ddl)
                 c.execute("SELECT version FROM schema_migrations")
                 applied = {r[0] for r in c.fetchall()}
-            cn.commit(); cn.close()
+            cn.commit()
+            cn.close()
             return applied
         else:
             _cli_exec(p, ddl)
@@ -123,9 +140,15 @@ def run_mariadb(args):
         sql = open(path).read()
         try:
             if driver == "pymysql":
-                cn = pymysql.connect(host=p["host"], port=p["port"], user=p["user"],
-                                     password=p["password"], database=p["database"],
-                                     unix_socket=p["socket"], autocommit=True)
+                cn = pymysql.connect(
+                    host=p["host"],
+                    port=p["port"],
+                    user=p["user"],
+                    password=p["password"],
+                    database=p["database"],
+                    unix_socket=p["socket"],
+                    autocommit=True,
+                )
                 with cn.cursor() as c:
                     for stmt in _split_statements(sql):
                         c.execute(stmt)
@@ -166,8 +189,10 @@ def _cli_query(p, sql):
 
 
 def _which(name):
-    return any(os.access(os.path.join(d, name), os.X_OK)
-               for d in os.environ.get("PATH", "").split(os.pathsep))
+    return any(
+        os.access(os.path.join(d, name), os.X_OK)
+        for d in os.environ.get("PATH", "").split(os.pathsep)
+    )
 
 
 def _split_statements(sql):
@@ -199,8 +224,10 @@ def main():
     ap.add_argument("--dialect", required=True, choices=["sqlite", "mariadb"])
     ap.add_argument("--database", help="sqlite file path, or mariadb database name")
     ap.add_argument("--status", action="store_true", help="show applied/pending and exit")
-    ap.add_argument("--host"); ap.add_argument("--port")
-    ap.add_argument("--user"); ap.add_argument("--password")
+    ap.add_argument("--host")
+    ap.add_argument("--port")
+    ap.add_argument("--user")
+    ap.add_argument("--password")
     ap.add_argument("--socket")
     args = ap.parse_args()
     if not args.database and args.dialect == "sqlite":

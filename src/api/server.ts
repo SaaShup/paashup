@@ -9,8 +9,6 @@ import { Serializer } from './serializer.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
-const RESERVED = new Set(['limit', 'offset', 'ordering', 'q', 'format']);
-
 /** endpoint path -> table name (e.g. "/api/dcim/devices/" -> "dcim_device"). */
 const COLLECTIONS = new Map<string, string>();
 for (const [table, meta] of Object.entries(tables)) COLLECTIONS.set(meta.endpoint, table);
@@ -101,7 +99,13 @@ function toApiError(err: unknown): ApiError {
   return new ApiError(500, 'Internal server error');
 }
 
-function pageLink(base: string, endpoint: string, sp: URLSearchParams, offset: number, limit: number): string {
+function pageLink(
+  base: string,
+  endpoint: string,
+  sp: URLSearchParams,
+  offset: number,
+  limit: number,
+): string {
   const q = new URLSearchParams(sp);
   q.set('limit', String(limit));
   q.set('offset', String(offset));
@@ -139,10 +143,26 @@ export function createApiServer(opts: ServerOptions): http.Server {
           const listOpts = parseQuery(url.searchParams);
           const page = await repo.list(listOpts);
           const results = await ser.objects(route.table, page.results);
-          const next = page.offset + page.limit < page.count
-            ? pageLink(baseUrl, meta.endpoint, url.searchParams, page.offset + page.limit, page.limit) : null;
-          const previous = page.offset > 0
-            ? pageLink(baseUrl, meta.endpoint, url.searchParams, Math.max(0, page.offset - page.limit), page.limit) : null;
+          const next =
+            page.offset + page.limit < page.count
+              ? pageLink(
+                  baseUrl,
+                  meta.endpoint,
+                  url.searchParams,
+                  page.offset + page.limit,
+                  page.limit,
+                )
+              : null;
+          const previous =
+            page.offset > 0
+              ? pageLink(
+                  baseUrl,
+                  meta.endpoint,
+                  url.searchParams,
+                  Math.max(0, page.offset - page.limit),
+                  page.limit,
+                )
+              : null;
           return send(res, 200, { count: page.count, next, previous, results });
         }
         if (method === 'POST') {

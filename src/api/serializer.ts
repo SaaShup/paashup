@@ -30,12 +30,34 @@ function genericGroups(meta: TableMeta): { accessor: string; typeCol: string; id
 }
 
 /** Columns to include when an entity is rendered as a nested brief. */
-const BRIEF_FIELDS = ['name', 'slug', 'description', 'model', 'rd', 'prefix',
-  'address', 'vid', 'asn', 'ssid', 'username', 'label'];
+const BRIEF_FIELDS = [
+  'name',
+  'slug',
+  'description',
+  'model',
+  'rd',
+  'prefix',
+  'address',
+  'vid',
+  'asn',
+  'ssid',
+  'username',
+  'label',
+];
 
 /** Columns used (in order of preference) to compute the `display` string. */
-const DISPLAY_FIELDS = ['name', 'model', 'prefix', 'address', 'rd', 'vid', 'ssid',
-  'username', 'slug', 'label'];
+const DISPLAY_FIELDS = [
+  'name',
+  'model',
+  'prefix',
+  'address',
+  'rd',
+  'vid',
+  'ssid',
+  'username',
+  'slug',
+  'label',
+];
 
 export type Serialized = Record<string, unknown>;
 
@@ -44,10 +66,14 @@ const metaOf = (table: string) => tables[table as keyof typeof tables] as TableM
 /** NetBox blank value for a non-nullable column with no stored value. */
 function scalarDefault(col: { tsKind: string }): unknown {
   switch (col.tsKind) {
-    case 'json': return {};
-    case 'boolean': return false;
-    case 'number': return 0;
-    default: return '';
+    case 'json':
+      return {};
+    case 'boolean':
+      return false;
+    case 'number':
+      return 0;
+    default:
+      return '';
   }
 }
 
@@ -131,7 +157,9 @@ export class Serializer {
 
     for (const [target, ids] of wanted) {
       const tmeta = metaOf(target);
-      const found = await new Repository<Record<string, unknown>>(this.db, tmeta).retrieveMany([...ids]);
+      const found = await new Repository<Record<string, unknown>>(this.db, tmeta).retrieveMany([
+        ...ids,
+      ]);
       const seen = new Set<number>();
       for (const r of found) {
         const id = Number(r[tmeta.pk]);

@@ -11,14 +11,16 @@ import { createApiServer } from '../dist/api/server.js';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const DB_FILE = join(ROOT, 'test', '.contract.sqlite');
-const spec = JSON.parse(readFileSync(join(ROOT, 'openapi', 'netbox-dcim-ipam-virt.openapi.json'), 'utf8'));
+const spec = JSON.parse(
+  readFileSync(join(ROOT, 'openapi', 'netbox-dcim-ipam-virt.openapi.json'), 'utf8'),
+);
 
 // OpenAPI 3.0 `nullable: true` -> JSON-Schema-compatible `anyOf [..., {type:null}]`.
 function tx(node) {
   if (Array.isArray(node)) return node.map(tx);
   if (node && typeof node === 'object') {
     if (node.nullable === true) {
-      const { nullable, ...rest } = node;
+      const { nullable: _nullable, ...rest } = node;
       return { anyOf: [tx(rest), { type: 'null' }] };
     }
     const o = {};
@@ -35,7 +37,8 @@ const validator = (schemaName) => ajv.compile({ $ref: `nb#/components/schemas/${
 let db, server, base;
 const api = async (m, p, b) => {
   const res = await fetch(`${base}${p}`, {
-    method: m, headers: b ? { 'Content-Type': 'application/json' } : undefined,
+    method: m,
+    headers: b ? { 'Content-Type': 'application/json' } : undefined,
     body: b ? JSON.stringify(b) : undefined,
   });
   return { status: res.status, body: await res.json() };
@@ -49,7 +52,11 @@ before(async () => {
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${server.address().port}`;
 });
-after(async () => { await new Promise((r) => server.close(r)); await db.close(); rmSync(DB_FILE, { force: true }); });
+after(async () => {
+  await new Promise((r) => server.close(r));
+  await db.close();
+  rmSync(DB_FILE, { force: true });
+});
 
 // (endpoint, OpenAPI read-schema component, minimal create body)
 const CASES = [

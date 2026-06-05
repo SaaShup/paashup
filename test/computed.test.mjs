@@ -12,7 +12,8 @@ const DB_FILE = join(ROOT, 'test', '.cmp.sqlite');
 let db, server, base;
 const api = async (m, p, b) => {
   const res = await fetch(`${base}${p}`, {
-    method: m, headers: b ? { 'Content-Type': 'application/json' } : undefined,
+    method: m,
+    headers: b ? { 'Content-Type': 'application/json' } : undefined,
     body: b ? JSON.stringify(b) : undefined,
   });
   const t = await res.text();
@@ -27,24 +28,35 @@ before(async () => {
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${server.address().port}`;
 });
-after(async () => { await new Promise((r) => server.close(r)); await db.close(); rmSync(DB_FILE, { force: true }); });
+after(async () => {
+  await new Promise((r) => server.close(r));
+  await db.close();
+  rmSync(DB_FILE, { force: true });
+});
 
 test('family is computed for IPv4 and IPv6 prefixes', async () => {
-  const v4 = (await api('POST', '/api/ipam/prefixes/', { prefix: '10.0.0.0/8', status: 'active' })).body;
-  const v6 = (await api('POST', '/api/ipam/prefixes/', { prefix: '2001:db8::/32', status: 'active' })).body;
+  const v4 = (await api('POST', '/api/ipam/prefixes/', { prefix: '10.0.0.0/8', status: 'active' }))
+    .body;
+  const v6 = (
+    await api('POST', '/api/ipam/prefixes/', { prefix: '2001:db8::/32', status: 'active' })
+  ).body;
   assert.deepEqual(v4.family, { value: 4, label: 'IPv4' });
   assert.deepEqual(v6.family, { value: 6, label: 'IPv6' });
 });
 
 test('family for ip-addresses', async () => {
-  const ip = (await api('POST', '/api/ipam/ip-addresses/', { address: '192.0.2.5/24', status: 'active' })).body;
+  const ip = (
+    await api('POST', '/api/ipam/ip-addresses/', { address: '192.0.2.5/24', status: 'active' })
+  ).body;
   assert.deepEqual(ip.family, { value: 4, label: 'IPv4' });
 });
 
 test('children and _depth for a Region tree', async () => {
   const root = (await api('POST', '/api/dcim/regions/', { name: 'World', slug: 'world' })).body;
-  const eu = (await api('POST', '/api/dcim/regions/', { name: 'EU', slug: 'eu', parent: root.id })).body;
-  const fr = (await api('POST', '/api/dcim/regions/', { name: 'FR', slug: 'fr', parent: eu.id })).body;
+  const eu = (await api('POST', '/api/dcim/regions/', { name: 'EU', slug: 'eu', parent: root.id }))
+    .body;
+  const fr = (await api('POST', '/api/dcim/regions/', { name: 'FR', slug: 'fr', parent: eu.id }))
+    .body;
   await api('POST', '/api/dcim/regions/', { name: 'DE', slug: 'de', parent: eu.id });
 
   const rootGot = (await api('GET', `/api/dcim/regions/${root.id}/`)).body;
@@ -62,7 +74,9 @@ test('children and _depth for a Region tree', async () => {
 test('tree computed fields stay batched on list', async () => {
   db.queries = 0;
   const r = await api('GET', '/api/dcim/regions/?limit=50');
-  assert.ok(r.body.results.every((x) => typeof x._depth === 'number' && typeof x.children === 'number'));
+  assert.ok(
+    r.body.results.every((x) => typeof x._depth === 'number' && typeof x.children === 'number'),
+  );
   assert.ok(db.queries < 12, `expected batched, got ${db.queries}`);
   console.log(`  region list with depth/children in ${db.queries} queries`);
 });

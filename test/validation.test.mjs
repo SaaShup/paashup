@@ -12,7 +12,8 @@ const DB_FILE = join(ROOT, 'test', '.val.sqlite');
 let db, server, base;
 const api = async (m, p, b) => {
   const res = await fetch(`${base}${p}`, {
-    method: m, headers: b ? { 'Content-Type': 'application/json' } : undefined,
+    method: m,
+    headers: b ? { 'Content-Type': 'application/json' } : undefined,
     body: b ? JSON.stringify(b) : undefined,
   });
   const t = await res.text();
@@ -27,7 +28,11 @@ before(async () => {
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${server.address().port}`;
 });
-after(async () => { await new Promise((r) => server.close(r)); await db.close(); rmSync(DB_FILE, { force: true }); });
+after(async () => {
+  await new Promise((r) => server.close(r));
+  await db.close();
+  rmSync(DB_FILE, { force: true });
+});
 
 test('missing required field -> 400 field error', async () => {
   const r = await api('POST', '/api/dcim/manufacturers/', { slug: 'no-name' });
@@ -49,7 +54,10 @@ test('wrong type and null-on-non-nullable -> 400', async () => {
 });
 
 test('maxLength enforced', async () => {
-  const r = await api('POST', '/api/dcim/manufacturers/', { name: 'x'.repeat(300), slug: 'toolong' });
+  const r = await api('POST', '/api/dcim/manufacturers/', {
+    name: 'x'.repeat(300),
+    slug: 'toolong',
+  });
   assert.equal(r.status, 400);
   assert.match(r.body.name[0], /at most \d+ characters/);
 });

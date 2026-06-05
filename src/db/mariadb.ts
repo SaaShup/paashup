@@ -22,12 +22,18 @@ class MariaDbConn implements Db {
   readonly dialect = 'mariadb' as const;
   constructor(protected readonly conn: Conn) {}
 
-  async query<T = Record<string, unknown>>(sql: string, params: readonly Param[] = []): Promise<T[]> {
+  async query<T = Record<string, unknown>>(
+    sql: string,
+    params: readonly Param[] = [],
+  ): Promise<T[]> {
     const [rows] = await this.conn.query(sql, mapParams(params));
     return rows as T[];
   }
 
-  async get<T = Record<string, unknown>>(sql: string, params: readonly Param[] = []): Promise<T | undefined> {
+  async get<T = Record<string, unknown>>(
+    sql: string,
+    params: readonly Param[] = [],
+  ): Promise<T | undefined> {
     const rows = await this.query<T>(sql, params);
     return rows[0];
   }

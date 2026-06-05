@@ -1,0 +1,10 @@
+# Ruff config for the Python build/generator scripts.
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = [
+  "E501", # line length handled by the formatter, not enforced strictly
+  "B905", # zip(strict=) not required for our py target usage
+]

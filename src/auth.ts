@@ -26,21 +26,38 @@ export interface CreateTokenInput {
 }
 
 /** Provision an API token for a user; returns the (only-shown-once) key. */
-export async function createToken(db: Db, input: CreateTokenInput): Promise<{ id: number; key: string }> {
+export async function createToken(
+  db: Db,
+  input: CreateTokenInput,
+): Promise<{ id: number; key: string }> {
   const key = input.key ?? generateTokenKey();
   const res = await db.execute(
     'INSERT INTO auth_token (`key`, user_id, write_enabled, expires, description) VALUES (?, ?, ?, ?, ?)',
-    [key, input.userId, input.writeEnabled === false ? 0 : 1, input.expires ?? null, input.description ?? ''],
+    [
+      key,
+      input.userId,
+      input.writeEnabled === false ? 0 : 1,
+      input.expires ?? null,
+      input.description ?? '',
+    ],
   );
   return { id: res.insertId, key };
 }
 
 /** Resolve an `Authorization: Token <key>` header to an auth context, or null. */
-export async function authenticate(db: Db, header: string | undefined): Promise<AuthContext | null> {
+export async function authenticate(
+  db: Db,
+  header: string | undefined,
+): Promise<AuthContext | null> {
   if (!header) return null;
   const m = /^Token\s+(.+)$/i.exec(header.trim());
   if (!m) return null;
-  const row = await db.get<{ id: number; userId: number; writeEnabled: number; expires: string | null }>(
+  const row = await db.get<{
+    id: number;
+    userId: number;
+    writeEnabled: number;
+    expires: string | null;
+  }>(
     'SELECT id, user_id AS userId, write_enabled AS writeEnabled, expires FROM auth_token WHERE `key` = ?',
     [m[1]!.trim()],
   );

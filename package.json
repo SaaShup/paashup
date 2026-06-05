@@ -1,0 +1,25 @@
+{
+  "name": "paasbox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NetBox-compatible API (DCIM/IPAM/Virtualization) — no-ORM data layer over SQLite/MariaDB",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "generate": "node scripts/generate.mjs",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "test": "tsc && node --test test/smoke.mjs"
+  },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "mysql2": "^3.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.6.0"
+  }
+}

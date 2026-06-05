@@ -1,0 +1,699 @@
+{
+  "extras/tags": {
+    "section": "extras",
+    "endpoint": "/api/extras/tags/",
+    "read_schema": "Tag",
+    "write_schema": "TagRequest",
+    "model": "Tag",
+    "origin": "external-full",
+    "fields": [
+      {
+        "name": "id",
+        "kind": "scalar",
+        "type": "integer",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "url",
+        "kind": "scalar",
+        "type": "string(uri)",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "display_url",
+        "kind": "scalar",
+        "type": "string(uri)",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "display",
+        "kind": "scalar",
+        "type": "string",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "name",
+        "kind": "scalar",
+        "type": "string(100)",
+        "nullable": false,
+        "required_on_create": true,
+        "writable": true,
+        "read_only": false,
+        "max_length": 100
+      },
+      {
+        "name": "slug",
+        "kind": "scalar",
+        "type": "string(100)",
+        "nullable": false,
+        "required_on_create": true,
+        "writable": true,
+        "read_only": false,
+        "max_length": 100,
+        "unique": true
+      },
+      {
+        "name": "color",
+        "kind": "scalar",
+        "type": "string(6)",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": true,
+        "read_only": false,
+        "max_length": 6
+      },
+      {
+        "name": "description",
+        "kind": "scalar",
+        "type": "string(200)",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": true,
+        "read_only": false,
+        "max_length": 200
+      },
+      {
+        "name": "weight",
+        "kind": "scalar",
+        "type": "integer",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": true,
+        "read_only": false
+      },
+      {
+        "name": "object_types",
+        "kind": "array",
+        "type": "array<string>",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": true,
+        "read_only": false
+      },
+      {
+        "name": "tagged_items",
+        "kind": "scalar",
+        "type": "bigint",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "created",
+        "kind": "scalar",
+        "type": "datetime",
+        "nullable": true,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "last_updated",
+        "kind": "scalar",
+        "type": "datetime",
+        "nullable": true,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      }
+    ]
+  },
+  "tenancy/tenants": {
+    "section": "tenancy",
+    "endpoint": "/api/tenancy/tenants/",
+    "read_schema": "Tenant",
+    "write_schema": "TenantRequest",
+    "model": "Tenant",
+    "origin": "external-full",
+    "fields": [
+      {
+        "name": "id",
+        "kind": "scalar",
+        "type": "integer",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "url",
+        "kind": "scalar",
+        "type": "string(uri)",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "display_url",
+        "kind": "scalar",
+        "type": "string(uri)",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "display",
+        "kind": "scalar",
+        "type": "string",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "name",
+        "kind": "scalar",
+        "type": "string(100)",
+        "nullable": false,
+        "required_on_create": true,
+        "writable": true,
+        "read_only": false,
+        "max_length": 100
+      },
+      {
+        "name": "slug",
+        "kind": "scalar",
+        "type": "string(100)",
+        "nullable": false,
+        "required_on_create": true,
+        "writable": true,
+        "read_only": false,
+        "max_length": 100,
+        "unique": true
+      },
+      {
+        "name": "group",
+        "kind": "fk",
+        "type": "integer (fk)",
+        "references": "TenantGroup",
+        "nullable": true,
+        "required_on_create": false,
+        "writable": true,
+        "read_only": false
+      },
+      {
+        "name": "description",
+        "kind": "scalar",
+        "type": "string(200)",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": true,
+        "read_only": false,
+        "max_length": 200
+      },
+      {
+        "name": "owner",
+        "kind": "fk",
+        "type": "integer (fk)",
+        "references": "Owner",
+        "nullable": true,
+        "required_on_create": false,
+        "writable": true,
+        "read_only": false
+      },
+      {
+        "name": "comments",
+        "kind": "scalar",
+        "type": "string",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": true,
+        "read_only": false
+      },
+      {
+        "name": "tags",
+        "kind": "m2m",
+        "type": "m2m",
+        "references": "Tag",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": true,
+        "read_only": false
+      },
+      {
+        "name": "custom_fields",
+        "kind": "scalar",
+        "type": "json",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": true,
+        "read_only": false
+      },
+      {
+        "name": "created",
+        "kind": "scalar",
+        "type": "datetime",
+        "nullable": true,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "last_updated",
+        "kind": "scalar",
+        "type": "datetime",
+        "nullable": true,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "circuit_count",
+        "kind": "scalar",
+        "type": "bigint",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "device_count",
+        "kind": "scalar",
+        "type": "bigint",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "ipaddress_count",
+        "kind": "scalar",
+        "type": "bigint",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "prefix_count",
+        "kind": "scalar",
+        "type": "bigint",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "rack_count",
+        "kind": "scalar",
+        "type": "bigint",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "site_count",
+        "kind": "scalar",
+        "type": "bigint",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "virtualmachine_count",
+        "kind": "scalar",
+        "type": "bigint",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "vlan_count",
+        "kind": "scalar",
+        "type": "bigint",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "vrf_count",
+        "kind": "scalar",
+        "type": "bigint",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "cluster_count",
+        "kind": "scalar",
+        "type": "bigint",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      }
+    ]
+  },
+  "tenancy/tenant-groups": {
+    "section": "tenancy",
+    "endpoint": "/api/tenancy/tenant-groups/",
+    "read_schema": "TenantGroup",
+    "write_schema": "WritableTenantGroupRequest",
+    "model": "TenantGroup",
+    "origin": "external-full",
+    "fields": [
+      {
+        "name": "id",
+        "kind": "scalar",
+        "type": "integer",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "url",
+        "kind": "scalar",
+        "type": "string(uri)",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "display_url",
+        "kind": "scalar",
+        "type": "string(uri)",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "display",
+        "kind": "scalar",
+        "type": "string",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "name",
+        "kind": "scalar",
+        "type": "string(100)",
+        "nullable": false,
+        "required_on_create": true,
+        "writable": true,
+        "read_only": false,
+        "max_length": 100
+      },
+      {
+        "name": "slug",
+        "kind": "scalar",
+        "type": "string(100)",
+        "nullable": false,
+        "required_on_create": true,
+        "writable": true,
+        "read_only": false,
+        "max_length": 100,
+        "unique": true
+      },
+      {
+        "name": "parent",
+        "kind": "fk",
+        "type": "integer (fk)",
+        "references": "TenantGroup",
+        "nullable": true,
+        "required_on_create": false,
+        "writable": true,
+        "read_only": false
+      },
+      {
+        "name": "description",
+        "kind": "scalar",
+        "type": "string(200)",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": true,
+        "read_only": false,
+        "max_length": 200
+      },
+      {
+        "name": "tags",
+        "kind": "m2m",
+        "type": "m2m",
+        "references": "Tag",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": true,
+        "read_only": false
+      },
+      {
+        "name": "custom_fields",
+        "kind": "scalar",
+        "type": "json",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": true,
+        "read_only": false
+      },
+      {
+        "name": "created",
+        "kind": "scalar",
+        "type": "datetime",
+        "nullable": true,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "last_updated",
+        "kind": "scalar",
+        "type": "datetime",
+        "nullable": true,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "tenant_count",
+        "kind": "scalar",
+        "type": "integer",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "owner",
+        "kind": "fk",
+        "type": "integer (fk)",
+        "references": "Owner",
+        "nullable": true,
+        "required_on_create": false,
+        "writable": true,
+        "read_only": false
+      },
+      {
+        "name": "comments",
+        "kind": "scalar",
+        "type": "string",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": true,
+        "read_only": false
+      },
+      {
+        "name": "_depth",
+        "kind": "scalar",
+        "type": "integer",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      }
+    ]
+  },
+  "users/owners": {
+    "section": "users",
+    "endpoint": "/api/users/owners/",
+    "read_schema": "Owner",
+    "write_schema": "OwnerRequest",
+    "model": "Owner",
+    "origin": "external-full",
+    "fields": [
+      {
+        "name": "id",
+        "kind": "scalar",
+        "type": "integer",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "url",
+        "kind": "scalar",
+        "type": "string(uri)",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "display_url",
+        "kind": "scalar",
+        "type": "string(uri)",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "display",
+        "kind": "scalar",
+        "type": "string",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "name",
+        "kind": "scalar",
+        "type": "string(100)",
+        "nullable": false,
+        "required_on_create": true,
+        "writable": true,
+        "read_only": false,
+        "max_length": 100
+      },
+      {
+        "name": "group",
+        "kind": "fk",
+        "type": "integer (fk)",
+        "references": "OwnerGroup",
+        "nullable": true,
+        "required_on_create": true,
+        "writable": true,
+        "read_only": false
+      },
+      {
+        "name": "description",
+        "kind": "scalar",
+        "type": "string(200)",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": true,
+        "read_only": false,
+        "max_length": 200
+      },
+      {
+        "name": "user_groups",
+        "kind": "m2m",
+        "type": "m2m",
+        "references": "Group",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": true,
+        "read_only": false
+      },
+      {
+        "name": "users",
+        "kind": "m2m",
+        "type": "m2m",
+        "references": "User",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": true,
+        "read_only": false
+      }
+    ]
+  },
+  "users/owner-groups": {
+    "section": "users",
+    "endpoint": "/api/users/owner-groups/",
+    "read_schema": "OwnerGroup",
+    "write_schema": "OwnerGroupRequest",
+    "model": "OwnerGroup",
+    "origin": "external-full",
+    "fields": [
+      {
+        "name": "id",
+        "kind": "scalar",
+        "type": "integer",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "url",
+        "kind": "scalar",
+        "type": "string(uri)",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "display_url",
+        "kind": "scalar",
+        "type": "string(uri)",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "display",
+        "kind": "scalar",
+        "type": "string",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      },
+      {
+        "name": "name",
+        "kind": "scalar",
+        "type": "string(100)",
+        "nullable": false,
+        "required_on_create": true,
+        "writable": true,
+        "read_only": false,
+        "max_length": 100
+      },
+      {
+        "name": "description",
+        "kind": "scalar",
+        "type": "string(200)",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": true,
+        "read_only": false,
+        "max_length": 200
+      },
+      {
+        "name": "member_count",
+        "kind": "scalar",
+        "type": "bigint",
+        "nullable": false,
+        "required_on_create": false,
+        "writable": false,
+        "read_only": true
+      }
+    ]
+  }
+}

@@ -1,0 +1,1260 @@
+{
+  "Region": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "parent",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "name"
+        ],
+        "lower": [],
+        "partial": true,
+        "cond_field": "parent",
+        "cond_op": "IS NULL",
+        "cond_raw": "Q(parent__isnull=True)"
+      },
+      {
+        "columns": [
+          "parent",
+          "slug"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "slug"
+        ],
+        "lower": [],
+        "partial": true,
+        "cond_field": "parent",
+        "cond_op": "IS NULL",
+        "cond_raw": "Q(parent__isnull=True)"
+      }
+    ],
+    "file": "dcim/models/sites.py"
+  },
+  "SiteGroup": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "parent",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "name"
+        ],
+        "lower": [],
+        "partial": true,
+        "cond_field": "parent",
+        "cond_op": "IS NULL",
+        "cond_raw": "Q(parent__isnull=True)"
+      },
+      {
+        "columns": [
+          "parent",
+          "slug"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "slug"
+        ],
+        "lower": [],
+        "partial": true,
+        "cond_field": "parent",
+        "cond_op": "IS NULL",
+        "cond_raw": "Q(parent__isnull=True)"
+      }
+    ],
+    "file": "dcim/models/sites.py"
+  },
+  "Site": {
+    "unique_fields": [
+      "name",
+      "slug"
+    ],
+    "unique_constraints": [],
+    "file": "dcim/models/sites.py"
+  },
+  "Location": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "site",
+          "parent",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "site",
+          "name"
+        ],
+        "lower": [],
+        "partial": true,
+        "cond_field": "parent",
+        "cond_op": "IS NULL",
+        "cond_raw": "Q(parent__isnull=True)"
+      },
+      {
+        "columns": [
+          "site",
+          "parent",
+          "slug"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "site",
+          "slug"
+        ],
+        "lower": [],
+        "partial": true,
+        "cond_field": "parent",
+        "cond_op": "IS NULL",
+        "cond_raw": "Q(parent__isnull=True)"
+      }
+    ],
+    "file": "dcim/models/sites.py"
+  },
+  "RackType": {
+    "unique_fields": [
+      "slug"
+    ],
+    "unique_constraints": [
+      {
+        "columns": [
+          "manufacturer",
+          "model"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "manufacturer",
+          "slug"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "dcim/models/racks.py"
+  },
+  "Rack": {
+    "unique_fields": [
+      "asset_tag"
+    ],
+    "unique_constraints": [
+      {
+        "columns": [
+          "location",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "location",
+          "facility_id"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "dcim/models/racks.py"
+  },
+  "PowerPanel": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "site",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "dcim/models/power.py"
+  },
+  "PowerFeed": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "power_panel",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "dcim/models/power.py"
+  },
+  "ModuleTypeProfile": {
+    "unique_fields": [
+      "name"
+    ],
+    "unique_constraints": [],
+    "file": "dcim/models/modules.py"
+  },
+  "ModuleType": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "manufacturer",
+          "model"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "dcim/models/modules.py"
+  },
+  "Module": {
+    "unique_fields": [
+      "asset_tag"
+    ],
+    "unique_constraints": [],
+    "file": "dcim/models/modules.py"
+  },
+  "DeviceType": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "manufacturer",
+          "model"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "manufacturer",
+          "slug"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "dcim/models/devices.py"
+  },
+  "DeviceRole": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "parent",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "name"
+        ],
+        "lower": [],
+        "partial": true,
+        "cond_field": "parent",
+        "cond_op": "IS NULL",
+        "cond_raw": "Q(parent__isnull=True)"
+      },
+      {
+        "columns": [
+          "parent",
+          "slug"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "slug"
+        ],
+        "lower": [],
+        "partial": true,
+        "cond_field": "parent",
+        "cond_op": "IS NULL",
+        "cond_raw": "Q(parent__isnull=True)"
+      }
+    ],
+    "file": "dcim/models/devices.py"
+  },
+  "Platform": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "manufacturer",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "name"
+        ],
+        "lower": [],
+        "partial": true,
+        "cond_field": "manufacturer",
+        "cond_op": "IS NULL",
+        "cond_raw": "Q(manufacturer__isnull=True)"
+      },
+      {
+        "columns": [
+          "manufacturer",
+          "slug"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "slug"
+        ],
+        "lower": [],
+        "partial": true,
+        "cond_field": "manufacturer",
+        "cond_op": "IS NULL",
+        "cond_raw": "Q(manufacturer__isnull=True)"
+      }
+    ],
+    "file": "dcim/models/devices.py"
+  },
+  "Device": {
+    "unique_fields": [
+      "asset_tag"
+    ],
+    "unique_constraints": [
+      {
+        "columns": [
+          "name",
+          "site",
+          "tenant"
+        ],
+        "lower": [
+          "name"
+        ],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "name",
+          "site"
+        ],
+        "lower": [
+          "name"
+        ],
+        "partial": true,
+        "cond_field": "tenant",
+        "cond_op": "IS NULL",
+        "cond_raw": "Q(tenant__isnull=True)"
+      },
+      {
+        "columns": [
+          "rack",
+          "position",
+          "face"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "virtual_chassis",
+          "vc_position"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "dcim/models/devices.py"
+  },
+  "VirtualDeviceContext": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "device",
+          "identifier"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "device",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "dcim/models/devices.py"
+  },
+  "ComponentModel": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "virtual_machine",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "virtualization/models/virtualmachines.py"
+  },
+  "FrontPort": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "device",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "dcim/models/device_components.py"
+  },
+  "ModuleBay": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "device",
+          "module",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "dcim/models/device_components.py"
+  },
+  "InventoryItem": {
+    "unique_fields": [
+      "asset_tag"
+    ],
+    "unique_constraints": [
+      {
+        "columns": [
+          "device",
+          "parent",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "dcim/models/device_components.py"
+  },
+  "ComponentTemplateModel": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "device_type",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "dcim/models/device_component_templates.py"
+  },
+  "ModularComponentTemplateModel": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "device_type",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "module_type",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "dcim/models/device_component_templates.py"
+  },
+  "FrontPortTemplate": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "device_type",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "module_type",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "dcim/models/device_component_templates.py"
+  },
+  "InventoryItemTemplate": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "device_type",
+          "parent",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "dcim/models/device_component_templates.py"
+  },
+  "CableBundle": {
+    "unique_fields": [
+      "name"
+    ],
+    "unique_constraints": [],
+    "file": "dcim/models/cables.py"
+  },
+  "CableTermination": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "termination_type",
+          "termination_id"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "cable",
+          "cable_end",
+          "connector"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "dcim/models/cables.py"
+  },
+  "PortMappingBase": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "front_port",
+          "front_port_position"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "rear_port",
+          "rear_port_position"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "dcim/models/base.py"
+  },
+  "VRF": {
+    "unique_fields": [
+      "rd"
+    ],
+    "unique_constraints": [],
+    "file": "ipam/models/vrfs.py"
+  },
+  "RouteTarget": {
+    "unique_fields": [
+      "name"
+    ],
+    "unique_constraints": [],
+    "file": "ipam/models/vrfs.py"
+  },
+  "VLANGroup": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "scope_type",
+          "scope_id",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "scope_type",
+          "scope_id",
+          "slug"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "ipam/models/vlans.py"
+  },
+  "VLAN": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "group",
+          "vid"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "group",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "qinq_svlan",
+          "vid"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "qinq_svlan",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "ipam/models/vlans.py"
+  },
+  "VLANTranslationPolicy": {
+    "unique_fields": [
+      "name"
+    ],
+    "unique_constraints": [],
+    "file": "ipam/models/vlans.py"
+  },
+  "VLANTranslationRule": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "policy",
+          "local_vid"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "policy",
+          "remote_vid"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "ipam/models/vlans.py"
+  },
+  "ServiceTemplate": {
+    "unique_fields": [
+      "name"
+    ],
+    "unique_constraints": [],
+    "file": "ipam/models/services.py"
+  },
+  "FHRPGroupAssignment": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "interface_type",
+          "interface_id",
+          "group"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "ipam/models/fhrp.py"
+  },
+  "ASNRange": {
+    "unique_fields": [
+      "name",
+      "slug"
+    ],
+    "unique_constraints": [],
+    "file": "ipam/models/asns.py"
+  },
+  "ASN": {
+    "unique_fields": [
+      "asn"
+    ],
+    "unique_constraints": [],
+    "file": "ipam/models/asns.py"
+  },
+  "VirtualMachineType": {
+    "unique_fields": [
+      "slug"
+    ],
+    "unique_constraints": [
+      {
+        "columns": [
+          "name"
+        ],
+        "lower": [
+          "name"
+        ],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "virtualization/models/virtualmachines.py"
+  },
+  "VirtualMachine": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "name",
+          "cluster",
+          "tenant"
+        ],
+        "lower": [
+          "name"
+        ],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "name",
+          "cluster"
+        ],
+        "lower": [
+          "name"
+        ],
+        "partial": true,
+        "cond_field": "tenant",
+        "cond_op": "IS NULL",
+        "cond_raw": "Q(tenant__isnull=True)"
+      },
+      {
+        "columns": [
+          "name",
+          "device",
+          "tenant"
+        ],
+        "lower": [
+          "name"
+        ],
+        "partial": true,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": "Q(cluster__isnull=True, device__isnull=False)"
+      },
+      {
+        "columns": [
+          "name",
+          "device"
+        ],
+        "lower": [
+          "name"
+        ],
+        "partial": true,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": "Q(cluster__isnull=True, device__isnull=False, tenant__isnull=True)"
+      }
+    ],
+    "file": "virtualization/models/virtualmachines.py"
+  },
+  "Cluster": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "group",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "_site",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "virtualization/models/clusters.py"
+  },
+  "TenantGroup": {
+    "unique_fields": [
+      "name",
+      "slug"
+    ],
+    "unique_constraints": [],
+    "file": "tenancy/models/tenants.py"
+  },
+  "Tenant": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "group",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "name"
+        ],
+        "lower": [],
+        "partial": true,
+        "cond_field": "group",
+        "cond_op": "IS NULL",
+        "cond_raw": "Q(group__isnull=True)"
+      },
+      {
+        "columns": [
+          "group",
+          "slug"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      },
+      {
+        "columns": [
+          "slug"
+        ],
+        "lower": [],
+        "partial": true,
+        "cond_field": "group",
+        "cond_op": "IS NULL",
+        "cond_raw": "Q(group__isnull=True)"
+      }
+    ],
+    "file": "tenancy/models/tenants.py"
+  },
+  "ContactGroup": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "parent",
+          "name"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "tenancy/models/contacts.py"
+  },
+  "ContactAssignment": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "object_type",
+          "object_id",
+          "contact",
+          "role"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "tenancy/models/contacts.py"
+  },
+  "Script": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "name",
+          "module"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "extras/models/scripts.py"
+  },
+  "Notification": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "object_type",
+          "object_id",
+          "user"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "extras/models/notifications.py"
+  },
+  "NotificationGroup": {
+    "unique_fields": [
+      "name"
+    ],
+    "unique_constraints": [],
+    "file": "extras/models/notifications.py"
+  },
+  "Subscription": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "object_type",
+          "object_id",
+          "user"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "extras/models/notifications.py"
+  },
+  "EventRule": {
+    "unique_fields": [
+      "name"
+    ],
+    "unique_constraints": [],
+    "file": "extras/models/models.py"
+  },
+  "Webhook": {
+    "unique_fields": [
+      "name"
+    ],
+    "unique_constraints": [],
+    "file": "extras/models/models.py"
+  },
+  "CustomLink": {
+    "unique_fields": [
+      "name"
+    ],
+    "unique_constraints": [],
+    "file": "extras/models/models.py"
+  },
+  "SavedFilter": {
+    "unique_fields": [
+      "name",
+      "slug"
+    ],
+    "unique_constraints": [],
+    "file": "extras/models/models.py"
+  },
+  "Bookmark": {
+    "unique_fields": [],
+    "unique_constraints": [
+      {
+        "columns": [
+          "object_type",
+          "object_id",
+          "user"
+        ],
+        "lower": [],
+        "partial": false,
+        "cond_field": null,
+        "cond_op": null,
+        "cond_raw": null
+      }
+    ],
+    "file": "extras/models/models.py"
+  },
+  "CustomField": {
+    "unique_fields": [
+      "name"
+    ],
+    "unique_constraints": [],
+    "file": "extras/models/customfields.py"
+  },
+  "CustomFieldChoiceSet": {
+    "unique_fields": [
+      "name"
+    ],
+    "unique_constraints": [],
+    "file": "extras/models/customfields.py"
+  },
+  "ConfigContextProfile": {
+    "unique_fields": [
+      "name"
+    ],
+    "unique_constraints": [],
+    "file": "extras/models/configs.py"
+  },
+  "ConfigContext": {
+    "unique_fields": [
+      "name"
+    ],
+    "unique_constraints": [],
+    "file": "extras/models/configs.py"
+  },
+  "Group": {
+    "unique_fields": [
+      "name"
+    ],
+    "unique_constraints": [],
+    "file": "users/models/users.py"
+  },
+  "User": {
+    "unique_fields": [
+      "username"
+    ],
+    "unique_constraints": [],
+    "file": "users/models/users.py"
+  },
+  "Token": {
+    "unique_fields": [
+      "plaintext",
+      "key"
+    ],
+    "unique_constraints": [],
+    "file": "users/models/tokens.py"
+  },
+  "OwnerGroup": {
+    "unique_fields": [
+      "name"
+    ],
+    "unique_constraints": [],
+    "file": "users/models/owners.py"
+  },
+  "Owner": {
+    "unique_fields": [
+      "name"
+    ],
+    "unique_constraints": [],
+    "file": "users/models/owners.py"
+  }
+}

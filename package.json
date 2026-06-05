@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc",
     "start": "node dist/main.js",
+    "ci": "bash scripts/ci.sh",
     "lint": "eslint \"src/**/*.ts\" \"scripts/**/*.mjs\" \"test/**/*.mjs\"",
     "format": "prettier --write \"src/**/*.ts\" \"scripts/**/*.mjs\" \"test/**/*.mjs\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"scripts/**/*.mjs\" \"test/**/*.mjs\"",

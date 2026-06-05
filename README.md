@@ -53,11 +53,18 @@ the image); for MariaDB, run migrations separately.
 ### Development
 
 ```bash
+npm run ci              # run the whole pipeline locally (mirrors GitHub Actions)
 npm run lint            # ESLint (TS/JS)
 npm run format          # Prettier write  (format:check in CI)
 npm test                # build + SQLite test suite
 ruff check . && ruff format --check .   # Python scripts
 ```
+
+`npm run ci` ([scripts/ci.sh](scripts/ci.sh)) runs lint, tests, security, the
+Docker image smoke test, and the MariaDB suite (spinning an ephemeral container).
+Stages whose tools aren't installed (Docker, Ruff, Trivy) are **skipped** with a
+hint rather than failing. Run a subset with e.g. `scripts/ci.sh lint test`, or
+`SKIP_DOCKER=1 npm run ci` to skip the container stages.
 
 CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs five jobs:
 **test** (SQLite), **test-mariadb** (service container), **lint** (ESLint +

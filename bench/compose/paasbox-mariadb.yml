@@ -1,0 +1,30 @@
+# paasbox over MariaDB (large-customer profile). Migrations are applied by the
+# orchestrator (bench/run.sh) via `docker compose exec db` before benching.
+services:
+  db:
+    image: mariadb:11
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: paasbox
+    healthcheck:
+      test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  paasbox:
+    build:
+      context: ../..
+    image: paasbox:bench
+    environment:
+      PB_DIALECT: mariadb
+      DB_HOST: db
+      DB_PORT: '3306'
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_NAME: paasbox
+      PORT: '8000'
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - '8000:8000'

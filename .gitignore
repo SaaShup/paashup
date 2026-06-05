@@ -4,3 +4,6 @@ dist/
 *.sqlite-*
 test/.smoke.sqlite*
 __pycache__/
+
+# benchmark per-run results (machine-specific); REPORT.md is kept
+bench/results/*.json

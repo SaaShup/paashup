@@ -1,0 +1,56 @@
+# NetBox 4.6 full stack (PostgreSQL + Redis + NetBox/gunicorn) for comparison.
+# A fixed superuser API token is created on first boot for the benchmark.
+# Adjust the image tag to match the paasbox-targeted NetBox version if needed.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: netbox
+      POSTGRES_USER: netbox
+      POSTGRES_PASSWORD: netbox
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'netbox']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save "" --appendonly no
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  netbox:
+    image: netboxcommunity/netbox:v4.6
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_NAME: netbox
+      DB_USER: netbox
+      DB_PASSWORD: netbox
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      REDIS_DATABASE: '0'
+      REDIS_CACHE_HOST: redis
+      REDIS_CACHE_PORT: '6379'
+      REDIS_CACHE_DATABASE: '1'
+      SECRET_KEY: 'benchmark-only-secret-key-0123456789-0123456789-abcd'
+      # NetBox 4.6 peppers (hashes) API tokens; required to create/use them.
+      API_TOKEN_PEPPERS: 'benchmark-only-token-pepper-0123456789-abcdef'
+      ALLOWED_HOSTS: '*'
+      SKIP_SUPERUSER: 'false'
+      SUPERUSER_NAME: admin
+      SUPERUSER_EMAIL: admin@example.com
+      SUPERUSER_PASSWORD: admin1234
+      SUPERUSER_API_TOKEN: '0123456789abcdef0123456789abcdef01234567'
+    volumes:
+      - ../netbox-config/extra.py:/etc/netbox/config/extra.py:ro
+    ports:
+      - '8000:8080'

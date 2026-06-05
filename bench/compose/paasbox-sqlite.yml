@@ -1,0 +1,17 @@
+# paasbox over SQLite (small-customer profile). Built from the repo Dockerfile.
+services:
+  paasbox:
+    build:
+      context: ../..
+    image: paasbox:bench
+    environment:
+      PB_DIALECT: sqlite
+      PB_SQLITE_FILE: /data/paasbox.db
+      PB_MIGRATE: '1'
+      PORT: '8000'
+    volumes:
+      - paasbox-data:/data
+    ports:
+      - '8000:8000'
+volumes:
+  paasbox-data:

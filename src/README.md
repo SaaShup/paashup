@@ -125,6 +125,10 @@ Per entity: `GET/POST /api/<app>/<resource>/` and
   against the extracted NetBox read schemas with `ajv`; `datamodel/coverage.py`
   reports per-entity field gaps (48/82 entities fully field-conformant; the rest
   miss complex subsystems — cable tracing, `config_context`, `primary_ip`, MAC).
+- **Self-describing schema**: `GET /api/schema/` returns a valid OpenAPI 3.0
+  document generated at runtime from the registry (core **and** plugin entities,
+  reflecting the actual response shapes); `GET /api/schema/swagger-ui/` renders it.
+  Both are public even when token auth is required. See `api/openapi.ts`.
 - **Auth**: optional token auth (`Authorization: Token <key>`), enabled with
   `ServerOptions.auth = { required: true }` (or `PB_AUTH_REQUIRED=1`). Anonymous →
   `403` when required; read-only tokens get `403` on writes; expired tokens

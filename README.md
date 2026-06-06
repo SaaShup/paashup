@@ -36,7 +36,9 @@ python3 migrations/migrate.py --dialect mariadb --database paasbox \
 PB_DIALECT=mariadb DB_NAME=paasbox DB_USER=paasbox DB_PASSWORD=secret npm start
 ```
 
-Then e.g. `curl localhost:8000/api/dcim/manufacturers/`.
+Then e.g. `curl localhost:8000/api/dcim/manufacturers/`. The live OpenAPI schema is
+at `GET /api/schema/` (Swagger UI at `/api/schema/swagger-ui/`), generated from the
+registry so it always reflects core **and** any loaded plugins.
 
 ### Docker
 

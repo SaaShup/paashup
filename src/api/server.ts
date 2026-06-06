@@ -7,8 +7,17 @@ import { ApiError, ValidationError } from '../errors.js';
 import { authenticate, type AuthOptions } from '../auth.js';
 import { matchRoute, fireHooks } from '../plugins/runtime.js';
 import { Serializer } from './serializer.js';
+import { buildOpenApi } from './openapi.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+const SWAGGER_UI_HTML = `<!doctype html>
+<html><head><meta charset="utf-8"><title>paasbox API</title>
+<link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist/swagger-ui.css"></head>
+<body><div id="swagger-ui"></div>
+<script src="https://unpkg.com/swagger-ui-dist/swagger-ui-bundle.js"></script>
+<script>window.onload=()=>SwaggerUIBundle({url:'/api/schema/',dom_id:'#swagger-ui'});</script>
+</body></html>`;
 
 export interface ServerOptions {
   db: Db;
@@ -121,11 +130,24 @@ export function createApiServer(opts: ServerOptions): http.Server {
   const fixedBase = opts.baseUrl?.replace(/\/$/, '');
   // Built once at server creation — plugins must be loaded before this.
   const collections = buildCollections();
+  let schemaDoc: Record<string, unknown> | undefined;
 
   return http.createServer(async (req, res) => {
     const baseUrl = fixedBase ?? `http://${req.headers.host ?? 'localhost:8000'}`;
     const method = req.method ?? 'GET';
     try {
+      const path = (req.url ?? '/').split('?')[0]!.replace(/\/?$/, '/');
+
+      // Public, unauthenticated schema endpoints (like NetBox's /api/schema/).
+      if (method === 'GET' && path === '/api/schema/') {
+        schemaDoc ??= buildOpenApi();
+        return send(res, 200, { ...schemaDoc, servers: [{ url: baseUrl }] });
+      }
+      if (method === 'GET' && path === '/api/schema/swagger-ui/') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(SWAGGER_UI_HTML);
+        return;
+      }
       // Authentication (token). When `auth.required`, anonymous requests are rejected.
       const auth = await authenticate(db, req.headers.authorization);
       if (opts.auth?.required && !auth) {

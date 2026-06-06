@@ -116,6 +116,18 @@ export const inventoryPlugin: Plugin = {
   version: '0.1.0',
   entities: [{ meta: assetMeta }],
   migrations: [initial],
+  // Extend a CORE entity with custom fields (stored in its custom_fields column).
+  customFields: [
+    { tables: ['dcim_manufacturer'], name: 'owner_team', type: 'text', default: '' },
+    {
+      tables: ['dcim_manufacturer'],
+      name: 'tier',
+      type: 'select',
+      choices: ['bronze', 'silver', 'gold'],
+      default: 'bronze',
+    },
+    { tables: ['dcim_manufacturer'], name: 'monitored', type: 'boolean', default: false },
+  ],
   routes: [
     {
       method: 'GET',

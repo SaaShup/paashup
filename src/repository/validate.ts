@@ -1,8 +1,9 @@
 import type { TableMeta } from '../model/meta-types.js';
 import { ValidationError } from '../errors.js';
+import { customFieldsFor } from '../customfields/registry.js';
 
 /** Field-keyed error messages, NetBox-style: { name: ["This field is required."] }. */
-export type FieldErrors = Record<string, string[]>;
+export type FieldErrors = Record<string, string[] | Record<string, string[]>>;
 
 /**
  * Validate a create/update body against the table metadata before touching the DB,
@@ -15,7 +16,7 @@ export function validateWrite(
   partial: boolean,
 ): void {
   const errors: FieldErrors = {};
-  const add = (field: string, msg: string) => (errors[field] ??= []).push(msg);
+  const add = (field: string, msg: string) => ((errors[field] ??= []) as string[]).push(msg);
   const byName = new Map(meta.columns.map((c) => [c.name, c]));
   const relNames = new Set(meta.relations.map((r) => r.name));
 
@@ -60,7 +61,47 @@ export function validateWrite(
     }
   }
 
+  const cfErrors = validateCustomFields(meta.table, data.custom_fields, partial);
+  if (cfErrors) errors.custom_fields = cfErrors;
+
   if (Object.keys(errors).length) {
     throw new ValidationError('Validation failed', errors);
   }
+}
+
+/** Validate the `custom_fields` payload against registered definitions. */
+function validateCustomFields(
+  table: string,
+  value: unknown,
+  partial: boolean,
+): Record<string, string[]> | undefined {
+  const defs = customFieldsFor(table);
+  if (!defs.length) return undefined;
+  const provided =
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const errors: Record<string, string[]> = {};
+  const add = (name: string, msg: string) => (errors[name] ??= []).push(msg);
+  const defined = new Set(defs.map((d) => d.name));
+
+  for (const key of Object.keys(provided)) {
+    if (!defined.has(key)) add(key, 'Unknown custom field.');
+  }
+  for (const def of defs) {
+    const present = def.name in provided && provided[def.name] !== null;
+    if (!partial && def.required && !present && def.default === undefined) {
+      add(def.name, 'This field is required.');
+    }
+    if (!(def.name in provided) || provided[def.name] === null) continue;
+    const v = provided[def.name];
+    if (def.type === 'integer' && (typeof v !== 'number' || !Number.isInteger(v)))
+      add(def.name, 'A valid integer is required.');
+    else if (def.type === 'boolean' && typeof v !== 'boolean')
+      add(def.name, 'Must be a valid boolean.');
+    else if (def.type === 'text' && typeof v !== 'string') add(def.name, 'Not a valid string.');
+    else if (def.type === 'select' && !(def.choices ?? []).includes(v as string))
+      add(def.name, `"${v}" is not a valid choice.`);
+  }
+  return Object.keys(errors).length ? errors : undefined;
 }

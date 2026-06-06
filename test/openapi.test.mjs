@@ -83,6 +83,29 @@ test('read-only entity exposes only GET', async () => {
   assert.equal(ro.post, undefined);
 });
 
+test('published schema is self-consistent (every $ref resolves)', async () => {
+  const doc = JSON.parse((await get('/api/schema/')).text);
+  const defined = new Set(Object.keys(doc.components.schemas));
+  const refs = [];
+  const walk = (n) => {
+    if (Array.isArray(n)) n.forEach(walk);
+    else if (n && typeof n === 'object') {
+      for (const [k, v] of Object.entries(n)) {
+        if (k === '$ref' && typeof v === 'string') refs.push(v);
+        else walk(v);
+      }
+    }
+  };
+  walk(doc.paths);
+  walk(doc.components.schemas);
+  const SP = '#/components/schemas/';
+  const dangling = [...new Set(refs)].filter(
+    (r) => r.startsWith(SP) && !defined.has(r.slice(SP.length)),
+  );
+  assert.deepEqual(dangling, [], `dangling $refs: ${dangling.join(', ')}`);
+  assert.ok(refs.length > 100); // sanity: refs actually present
+});
+
 test('swagger-ui page is served', async () => {
   const r = await get('/api/schema/swagger-ui/');
   assert.equal(r.status, 200);

@@ -20,6 +20,8 @@ export {
   discoverPluginSpecifiers,
 } from './plugins/index.js';
 export { registerEntity, getTable, allTables } from './model/registry.js';
+export { registerCustomField, customFieldsFor } from './customfields/registry.js';
+export type { CustomField, CustomFieldType } from './customfields/types.js';
 export type {
   Plugin,
   PluginEntity,

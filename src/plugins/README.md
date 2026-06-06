@@ -65,6 +65,24 @@ take precedence over generic CRUD.
 React to API writes with `{ table, event: 'created'|'updated'|'deleted', handler }`.
 Hooks fire after a successful API change (handler gets `{ db, id, row }`).
 
+### Custom fields
+
+Attach extra fields to **core or plugin** entities (NetBox-style). They're stored in
+the target entity's existing `custom_fields` JSON column — no migration needed:
+
+```ts
+customFields: [
+  { tables: ['dcim_manufacturer'], name: 'tier', type: 'select',
+    choices: ['bronze', 'silver', 'gold'], default: 'bronze' },
+]
+```
+
+Types: `text` | `integer` | `boolean` | `select`. On write, `custom_fields` values
+are validated (defined name, type, choice, required) and rejected with nested
+errors (`{ "custom_fields": { "tier": ["…"] } }`); on read, every defined field is
+returned, filled with its `default` (or `null`) when unset. `PATCH custom_fields`
+replaces the object (send the full set you want).
+
 ## Loading plugins
 
 Plugins are discovered from the project's **package.json** and from the

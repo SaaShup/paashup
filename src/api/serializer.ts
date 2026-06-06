@@ -3,6 +3,7 @@ import type { TableMeta } from '../model/meta-types.js';
 import { allTables, getTable, registryVersion } from '../model/registry.js';
 import { Repository } from '../repository/repository.js';
 import { readRelations } from '../repository/relations.js';
+import { customFieldsFor } from '../customfields/registry.js';
 import { computeFields } from './computed.js';
 
 // Lookups derived from the registry, rebuilt when a plugin registers an entity.
@@ -226,6 +227,20 @@ export class Serializer {
     if (!('tags' in out)) out.tags = [];
     // computed read-only fields (family, children, _depth)
     Object.assign(out, this.computed.get(id) ?? {});
+    // custom fields: surface every defined field, filling defaults when unset
+    const cfs = customFieldsFor(meta.table);
+    if (cfs.length) {
+      const stored =
+        out.custom_fields &&
+        typeof out.custom_fields === 'object' &&
+        !Array.isArray(out.custom_fields)
+          ? (out.custom_fields as Record<string, unknown>)
+          : {};
+      const result: Record<string, unknown> = {};
+      for (const cf of cfs)
+        result[cf.name] = cf.name in stored ? stored[cf.name] : (cf.default ?? null);
+      out.custom_fields = result;
+    }
     return out;
   }
 

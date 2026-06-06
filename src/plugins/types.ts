@@ -1,5 +1,6 @@
 import type { Db } from '../db/types.js';
 import type { TableMeta } from '../model/meta-types.js';
+import type { CustomField } from '../customfields/types.js';
 
 /**
  * A plugin extends paasbox without touching core. Because the API engine is
@@ -17,6 +18,8 @@ export interface Plugin {
   readonly migrations?: readonly PluginMigration[];
   readonly routes?: readonly PluginRoute[];
   readonly hooks?: readonly Hook[];
+  /** Custom fields to attach to core/plugin entities (stored in `custom_fields`). */
+  readonly customFields?: readonly CustomField[];
 }
 
 /** An entity contributed by a plugin: table metadata (DDL lives in `migrations`). */

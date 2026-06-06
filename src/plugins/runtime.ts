@@ -1,5 +1,6 @@
 import type { Db } from '../db/types.js';
 import { getTable, registerEntity } from '../model/registry.js';
+import { registerCustomField, customFieldsFor } from '../customfields/registry.js';
 import type { Hook, HookEvent, Plugin, PluginMigration, PluginRoute } from './types.js';
 
 interface CompiledRoute {
@@ -89,6 +90,12 @@ export async function loadPlugins(db: Db, plugins: readonly Plugin[]): Promise<v
     await applyPluginMigrations(db, plugin.name, plugin.migrations ?? []);
     for (const entity of plugin.entities ?? []) {
       if (!getTable(entity.meta.table)) registerEntity(entity.meta); // safe on reload
+    }
+    for (const cf of plugin.customFields ?? []) {
+      // skip if already registered (safe on reload)
+      if (!cf.tables.some((t) => customFieldsFor(t).some((c) => c.name === cf.name))) {
+        registerCustomField(cf);
+      }
     }
     for (const route of plugin.routes ?? []) {
       routes.push(compile(route));

@@ -1,4 +1,6 @@
 import http from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { extname, resolve as resolvePath } from 'node:path';
 import type { Db } from '../db/types.js';
 import type { TableMeta } from '../model/meta-types.js';
 import { allTables, getTable } from '../model/registry.js';
@@ -31,6 +33,51 @@ export interface ServerOptions {
   auth?: AuthOptions;
   /** Attach a WebSocket change-feed at /api/ws/ that broadcasts write events. */
   realtime?: boolean;
+  /** Serve a built SPA (web/dist) for non-/api GET routes (single-container deploy). */
+  webRoot?: string;
+}
+
+const MIME: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript',
+  '.css': 'text/css',
+  '.json': 'application/json',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+  '.map': 'application/json',
+};
+
+/** Serve a static file from `root`, falling back to index.html (SPA routing). */
+async function serveStatic(
+  res: http.ServerResponse,
+  root: string,
+  pathname: string,
+): Promise<void> {
+  const rootAbs = resolvePath(root);
+  let rel = decodeURIComponent(pathname);
+  if (rel.endsWith('/')) rel += 'index.html';
+  const filePath = resolvePath(rootAbs, `.${rel}`);
+  if (filePath !== rootAbs && !filePath.startsWith(rootAbs + '/')) {
+    res.writeHead(403);
+    res.end();
+    return;
+  }
+  try {
+    const data = await readFile(filePath);
+    res.writeHead(200, { 'Content-Type': MIME[extname(filePath)] ?? 'application/octet-stream' });
+    res.end(data);
+  } catch {
+    try {
+      const html = await readFile(resolvePath(rootAbs, 'index.html'));
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(html);
+    } catch {
+      res.writeHead(404);
+      res.end();
+    }
+  }
 }
 
 interface Route {
@@ -159,6 +206,11 @@ export function createApiServer(opts: ServerOptions): http.Server {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(SWAGGER_UI_HTML);
         return;
+      }
+      // Static SPA for non-API GET routes (single-container deploy).
+      const rawPath = (req.url ?? '/').split('?')[0]!;
+      if (opts.webRoot && method === 'GET' && !rawPath.startsWith('/api/')) {
+        return serveStatic(res, opts.webRoot, rawPath);
       }
       // Authentication (token). When `auth.required`, anonymous requests are rejected.
       const auth = await authenticate(db, req.headers.authorization);

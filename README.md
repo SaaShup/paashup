@@ -49,9 +49,12 @@ docker build -t paasbox .
 docker run -p 8000:8000 -e PB_MIGRATE=1 -v paasbox-data:/data paasbox
 ```
 
-The image is multi-stage and runs as a non-root user. `PB_MIGRATE=1` applies the
-bundled SQLite migrations on boot (via `scripts/migrate-sqlite.mjs`, no Python in
-the image); for MariaDB, run migrations separately.
+The image is multi-stage and runs as a non-root user. It bundles the built Vue UI
+and serves **everything on one port**: the SPA at `/`, the REST API at `/api/`,
+the OpenAPI schema at `/api/schema/`, and the WebSocket change-feed at `/api/ws/`.
+`PB_MIGRATE=1` applies the bundled SQLite migrations on boot (via
+`scripts/migrate-sqlite.mjs`, no Python in the image); for MariaDB, run migrations
+separately.
 
 ### Development
 

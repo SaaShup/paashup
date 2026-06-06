@@ -2,8 +2,11 @@
 import { computed } from 'vue';
 import type { Obj } from '../api/client.js';
 
-const props = defineProps<{ items: Obj[] }>();
-const emit = defineEmits<{ (e: 'delete', id: number): void }>();
+const props = defineProps<{ items: Obj[]; editable?: boolean }>();
+const emit = defineEmits<{
+  (e: 'delete', id: number): void;
+  (e: 'edit', row: Obj): void;
+}>();
 
 const HIDE = new Set(['url', 'display_url', 'custom_fields', 'tags']);
 const FIRST = ['id', 'display'];
@@ -42,8 +45,11 @@ function cell(value: unknown): string {
     <tbody>
       <tr v-for="row in items" :key="(row as any).id">
         <td v-for="c in columns" :key="c">{{ cell(row[c]) }}</td>
-        <td>
-          <button class="del" @click="emit('delete', (row as any).id)">✕</button>
+        <td class="ops">
+          <button v-if="editable" class="edit" title="Edit" @click="emit('edit', row)">✎</button>
+          <button v-if="editable" class="del" title="Delete" @click="emit('delete', (row as any).id)">
+            ✕
+          </button>
         </td>
       </tr>
     </tbody>
@@ -70,11 +76,21 @@ th {
 tbody tr:hover {
   background: #f7f7f9;
 }
-.del {
+.ops {
+  white-space: nowrap;
+}
+.del,
+.edit {
   border: none;
   background: none;
-  color: #b91c1c;
   cursor: pointer;
+  font-size: 0.95rem;
+}
+.del {
+  color: #b91c1c;
+}
+.edit {
+  color: #2563eb;
 }
 .empty {
   color: #888;

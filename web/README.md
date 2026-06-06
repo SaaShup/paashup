@@ -49,8 +49,27 @@ stores; `BrowseView` loads a resource via REST once, then every subsequent chang
 to that table patches the in-memory list (insert/replace/remove) with no refetch.
 The `StatusBadge` shows connection state; `EventLog` shows the recent change stream.
 
-## Notes / next steps
+## Create / edit
 
-- Read + delete are wired; create/edit forms (rendered from the schema field types)
-  are the natural next addition.
+Forms are **schema-driven**: `ObjectForm.vue` reads the entity's `<Model>Request`
+schema from `/api/schema/` and renders inputs by type — text, number, checkbox
+(boolean), `<select>` for enums, an async `<select>` populated from the target
+resource for **foreign keys**, and a JSON textarea for `custom_fields`. Validation
+errors from the API (400, NetBox field-error shape) show inline. On save the change
+arrives over the WebSocket, so the list updates itself.
+
+## Single-container deploy
+
+The backend can serve the built SPA, so one container runs API + WebSocket + UI:
+
+```bash
+cd web && npm run build           # -> web/dist
+cd .. && PB_WEB_ROOT=web/dist npm start   # SPA at /, API at /api/, schema at /api/schema/
+```
+
+The provided `Dockerfile` does this automatically (it builds `web/` and sets
+`PB_WEB_ROOT`), so `docker run paasbox` serves everything on port 8000.
+
+## Notes
+
 - Auth: set a token in `localStorage.pb_token` to send `Authorization: Token …`.

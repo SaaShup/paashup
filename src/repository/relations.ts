@@ -1,6 +1,6 @@
 import type { Db } from '../db/types.js';
 import type { RelationMeta, TableMeta } from '../model/meta-types.js';
-import { tables } from '../model/metadata.js';
+import { getTable } from '../model/registry.js';
 import { ApiError } from '../errors.js';
 
 const TAG_TABLE = 'extras_tag';
@@ -79,7 +79,7 @@ async function resolveTargetIds(
     } else if (item && (item.slug || item.name)) {
       const col = item.slug ? 'slug' : 'name';
       const val = (item.slug ?? item.name)!;
-      const targetMeta = tables[rel.targetTable as keyof typeof tables] as TableMeta | undefined;
+      const targetMeta = getTable(rel.targetTable);
       if (targetMeta && !targetMeta.columns.some((c) => c.column === col)) {
         throw new ApiError(400, `${rel.target} cannot be looked up by ${col}; use an id`);
       }

@@ -67,7 +67,7 @@ export interface TableMeta {
   readonly table: string;
   readonly section: string;
   readonly endpoint: string;
-  readonly origin: 'core' | 'external-full' | 'external-stub';
+  readonly origin: 'core' | 'external-full' | 'external-stub' | 'plugin';
   readonly pk: string;
   readonly columns: readonly ColumnMeta[];
   /** Many-to-many relations (tags + join-table M2M). */

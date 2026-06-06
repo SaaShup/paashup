@@ -1,17 +1,25 @@
 import type { Db } from '../db/types.js';
 import type { TableMeta } from '../model/meta-types.js';
-import { tables } from '../model/metadata.js';
+import { allTables, getTable, registryVersion } from '../model/registry.js';
 import { Repository } from '../repository/repository.js';
 import { readRelations } from '../repository/relations.js';
 import { computeFields } from './computed.js';
 
-/** model name -> table name, for resolving FK targets. */
-const MODEL_TO_TABLE: Record<string, string> = {};
-/** content-type string (e.g. "dcim.site") -> table, for generic relations. */
-const CONTENTTYPE_TO_TABLE: Record<string, string> = {};
-for (const [table, meta] of Object.entries(tables)) {
-  MODEL_TO_TABLE[meta.model] = table;
-  CONTENTTYPE_TO_TABLE[meta.objectType] = table;
+// Lookups derived from the registry, rebuilt when a plugin registers an entity.
+let MODEL_TO_TABLE: Record<string, string> = {};
+let CONTENTTYPE_TO_TABLE: Record<string, string> = {};
+let lookupsVersion = -1;
+function lookups() {
+  if (lookupsVersion !== registryVersion()) {
+    MODEL_TO_TABLE = {};
+    CONTENTTYPE_TO_TABLE = {};
+    for (const meta of allTables()) {
+      MODEL_TO_TABLE[meta.model] = meta.table;
+      CONTENTTYPE_TO_TABLE[meta.objectType] = meta.table;
+    }
+    lookupsVersion = registryVersion();
+  }
+  return { MODEL_TO_TABLE, CONTENTTYPE_TO_TABLE };
 }
 
 /** Generic-relation groups for a table: accessor -> {typeCol, idCol}. */
@@ -61,7 +69,7 @@ const DISPLAY_FIELDS = [
 
 export type Serialized = Record<string, unknown>;
 
-const metaOf = (table: string) => tables[table as keyof typeof tables] as TableMeta;
+const metaOf = (table: string) => getTable(table) as TableMeta;
 
 /** NetBox blank value for a non-nullable column with no stored value. */
 function scalarDefault(col: { tsKind: string }): unknown {
@@ -113,6 +121,7 @@ export class Serializer {
 
   // ---- phase 1: collect FK + relation ids and load their briefs in bulk ----
   private async prefetch(table: string, rows: Record<string, unknown>[]): Promise<void> {
+    const { MODEL_TO_TABLE, CONTENTTYPE_TO_TABLE } = lookups();
     const meta = metaOf(table);
     const fkCols = meta.columns.filter((c) => c.references && MODEL_TO_TABLE[c.references]);
     const wanted = new Map<string, Set<number>>(); // target table -> ids to brief
@@ -172,6 +181,7 @@ export class Serializer {
 
   // ---- phase 2: synchronous render using the populated cache ----------------
   private render(table: string, row: Record<string, unknown>): Serialized {
+    const { MODEL_TO_TABLE, CONTENTTYPE_TO_TABLE } = lookups();
     const meta = metaOf(table);
     const id = Number(row[meta.pk]);
     const out: Serialized = {

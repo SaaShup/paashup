@@ -4,6 +4,8 @@
 //   PORT=8000  BASE_URL=http://localhost:8000
 import { createDb, type DbConfig } from './db/index.js';
 import { createApiServer } from './api/server.js';
+import { loadPlugins, loadedPlugins } from './plugins/runtime.js';
+import type { Plugin } from './plugins/types.js';
 
 function configFromEnv(): DbConfig {
   const dialect = (process.env.PB_DIALECT ?? 'sqlite') as 'sqlite' | 'mariadb';
@@ -23,6 +25,27 @@ function configFromEnv(): DbConfig {
 const port = Number(process.env.PORT ?? 8000);
 const baseUrl = process.env.BASE_URL ?? `http://localhost:${port}`;
 const db = createDb(configFromEnv());
+
+// Load plugins (comma-separated module specifiers in PB_PLUGINS) before the
+// server is created, so their entities/routes are part of the routing table.
+const pluginPaths = (process.env.PB_PLUGINS ?? '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+if (pluginPaths.length) {
+  const plugins: Plugin[] = [];
+  for (const spec of pluginPaths) {
+    const mod = await import(spec);
+    plugins.push((mod.default ?? mod) as Plugin);
+  }
+  await loadPlugins(db, plugins);
+  console.log(
+    `loaded plugins: ${loadedPlugins()
+      .map((p) => `${p.name}@${p.version}`)
+      .join(', ')}`,
+  );
+}
+
 const server = createApiServer({
   db,
   baseUrl,

@@ -128,6 +128,10 @@ five jobs: **test** (SQLite), **test-mariadb** (service container), **lint**
   (NetBox field-error shape), and optional token auth (`Authorization: Token …`).
 - **OpenAPI conformance** enforced by `test/contract.test.mjs` (validates live
   responses against the NetBox read schemas with `ajv`).
+- **Plugins** ([src/plugins/](src/plugins/)): third parties extend paasbox by
+  registering entity metadata (+ DDL) — the engine then exposes a full NetBox-shaped
+  CRUD API under `/api/plugins/<name>/…` automatically — plus custom routes and write
+  hooks. Load via `PB_PLUGINS=<module,…>`.
 
 ## Regenerate everything
 

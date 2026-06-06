@@ -1,17 +1,14 @@
 import http from 'node:http';
 import type { Db } from '../db/types.js';
 import type { TableMeta } from '../model/meta-types.js';
-import { tables } from '../model/metadata.js';
+import { allTables, getTable } from '../model/registry.js';
 import { Repository, type ListOptions } from '../repository/repository.js';
 import { ApiError, ValidationError } from '../errors.js';
 import { authenticate, type AuthOptions } from '../auth.js';
+import { matchRoute, fireHooks } from '../plugins/runtime.js';
 import { Serializer } from './serializer.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-
-/** endpoint path -> table name (e.g. "/api/dcim/devices/" -> "dcim_device"). */
-const COLLECTIONS = new Map<string, string>();
-for (const [table, meta] of Object.entries(tables)) COLLECTIONS.set(meta.endpoint, table);
 
 export interface ServerOptions {
   db: Db;
@@ -29,12 +26,19 @@ interface Route {
   id?: number;
 }
 
-function resolve(pathname: string): Route | null {
+/** endpoint path -> table name, built from the registry (includes plugin entities). */
+function buildCollections(): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const meta of allTables()) m.set(meta.endpoint, meta.table);
+  return m;
+}
+
+function resolve(pathname: string, collections: Map<string, string>): Route | null {
   const p = pathname.endsWith('/') ? pathname : `${pathname}/`;
-  const collection = COLLECTIONS.get(p);
+  const collection = collections.get(p);
   if (collection) return { table: collection };
   const m = p.match(/^(.*\/)(\d+)\/$/);
-  if (m && COLLECTIONS.has(m[1]!)) return { table: COLLECTIONS.get(m[1]!)!, id: Number(m[2]) };
+  if (m && collections.has(m[1]!)) return { table: collections.get(m[1]!)!, id: Number(m[2]) };
   return null;
 }
 
@@ -115,6 +119,8 @@ function pageLink(
 export function createApiServer(opts: ServerOptions): http.Server {
   const { db } = opts;
   const fixedBase = opts.baseUrl?.replace(/\/$/, '');
+  // Built once at server creation — plugins must be loaded before this.
+  const collections = buildCollections();
 
   return http.createServer(async (req, res) => {
     const baseUrl = fixedBase ?? `http://${req.headers.host ?? 'localhost:8000'}`;
@@ -130,10 +136,24 @@ export function createApiServer(opts: ServerOptions): http.Server {
       }
 
       const url = new URL(req.url ?? '/', baseUrl);
-      const route = resolve(url.pathname);
+
+      // Custom plugin routes take precedence over generic CRUD.
+      const custom = matchRoute(method, url.pathname);
+      if (custom) {
+        const body = SAFE_METHODS.has(method) ? undefined : await readBody(req);
+        const result = await custom.route.handler({
+          db,
+          params: custom.params,
+          query: url.searchParams,
+          body,
+        });
+        return send(res, result.status, result.body);
+      }
+
+      const route = resolve(url.pathname, collections);
       if (!route) throw new ApiError(404, 'Not found');
 
-      const meta = tables[route.table as keyof typeof tables] as TableMeta;
+      const meta = getTable(route.table) as TableMeta;
       const repo = new Repository<Record<string, unknown>>(db, meta);
       const ser = new Serializer(db, baseUrl);
 
@@ -176,6 +196,7 @@ export function createApiServer(opts: ServerOptions): http.Server {
             return send(res, 201, out);
           }
           const created = await repo.create(body as Record<string, unknown>);
+          await fireHooks(db, route.table, 'created', (created as { id: number }).id, created);
           return send(res, 201, await ser.object(route.table, created));
         }
         throw new ApiError(405, `Method ${method} not allowed`);
@@ -191,11 +212,13 @@ export function createApiServer(opts: ServerOptions): http.Server {
         const body = await readBody(req);
         const updated = await repo.update(route.id, body as Record<string, unknown>);
         if (!updated) throw new ApiError(404, 'Not found');
+        await fireHooks(db, route.table, 'updated', route.id, updated);
         return send(res, 200, await ser.object(route.table, updated));
       }
       if (method === 'DELETE') {
         const ok = await repo.destroy(route.id);
         if (!ok) throw new ApiError(404, 'Not found');
+        await fireHooks(db, route.table, 'deleted', route.id);
         return send(res, 204);
       }
       throw new ApiError(405, `Method ${method} not allowed`);

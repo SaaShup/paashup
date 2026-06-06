@@ -16,7 +16,8 @@ repository → an HTTP API that serializes NetBox-shaped responses.
 | [`openapi/`](openapi/) | Filtered NetBox OpenAPI spec (DCIM/IPAM/Virtualization) + extractor |
 | [`datamodel/`](datamodel/) | Data model + generators → `data-model.json`, dual-dialect SQL, coverage report |
 | [`migrations/`](migrations/) | Plain-SQL migrations (per dialect) + a no-ORM runner |
-| [`src/`](src/) | TypeScript data layer + HTTP API (db abstraction, repository, serializer, auth) |
+| [`src/`](src/) | TypeScript data layer + HTTP API (db abstraction, repository, serializer, auth, WebSocket feed) |
+| [`web/`](web/) | Vue 3 + Vite + TS + Pinia admin UI — schema-driven, live over WebSocket |
 | [`scripts/`](scripts/) | `generate.mjs` — emits TS types + runtime metadata from the data model |
 | [`test/`](test/) | `node:test` suites incl. an OpenAPI contract test (ajv) |
 

@@ -8,6 +8,8 @@ export { repository, Repository, tables } from './repository/index.js';
 export type { TableName, ListOptions, Page } from './repository/index.js';
 
 export { createApiServer, Serializer, buildOpenApi } from './api/index.js';
+export { attachRealtime, broadcast, clientCount } from './realtime.js';
+export type { ChangeEvent } from './realtime.js';
 export type { ServerOptions, Serialized } from './api/index.js';
 export { ApiError, NotFoundError, ValidationError } from './errors.js';
 export { authenticate, createToken, generateTokenKey } from './auth.js';

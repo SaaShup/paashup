@@ -1,0 +1,56 @@
+# paasbox web (Vue 3 + Vite + TypeScript + Pinia)
+
+A human-facing admin UI for paasbox. It's **schema-driven** — resources are
+discovered from the API's own `/api/schema/` — and **live**: Pinia stores are kept
+up to date by the backend's WebSocket change-feed (`/api/ws/`), so creates/edits/
+deletes from anywhere (API, other tabs, automation) appear instantly.
+
+## Stack & layout
+
+Vue 3 · Vite · TypeScript · Pinia · **native WebSocket** (no socket.io).
+
+```
+src/
+├── api/          REST client (client.ts) + schema-driven resource discovery (resources.ts)
+├── websocket/
+│   ├── socket.ts   native WebSocket manager (auto-reconnect, backoff)
+│   └── events.ts   typed server events (hello / change)
+├── stores/       Pinia state updated by the WebSocket
+│   ├── connection.ts   status + rolling change log
+│   └── objects.ts      records per table; load() via REST, applyChange() from WS
+├── views/        DashboardView.vue (live activity), BrowseView.vue (any resource)
+└── components/   StatusBadge · ObjectTable · EventLog
+```
+
+## Develop
+
+```bash
+# 1) run the backend (with the WebSocket feed, on by default)
+cd .. && PB_SQLITE_FILE=./paasbox.db PB_MIGRATE=1 npm run build && npm start
+# 2) run the UI (proxies /api and /api/ws to the backend)
+cd web && npm install && npm run dev    # http://localhost:5173
+```
+
+`PB_BACKEND` overrides the dev proxy target (default `http://localhost:8000`).
+
+## Build
+
+```bash
+npm run build      # vue-tsc typecheck + vite build -> dist/
+```
+
+Serve `dist/` with any static server (or behind the API). The UI calls the API
+same-origin, so put it on the same host/proxy as paasbox in production.
+
+## How "live" works
+
+`main.ts` connects the singleton `socket`, forwards `change` events to the Pinia
+stores; `BrowseView` loads a resource via REST once, then every subsequent change
+to that table patches the in-memory list (insert/replace/remove) with no refetch.
+The `StatusBadge` shows connection state; `EventLog` shows the recent change stream.
+
+## Notes / next steps
+
+- Read + delete are wired; create/edit forms (rendered from the schema field types)
+  are the natural next addition.
+- Auth: set a token in `localStorage.pb_token` to send `Authorization: Token …`.

@@ -6,6 +6,7 @@ import { Repository, type ListOptions } from '../repository/repository.js';
 import { ApiError, ValidationError } from '../errors.js';
 import { authenticate, type AuthOptions } from '../auth.js';
 import { matchRoute, fireHooks } from '../plugins/runtime.js';
+import { attachRealtime, broadcast } from '../realtime.js';
 import { Serializer } from './serializer.js';
 import { buildOpenApi } from './openapi.js';
 
@@ -28,6 +29,8 @@ export interface ServerOptions {
   baseUrl?: string;
   /** Token authentication. Off by default; set `{ required: true }` to enforce. */
   auth?: AuthOptions;
+  /** Attach a WebSocket change-feed at /api/ws/ that broadcasts write events. */
+  realtime?: boolean;
 }
 
 interface Route {
@@ -40,6 +43,15 @@ function buildCollections(): Map<string, string> {
   const m = new Map<string, string>();
   for (const meta of allTables()) m.set(meta.endpoint, meta.table);
   return m;
+}
+
+function emitChange(
+  meta: TableMeta,
+  event: 'created' | 'updated' | 'deleted',
+  id: number,
+  data?: unknown,
+): void {
+  broadcast({ type: 'change', event, object_type: meta.objectType, table: meta.table, id, data });
 }
 
 function resolve(pathname: string, collections: Map<string, string>): Route | null {
@@ -132,7 +144,7 @@ export function createApiServer(opts: ServerOptions): http.Server {
   const collections = buildCollections();
   let schemaDoc: Record<string, unknown> | undefined;
 
-  return http.createServer(async (req, res) => {
+  const server = http.createServer(async (req, res) => {
     const baseUrl = fixedBase ?? `http://${req.headers.host ?? 'localhost:8000'}`;
     const method = req.method ?? 'GET';
     try {
@@ -215,11 +227,15 @@ export function createApiServer(opts: ServerOptions): http.Server {
               return Promise.all(body.map((b) => r.create(b as Record<string, unknown>)));
             });
             const out = await ser.objects(route.table, created as Record<string, unknown>[]);
+            for (const o of out) emitChange(meta, 'created', Number((o as { id: number }).id), o);
             return send(res, 201, out);
           }
           const created = await repo.create(body as Record<string, unknown>);
-          await fireHooks(db, route.table, 'created', (created as { id: number }).id, created);
-          return send(res, 201, await ser.object(route.table, created));
+          const createdId = (created as { id: number }).id;
+          await fireHooks(db, route.table, 'created', createdId, created);
+          const obj = await ser.object(route.table, created);
+          emitChange(meta, 'created', createdId, obj);
+          return send(res, 201, obj);
         }
         throw new ApiError(405, `Method ${method} not allowed`);
       }
@@ -235,12 +251,15 @@ export function createApiServer(opts: ServerOptions): http.Server {
         const updated = await repo.update(route.id, body as Record<string, unknown>);
         if (!updated) throw new ApiError(404, 'Not found');
         await fireHooks(db, route.table, 'updated', route.id, updated);
-        return send(res, 200, await ser.object(route.table, updated));
+        const obj = await ser.object(route.table, updated);
+        emitChange(meta, 'updated', route.id, obj);
+        return send(res, 200, obj);
       }
       if (method === 'DELETE') {
         const ok = await repo.destroy(route.id);
         if (!ok) throw new ApiError(404, 'Not found');
         await fireHooks(db, route.table, 'deleted', route.id);
+        emitChange(meta, 'deleted', route.id);
         return send(res, 204);
       }
       throw new ApiError(405, `Method ${method} not allowed`);
@@ -252,4 +271,7 @@ export function createApiServer(opts: ServerOptions): http.Server {
       send(res, e.status, body);
     }
   });
+
+  if (opts.realtime) attachRealtime(server);
+  return server;
 }

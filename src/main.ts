@@ -55,6 +55,7 @@ const server = createApiServer({
   db,
   baseUrl,
   auth: { required: process.env.PB_AUTH_REQUIRED === '1' },
+  realtime: process.env.PB_REALTIME !== '0', // WebSocket change-feed on by default
 });
 
 server.listen(port, () => {

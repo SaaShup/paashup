@@ -24,7 +24,7 @@ run()  { printf '%s$ %s%s\n' "$DIM" "$*" "$RST"; "$@"; }
 stage() { local name="$1"; shift; banner "$name"; if run "$@"; then pass "$name"; else fail "$name"; fi; }
 
 # which stages to run (default: all)
-WANT="${*:-lint test security build test-mariadb}"
+WANT="${*:-lint test security build web test-mariadb}"
 wants() { case " $WANT " in *" $1 "*) return 0;; *) return 1;; esac; }
 
 cleanup() { docker rm -f paasbox-ci-app paasbox-ci-maria >/dev/null 2>&1 || true; }
@@ -87,6 +87,17 @@ if wants build; then
     else
       fail "docker-image"
     fi
+  fi
+fi
+
+# ---------- web (frontend build) ----------
+if wants web; then
+  if have npm && [ -d web ]; then
+    banner "web"
+    [ -d web/node_modules ] || (cd web && npm ci >/dev/null 2>&1)
+    if (cd web && npm run build); then pass "web"; else fail "web"; fi
+  else
+    skip "web" "npm or web/ missing"
   fi
 fi
 

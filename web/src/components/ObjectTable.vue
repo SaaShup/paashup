@@ -65,16 +65,19 @@ table {
 }
 th,
 td {
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border);
   text-align: left;
-  padding: 6px 10px;
+  padding: 8px 12px;
 }
-th {
-  color: #666;
+thead th {
+  background: var(--surface);
+  color: var(--muted);
   font-weight: 600;
+  position: sticky;
+  top: 0;
 }
 tbody tr:hover {
-  background: #f7f7f9;
+  background: var(--surface);
 }
 .ops {
   white-space: nowrap;
@@ -87,12 +90,13 @@ tbody tr:hover {
   font-size: 0.95rem;
 }
 .del {
-  color: #b91c1c;
+  color: var(--danger);
 }
 .edit {
-  color: #2563eb;
+  color: var(--primary-d);
 }
 .empty {
-  color: #888;
+  color: var(--muted);
+  padding: 14px;
 }
 </style>

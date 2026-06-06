@@ -191,22 +191,28 @@ input,
 select,
 textarea {
   padding: 6px 8px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  font:
-    inherit;
+  font: inherit;
   width: 100%;
   box-sizing: border-box;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
 }
 input[type='checkbox'] {
   width: auto;
 }
 .err {
-  color: #b91c1c;
+  color: var(--danger);
   font-size: 0.78rem;
 }
 .general {
-  color: #b91c1c;
+  color: var(--danger);
   font-size: 0.85rem;
 }
 .actions {
@@ -218,14 +224,17 @@ input[type='checkbox'] {
 button {
   padding: 7px 14px;
   border-radius: 6px;
-  border: 1px solid #2563eb;
-  background: #2563eb;
+  border: 1px solid var(--primary);
+  background: var(--primary);
   color: white;
   cursor: pointer;
 }
+button:hover {
+  background: var(--primary-d);
+}
 button.ghost {
   background: white;
-  color: #555;
-  border-color: #ddd;
+  color: var(--text);
+  border-color: var(--border);
 }
 </style>

@@ -1,27 +1,18 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { loadResources } from '../api/resources.js';
+import { computed } from 'vue';
+import { useUiStore } from '../stores/ui.js';
 import EventLog from '../components/EventLog.vue';
 
-const resourceCount = ref<number | null>(null);
-const sections = ref<string[]>([]);
-
-onMounted(async () => {
-  try {
-    const resources = await loadResources();
-    resourceCount.value = resources.length;
-    sections.value = [...new Set(resources.map((r) => r.section))].sort();
-  } catch {
-    resourceCount.value = -1;
-  }
-});
+const ui = useUiStore();
+const resourceCount = computed(() => ui.resources.length);
+const sections = computed(() => [...new Set(ui.resources.map((r) => r.section))].sort());
 </script>
 
 <template>
   <section>
     <div class="cards">
       <div class="card">
-        <div class="num">{{ resourceCount === null ? '…' : resourceCount }}</div>
+        <div class="num">{{ resourceCount || '…' }}</div>
         <div class="lbl">API resources</div>
       </div>
       <div class="card">
@@ -46,7 +37,8 @@ onMounted(async () => {
   gap: 16px;
 }
 .card {
-  background: #f4f4f7;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 16px 22px;
   min-width: 120px;
@@ -54,9 +46,10 @@ onMounted(async () => {
 .num {
   font-size: 2rem;
   font-weight: 700;
+  color: var(--primary-d);
 }
 .lbl {
-  color: #777;
+  color: var(--muted);
   font-size: 0.85rem;
 }
 .sections {

@@ -21,7 +21,7 @@ const color = computed(
   align-items: center;
   gap: 6px;
   font-size: 0.85rem;
-  color: #444;
+  color: inherit;
 }
 .dot {
   width: 9px;

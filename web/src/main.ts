@@ -1,5 +1,6 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
+import './styles.css';
 import App from './App.vue';
 import { socket } from './websocket/socket.js';
 import { isChange } from './websocket/events.js';

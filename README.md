@@ -56,6 +56,34 @@ the OpenAPI schema at `/api/schema/`, and the WebSocket change-feed at `/api/ws/
 `scripts/migrate-sqlite.mjs`, no Python in the image); for MariaDB, run migrations
 separately.
 
+### Run the web UI
+
+The admin UI (Vue 3, NetBox-style, schema-driven, live over WebSocket) can be run
+two ways.
+
+**Single container (simplest — UI + API + schema + WebSocket on one port):**
+
+```bash
+docker build -t paasbox .
+docker run --rm -p 8000:8000 -e PB_MIGRATE=1 paasbox
+# then open http://localhost:8000/
+```
+
+**Dev mode (hot reload, for working on the UI) — two processes:**
+
+```bash
+# Terminal 1 — backend (API + WebSocket on :8000)
+npm install && npm run build
+node scripts/migrate-sqlite.mjs ./paasbox.db          # create the SQLite schema (no Python)
+PB_SQLITE_FILE=./paasbox.db node dist/main.js
+
+# Terminal 2 — Vue dev server (proxies /api and /api/ws to :8000)
+cd web && npm install && npm run dev                  # then open http://localhost:5173
+```
+
+A fresh database is empty — click **+ Add** in the UI, or seed via the API. Full
+details in [`web/README.md`](web/README.md).
+
 ### Development
 
 ```bash

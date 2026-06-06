@@ -13,16 +13,26 @@ export interface Plugin {
   readonly name: string;
   readonly version: string;
   readonly entities?: readonly PluginEntity[];
+  /** Ordered schema migrations, tracked in `schema_migrations` like core ones. */
+  readonly migrations?: readonly PluginMigration[];
   readonly routes?: readonly PluginRoute[];
   readonly hooks?: readonly Hook[];
 }
 
-/** An entity contributed by a plugin: table metadata + the DDL to create it. */
+/** An entity contributed by a plugin: table metadata (DDL lives in `migrations`). */
 export interface PluginEntity {
   /** Table metadata; `endpoint` must be under `/api/plugins/<plugin>/<resource>/`. */
   readonly meta: TableMeta;
-  /** Idempotent DDL (CREATE TABLE IF NOT EXISTS …) per dialect, applied on load. */
-  readonly migration: { readonly sqlite: string; readonly mariadb: string };
+}
+
+/**
+ * One versioned migration for a plugin. Applied in `version` order and recorded
+ * in `schema_migrations` as `plugin:<name>:<version>`, so each runs exactly once.
+ */
+export interface PluginMigration {
+  readonly version: string; // e.g. "0001_initial"
+  readonly sqlite: string;
+  readonly mariadb: string;
 }
 
 export interface PluginRouteContext {

@@ -13,11 +13,17 @@ export { ApiError, NotFoundError, ValidationError } from './errors.js';
 export { authenticate, createToken, generateTokenKey } from './auth.js';
 export type { AuthContext, AuthOptions, CreateTokenInput } from './auth.js';
 
-export { loadPlugins, loadedPlugins } from './plugins/runtime.js';
+export {
+  loadPlugins,
+  applyPluginMigrations,
+  loadedPlugins,
+  discoverPluginSpecifiers,
+} from './plugins/index.js';
 export { registerEntity, getTable, allTables } from './model/registry.js';
 export type {
   Plugin,
   PluginEntity,
+  PluginMigration,
   PluginRoute,
   PluginRouteContext,
   PluginRouteResult,

@@ -82,7 +82,8 @@ const assetMeta: TableMeta = {
   ],
 };
 
-const migration = {
+const initial = {
+  version: '0001_initial',
   sqlite: `
     CREATE TABLE IF NOT EXISTS ${TABLE} (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -113,7 +114,8 @@ let createdCount = 0;
 export const inventoryPlugin: Plugin = {
   name: 'inventory',
   version: '0.1.0',
-  entities: [{ meta: assetMeta, migration }],
+  entities: [{ meta: assetMeta }],
+  migrations: [initial],
   routes: [
     {
       method: 'GET',

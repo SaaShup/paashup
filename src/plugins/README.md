@@ -15,9 +15,10 @@ import type { Plugin } from 'paasbox';
 const plugin: Plugin = {
   name: 'inventory',
   version: '0.1.0',
-  entities: [{ meta /* TableMeta */, migration: { sqlite, mariadb } }],
-  routes:  [{ method: 'GET', path: '/api/plugins/inventory/stats/', handler }],
-  hooks:   [{ table: 'plugin_inventory_asset', event: 'created', handler }],
+  entities:   [{ meta /* TableMeta */ }],
+  migrations: [{ version: '0001_initial', sqlite, mariadb }],
+  routes:     [{ method: 'GET', path: '/api/plugins/inventory/stats/', handler }],
+  hooks:      [{ table: 'plugin_inventory_asset', event: 'created', handler }],
 };
 export default plugin;
 ```
@@ -29,9 +30,8 @@ See [`examples/inventory.ts`](examples/inventory.ts) for a complete, working exa
 
 Provide a `TableMeta` (the same shape core entities use — see
 [`../model/meta-types.ts`](../model/meta-types.ts)) with an `endpoint` under
-`/api/plugins/<name>/<resource>/`, plus idempotent `CREATE TABLE IF NOT EXISTS` DDL
-for each dialect. On load the entity is registered and its table ensured; it then
-gets, for free:
+`/api/plugins/<name>/<resource>/`, and the table's DDL as a `migrations` entry (see
+below). On load the entity is registered; it then gets, for free:
 
 - `GET/POST /…/`, `GET/PUT/PATCH/DELETE /…/{id}/`
 - pagination envelope, query lookups (`__ic`, `__in`, `__gte`, `q`, `ordering`)
@@ -40,6 +40,19 @@ gets, for free:
 
 A plugin entity can reference **core** tables (FKs, tags) by pointing `references` /
 relations at core table names.
+
+### Migrations
+
+Declare ordered, per-dialect migrations at the plugin level:
+
+```ts
+migrations: [{ version: '0001_initial', sqlite: 'CREATE TABLE …', mariadb: 'CREATE TABLE …' }]
+```
+
+`loadPlugins` applies pending migrations in `version` order and records each in
+`schema_migrations` as `plugin:<name>:<version>`, so every migration runs exactly
+once (idempotent across restarts, on SQLite and MariaDB). Ship later schema changes
+as additional versions (`0002_…`).
 
 ### Custom routes
 
@@ -54,10 +67,20 @@ Hooks fire after a successful API change (handler gets `{ db, id, row }`).
 
 ## Loading plugins
 
-At runtime, set `PB_PLUGINS` to a comma-separated list of module specifiers; each is
-imported and its default export loaded **before** the server starts:
+Plugins are discovered from the project's **package.json** and from the
+`PB_PLUGINS` env list (merged), then imported and loaded **before** the server
+starts:
+
+```jsonc
+// package.json
+{
+  "paasbox": { "plugins": ["./dist/plugins/examples/inventory.js"] },
+  "dependencies": { "paasbox-plugin-acme": "^1.0.0" }  // paasbox-plugin-* auto-discovered
+}
+```
 
 ```bash
+# or explicitly via env (comma-separated module specifiers)
 PB_PLUGINS=paasbox/dist/plugins/examples/inventory.js npm start
 ```
 
@@ -85,8 +108,6 @@ const server = createApiServer({ db });
 ## Current limits (vs NetBox plugins)
 
 - No UI/templates (paasbox is API-only).
-- Plugin DDL is applied idempotently on load (use `IF NOT EXISTS`); there's no
-  per-plugin versioned migration history yet (core uses `migrations/`).
 - Hooks fire on **API** writes, not on direct repository use.
 - Plugin entity types aren't in the generated `TableName`, so use
   `new Repository(db, getTable(name)!)` for typed-ish access in code.

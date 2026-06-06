@@ -2,12 +2,14 @@
 // a write hook — all NetBox-shaped. Run: node --test test/plugins.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, rmSync } from 'node:fs';
+import { readFileSync, rmSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 import { SqliteDb } from '../dist/db/sqlite.js';
 import { loadPlugins } from '../dist/plugins/runtime.js';
+import { discoverPluginSpecifiers } from '../dist/plugins/discovery.js';
 import inventoryPlugin from '../dist/plugins/examples/inventory.js';
 import { createApiServer } from '../dist/api/server.js';
 
@@ -102,4 +104,33 @@ test('core API still works alongside the plugin', async () => {
 
 test('unknown plugin path 404s', async () => {
   assert.equal((await api('GET', '/api/plugins/nope/')).status, 404);
+});
+
+test('plugin migration is tracked once and idempotent on reload', async () => {
+  const q = "SELECT version FROM schema_migrations WHERE version LIKE 'plugin:inventory:%'";
+  let rows = await db.query(q);
+  assert.deepEqual(
+    rows.map((r) => r.version),
+    ['plugin:inventory:0001_initial'],
+  );
+  // reloading must not re-apply the migration or throw
+  await loadPlugins(db, [inventoryPlugin]);
+  rows = await db.query(q);
+  assert.equal(rows.length, 1);
+});
+
+test('discoverPluginSpecifiers reads package.json', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pbx-disc-'));
+  writeFileSync(
+    join(dir, 'package.json'),
+    JSON.stringify({
+      paasbox: { plugins: ['./local-plugin.js'] },
+      dependencies: { 'paasbox-plugin-foo': '^1.0.0', mysql2: '^3' },
+    }),
+  );
+  const specs = discoverPluginSpecifiers(dir);
+  assert.ok(specs.includes('./local-plugin.js'));
+  assert.ok(specs.includes('paasbox-plugin-foo'));
+  assert.ok(!specs.includes('mysql2'));
+  rmSync(dir, { recursive: true, force: true });
 });

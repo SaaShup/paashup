@@ -1,6 +1,6 @@
 import type { Db } from '../db/types.js';
-import { registerEntity } from '../model/registry.js';
-import type { Hook, HookEvent, Plugin, PluginRoute } from './types.js';
+import { getTable, registerEntity } from '../model/registry.js';
+import type { Hook, HookEvent, Plugin, PluginMigration, PluginRoute } from './types.js';
 
 interface CompiledRoute {
   method: string;
@@ -36,15 +36,59 @@ function statements(sql: string): string[] {
     .filter(Boolean);
 }
 
-/** Register plugins: add their entities, apply idempotent DDL, mount routes/hooks. */
+async function ensureMigrationsTable(db: Db): Promise<void> {
+  if (db.dialect === 'sqlite') {
+    await db.execute(
+      `CREATE TABLE IF NOT EXISTS schema_migrations (
+         version TEXT PRIMARY KEY,
+         applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))`,
+    );
+  } else {
+    await db.execute(
+      `CREATE TABLE IF NOT EXISTS schema_migrations (
+         version VARCHAR(255) PRIMARY KEY,
+         applied_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    );
+  }
+}
+
+/**
+ * Apply a plugin's pending migrations in order, each recorded as
+ * `plugin:<name>:<version>` so it runs exactly once. Returns versions applied now.
+ */
+export async function applyPluginMigrations(
+  db: Db,
+  name: string,
+  migrations: readonly PluginMigration[],
+): Promise<string[]> {
+  if (!migrations.length) return [];
+  await ensureMigrationsTable(db);
+  const applied = new Set(
+    (await db.query<{ version: string }>('SELECT version FROM schema_migrations')).map(
+      (r) => r.version,
+    ),
+  );
+  const done: string[] = [];
+  for (const m of [...migrations].sort((a, b) => a.version.localeCompare(b.version))) {
+    const version = `plugin:${name}:${m.version}`;
+    if (applied.has(version)) continue;
+    const ddl = db.dialect === 'sqlite' ? m.sqlite : m.mariadb;
+    await db.transaction(async (tx) => {
+      for (const stmt of statements(ddl)) await tx.execute(stmt);
+      await tx.execute('INSERT INTO schema_migrations (version) VALUES (?)', [version]);
+    });
+    done.push(version);
+  }
+  return done;
+}
+
+/** Register plugins: add entities, apply pending migrations, mount routes/hooks. */
 export async function loadPlugins(db: Db, plugins: readonly Plugin[]): Promise<void> {
   for (const plugin of plugins) {
+    await applyPluginMigrations(db, plugin.name, plugin.migrations ?? []);
     for (const entity of plugin.entities ?? []) {
-      registerEntity(entity.meta);
-      const ddl = db.dialect === 'sqlite' ? entity.migration.sqlite : entity.migration.mariadb;
-      for (const stmt of statements(ddl)) {
-        await db.execute(stmt);
-      }
+      if (!getTable(entity.meta.table)) registerEntity(entity.meta); // safe on reload
     }
     for (const route of plugin.routes ?? []) {
       routes.push(compile(route));

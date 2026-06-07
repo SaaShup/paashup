@@ -11,7 +11,7 @@ const page = computed(() => ui.pluginPage);
 
 const ZMIN = 50;
 const ZMAX = 300;
-const pct = ref(100);
+const pct = ref(150); // default larger so plugin "blocks" aren't too small
 const setZoom = (p: number) => (pct.value = Math.min(ZMAX, Math.max(ZMIN, Math.round(p))));
 const zoomBy = (d: number) => setZoom(pct.value + d);
 

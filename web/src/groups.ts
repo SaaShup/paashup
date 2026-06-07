@@ -47,6 +47,7 @@ const SECTION_GROUPS: Record<string, SubGroup[]> = {
   ],
   extras: [
     { label: 'Tags', match: ['tag'] },
+    { label: 'Webhooks', match: ['webhook'] },
     { label: 'Config', match: ['config'] },
   ],
 };

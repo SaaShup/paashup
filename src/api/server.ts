@@ -9,6 +9,7 @@ import { ApiError, ValidationError } from '../errors.js';
 import { authenticate, type AuthOptions } from '../auth.js';
 import { matchRoute, fireHooks } from '../plugins/runtime.js';
 import { attachRealtime, broadcast } from '../realtime.js';
+import { dispatchWebhooks } from '../webhooks.js';
 import { Serializer } from './serializer.js';
 import { buildOpenApi } from './openapi.js';
 
@@ -93,12 +94,14 @@ function buildCollections(): Map<string, string> {
 }
 
 function emitChange(
+  db: Db,
   meta: TableMeta,
   event: 'created' | 'updated' | 'deleted',
   id: number,
   data?: unknown,
 ): void {
   broadcast({ type: 'change', event, object_type: meta.objectType, table: meta.table, id, data });
+  void dispatchWebhooks(db, meta, event, id, data); // fire-and-forget HTTP webhooks
 }
 
 function resolve(pathname: string, collections: Map<string, string>): Route | null {
@@ -279,14 +282,15 @@ export function createApiServer(opts: ServerOptions): http.Server {
               return Promise.all(body.map((b) => r.create(b as Record<string, unknown>)));
             });
             const out = await ser.objects(route.table, created as Record<string, unknown>[]);
-            for (const o of out) emitChange(meta, 'created', Number((o as { id: number }).id), o);
+            for (const o of out)
+              emitChange(db, meta, 'created', Number((o as { id: number }).id), o);
             return send(res, 201, out);
           }
           const created = await repo.create(body as Record<string, unknown>);
           const createdId = (created as { id: number }).id;
           await fireHooks(db, route.table, 'created', createdId, created);
           const obj = await ser.object(route.table, created);
-          emitChange(meta, 'created', createdId, obj);
+          emitChange(db, meta, 'created', createdId, obj);
           return send(res, 201, obj);
         }
         throw new ApiError(405, `Method ${method} not allowed`);
@@ -304,14 +308,14 @@ export function createApiServer(opts: ServerOptions): http.Server {
         if (!updated) throw new ApiError(404, 'Not found');
         await fireHooks(db, route.table, 'updated', route.id, updated);
         const obj = await ser.object(route.table, updated);
-        emitChange(meta, 'updated', route.id, obj);
+        emitChange(db, meta, 'updated', route.id, obj);
         return send(res, 200, obj);
       }
       if (method === 'DELETE') {
         const ok = await repo.destroy(route.id);
         if (!ok) throw new ApiError(404, 'Not found');
         await fireHooks(db, route.table, 'deleted', route.id);
-        emitChange(meta, 'deleted', route.id);
+        emitChange(db, meta, 'deleted', route.id);
         return send(res, 204);
       }
       throw new ApiError(405, `Method ${method} not allowed`);

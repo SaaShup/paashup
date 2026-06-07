@@ -17,11 +17,12 @@
     "format": "prettier --write \"src/**/*.ts\" \"scripts/**/*.mjs\" \"test/**/*.mjs\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"scripts/**/*.mjs\" \"test/**/*.mjs\"",
     "pretest": "tsc",
-    "test": "node --test test/smoke.mjs test/api.test.mjs test/batching.test.mjs test/relations.test.mjs test/validation.test.mjs test/generic-relations.test.mjs test/computed.test.mjs test/auth.test.mjs test/contract.test.mjs test/plugins.test.mjs test/customfields.test.mjs test/openapi.test.mjs test/realtime.test.mjs test/static.test.mjs",
+    "test": "node --test test/smoke.mjs test/api.test.mjs test/batching.test.mjs test/relations.test.mjs test/validation.test.mjs test/generic-relations.test.mjs test/computed.test.mjs test/auth.test.mjs test/contract.test.mjs test/plugins.test.mjs test/customfields.test.mjs test/openapi.test.mjs test/realtime.test.mjs test/static.test.mjs test/webhooks.test.mjs",
     "test:mariadb": "node --test test/smoke-mariadb.mjs"
   },
   "dependencies": {
     "mysql2": "^3.11.0",
+    "undici": "^8.4.0",
     "ws": "^8.21.0"
   },
   "devDependencies": {

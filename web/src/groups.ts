@@ -82,6 +82,7 @@ export function subgroupsFor(section: string, resources: Resource[]): SubGroupVi
     .filter((l) => byLabel.has(l))
     .map((label) => ({
       label,
-      items: byLabel.get(label)!.sort((a, b) => a.label.localeCompare(b.label)),
+      // creation order: prerequisites first (e.g. Region before Site), then alpha
+      items: byLabel.get(label)!.sort((a, b) => a.order - b.order || a.label.localeCompare(b.label)),
     }));
 }

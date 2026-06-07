@@ -14,10 +14,58 @@ export interface Resource {
   model?: string;
   /** Whether the resource supports create/update/delete. */
   writable: boolean;
+  /** Creation-dependency rank (prerequisites first); lower = create earlier. */
+  order: number;
 }
 
 function titleize(slug: string): string {
   return slug.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** A single foreign-key target model from a read-schema property, else null. */
+function fkTarget(prop: any): string | null {
+  const ref: string | undefined = prop?.$ref ?? prop?.allOf?.[0]?.$ref;
+  if (typeof ref === 'string') {
+    const name = ref.split('/').pop()!;
+    if (name.endsWith('Brief')) return name.slice(0, -'Brief'.length);
+  }
+  return null; // arrays (M2M) and generic relations are not creation prerequisites
+}
+
+/**
+ * Topologically order models by their foreign-key dependencies so prerequisites
+ * come first (e.g. Region before Site). Self-references and cycles are tolerated.
+ */
+function dependencyOrder(doc: any, models: Set<string>): Map<string, number> {
+  const deps = new Map<string, Set<string>>();
+  for (const m of models) {
+    const set = new Set<string>();
+    const props = doc.components?.schemas?.[m]?.properties ?? {};
+    for (const prop of Object.values<any>(props)) {
+      const t = fkTarget(prop);
+      if (t && t !== m && models.has(t)) set.add(t);
+    }
+    deps.set(m, set);
+  }
+  const sorted = [...models].sort();
+  const order = new Map<string, number>();
+  const remaining = new Set(models);
+  let rank = 0;
+  let progress = true;
+  while (remaining.size && progress) {
+    progress = false;
+    for (const m of sorted) {
+      if (!remaining.has(m)) continue;
+      const unmet = [...deps.get(m)!].some((d) => remaining.has(d));
+      if (!unmet) {
+        order.set(m, rank++);
+        remaining.delete(m);
+        progress = true;
+      }
+    }
+  }
+  for (const m of sorted) if (remaining.has(m)) order.set(m, rank++); // cycle remainder
+  return order;
 }
 
 /**
@@ -51,7 +99,12 @@ export async function loadResources(): Promise<Resource[]> {
       label: titleize(parts[parts.length - 1] ?? table),
       model,
       writable: !!(ops as any).post,
+      order: Number.MAX_SAFE_INTEGER,
     });
   }
+  // rank by creation dependencies (prerequisites first)
+  const models = new Set(out.map((r) => r.model).filter((m): m is string => !!m));
+  const order = dependencyOrder(doc, models);
+  for (const r of out) r.order = r.model ? (order.get(r.model) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
   return out.sort((a, b) => (a.section + a.label).localeCompare(b.section + b.label));
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { onMounted, ref } from 'vue';
 import { loadResources } from './api/resources.js';
 import { useUiStore } from './stores/ui.js';
 import StatusBadge from './components/StatusBadge.vue';
@@ -9,6 +9,8 @@ import ResourceListView from './views/ResourceListView.vue';
 import DocsView from './views/DocsView.vue';
 
 const ui = useUiStore();
+const logoOk = ref(true);
+const logoUrl = '/paas2box-logo.png';
 
 onMounted(async () => {
   try {
@@ -25,6 +27,7 @@ onMounted(async () => {
       <div class="brand"><span class="logo">▌</span> paasbox</div>
       <input class="globalsearch" type="search" placeholder="Search resources…" v-model="ui.search" />
       <span class="spacer" />
+      <img v-show="logoOk" class="topbar-logo" :src="logoUrl" alt="paas2box" @error="logoOk = false" />
       <StatusBadge />
     </header>
     <div class="body">
@@ -81,6 +84,13 @@ onMounted(async () => {
 }
 .spacer {
   flex: 1;
+}
+.topbar-logo {
+  height: 40px;
+  width: auto;
+  background: #fff;
+  border-radius: 6px;
+  padding: 3px 6px;
 }
 .body {
   flex: 1;

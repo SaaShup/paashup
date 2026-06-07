@@ -8,9 +8,6 @@ import EventLog from '../components/EventLog.vue';
 const ui = useUiStore();
 const resourceCount = computed(() => ui.resources.length);
 const sections = computed(() => [...new Set(ui.resources.map((r) => r.section))].sort());
-const logoOk = ref(true);
-const logoUrl = '/paas2box-logo.png';
-
 interface SectionUsage {
   section: string;
   label: string;
@@ -70,8 +67,6 @@ onMounted(loadUsage);
 
 <template>
   <section>
-    <img v-show="logoOk" class="hero-logo" :src="logoUrl" alt="paas2box" @error="logoOk = false" />
-
     <div class="cards">
       <div class="card">
         <div class="num">{{ resourceCount || '…' }}</div>
@@ -118,12 +113,6 @@ onMounted(loadUsage);
 </template>
 
 <style scoped>
-.hero-logo {
-  display: block;
-  max-width: 260px;
-  height: auto;
-  margin: 0 0 22px;
-}
 .cards {
   display: flex;
   gap: 16px;

@@ -1,15 +1,24 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { ref, computed } from 'vue';
 import { useUiStore } from '../stores/ui.js';
 import EventLog from '../components/EventLog.vue';
 
 const ui = useUiStore();
 const resourceCount = computed(() => ui.resources.length);
 const sections = computed(() => [...new Set(ui.resources.map((r) => r.section))].sort());
+const logoOk = ref(true); // hide the hero if the logo file isn't present yet
+const logoUrl = '/paas2box-logo.png'; // served from web/public (runtime-resolved)
 </script>
 
 <template>
   <section>
+    <img
+      v-show="logoOk"
+      class="hero-logo"
+      :src="logoUrl"
+      alt="paas2box"
+      @error="logoOk = false"
+    />
     <div class="cards">
       <div class="card">
         <div class="num">{{ resourceCount || '…' }}</div>
@@ -32,6 +41,12 @@ const sections = computed(() => [...new Set(ui.resources.map((r) => r.section))]
 </template>
 
 <style scoped>
+.hero-logo {
+  display: block;
+  max-width: 260px;
+  height: auto;
+  margin: 0 0 22px;
+}
 .cards {
   display: flex;
   gap: 16px;

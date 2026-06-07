@@ -30,6 +30,7 @@ onMounted(async () => {
     <div class="body">
       <Sidebar />
       <main class="content">
+        <div class="page-watermark" aria-hidden="true" />
         <DashboardView v-if="ui.view === 'dashboard'" />
         <DocsView v-else-if="ui.view === 'docs'" />
         <ResourceListView v-else />
@@ -91,5 +92,24 @@ onMounted(async () => {
   overflow: auto;
   padding: 22px 28px;
   background: var(--bg);
+  position: relative;
+}
+/* faint logo watermark behind every page — never intercepts clicks, never hides content */
+.page-watermark {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  background-image: url('/paas2box-logo.png');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-attachment: fixed;
+  background-size: min(560px, 55vw);
+}
+/* keep real page content above the watermark */
+.content > :not(.page-watermark) {
+  position: relative;
+  z-index: 1;
 }
 </style>

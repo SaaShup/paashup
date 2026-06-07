@@ -1034,6 +1034,7 @@ CREATE TABLE ipam_iprange (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     start_address TEXT NOT NULL,
     end_address TEXT NOT NULL,
+    gateway TEXT,
     vrf_id BIGINT,
     tenant_id BIGINT,
     status VARCHAR(32) CHECK (status IN ('active', 'reserved', 'deprecated')),

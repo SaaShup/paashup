@@ -1683,6 +1683,7 @@ export interface IPRange {
   id: number;
   start_address: string;
   end_address: string;
+  gateway: string | null;
   vrf: number | null;
   tenant: number | null;
   status: 'active' | 'reserved' | 'deprecated';
@@ -1699,6 +1700,7 @@ export interface IPRange {
 export interface IPRangeCreate {
   start_address: string;
   end_address: string;
+  gateway?: string | null;
   vrf?: number | null;
   tenant?: number | null;
   status?: 'active' | 'reserved' | 'deprecated';

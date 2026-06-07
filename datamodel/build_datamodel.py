@@ -339,6 +339,38 @@ def build_fields(ent, S=None):
 for ent in entities.values():
     ent["fields"] = build_fields(ent)
 
+# ---- paas2box extensions ----------------------------------------------------
+# Extra fields added to core entities beyond the NetBox spec. Inserted after the
+# named anchor field (or appended). Keeps the data model reproducible across regens.
+EXTRA_FIELDS = {
+    "ipam/ip-ranges": [
+        (
+            "end_address",  # insert after this field
+            {
+                "name": "gateway",
+                "kind": "scalar",
+                "type": "string",
+                "nullable": True,
+                "required_on_create": False,
+                "writable": True,
+                "read_only": False,
+            },
+        ),
+    ],
+}
+for key, extras in EXTRA_FIELDS.items():
+    ent = entities.get(key)
+    if not ent:
+        continue
+    for anchor, field in extras:
+        if any(f["name"] == field["name"] for f in ent["fields"]):
+            continue
+        idx = next((i for i, f in enumerate(ent["fields"]) if f["name"] == anchor), None)
+        if idx is None:
+            ent["fields"].append(field)
+        else:
+            ent["fields"].insert(idx + 1, field)
+
 # ---- external entities ------------------------------------------------------
 # FK/M2M targets that live in other NetBox apps. Per project decision:
 #   * "full"  -> Tag, Tenant, TenantGroup, Owner, OwnerGroup (extracted from the

@@ -61,12 +61,68 @@ export function validateWrite(
     }
   }
 
+  // gateway must be a valid IP, and within [start_address, end_address] when both
+  // bounds are present (paas2box extension to IP ranges).
+  if (byName.has('gateway') && typeof data.gateway === 'string' && data.gateway.trim() !== '') {
+    const gw = ipToInt(data.gateway);
+    if (gw === null) {
+      add('gateway', 'Enter a valid IPv4 or IPv6 address.');
+    } else {
+      const lo = typeof data.start_address === 'string' ? ipToInt(data.start_address) : null;
+      const hi = typeof data.end_address === 'string' ? ipToInt(data.end_address) : null;
+      if (lo !== null && hi !== null && (gw < lo || gw > hi)) {
+        add('gateway', 'Gateway must be an address within the range.');
+      }
+    }
+  }
+
   const cfErrors = validateCustomFields(meta.table, data.custom_fields, partial);
   if (cfErrors) errors.custom_fields = cfErrors;
 
   if (Object.keys(errors).length) {
     throw new ValidationError('Validation failed', errors);
   }
+}
+
+/** Parse an IPv4/IPv6 address (optionally with a /mask) to a comparable integer. */
+function ipToInt(addr: string): bigint | null {
+  const s = addr.split('/')[0]!.trim();
+  return s.includes(':') ? ipv6ToInt(s) : ipv4ToInt(s);
+}
+
+function ipv4ToInt(s: string): bigint | null {
+  const parts = s.split('.');
+  if (parts.length !== 4) return null;
+  let n = 0n;
+  for (const p of parts) {
+    if (!/^\d{1,3}$/.test(p)) return null;
+    const v = Number(p);
+    if (v > 255) return null;
+    n = (n << 8n) + BigInt(v);
+  }
+  return n;
+}
+
+function ipv6ToInt(s: string): bigint | null {
+  const halves = s.split('::');
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0]!.split(':') : [];
+  let groups: string[];
+  if (halves.length === 1) {
+    groups = head;
+  } else {
+    const tail = halves[1] ? halves[1]!.split(':') : [];
+    const missing = 8 - (head.length + tail.length);
+    if (missing < 0) return null;
+    groups = [...head, ...Array(missing).fill('0'), ...tail];
+  }
+  if (groups.length !== 8) return null;
+  let n = 0n;
+  for (const g of groups) {
+    if (!/^[0-9a-fA-F]{1,4}$/.test(g)) return null;
+    n = (n << 16n) + BigInt(parseInt(g, 16));
+  }
+  return n;
 }
 
 /** Validate the `custom_fields` payload against registered definitions. */

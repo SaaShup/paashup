@@ -14986,6 +14986,15 @@
           "read_only": false
         },
         {
+          "name": "gateway",
+          "kind": "scalar",
+          "type": "string",
+          "nullable": true,
+          "required_on_create": false,
+          "writable": true,
+          "read_only": false
+        },
+        {
           "name": "size",
           "kind": "scalar",
           "type": "integer",

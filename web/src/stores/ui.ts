@@ -6,7 +6,7 @@ import { subgroupsFor, sectionRank, type SubGroupView } from '../groups.js';
 export const useUiStore = defineStore('ui', {
   state: () => ({
     resources: [] as Resource[],
-    view: 'dashboard' as 'dashboard' | 'list',
+    view: 'dashboard' as 'dashboard' | 'list' | 'docs',
     selected: null as Resource | null,
     // accordion: everything collapsed by default; user expands by clicking.
     expandedSections: {} as Record<string, boolean>,
@@ -33,6 +33,10 @@ export const useUiStore = defineStore('ui', {
     },
     openDashboard() {
       this.view = 'dashboard';
+      this.selected = null;
+    },
+    openDocs() {
+      this.view = 'docs';
       this.selected = null;
     },
     openResource(r: Resource) {

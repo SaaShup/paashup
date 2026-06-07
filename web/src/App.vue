@@ -6,6 +6,7 @@ import StatusBadge from './components/StatusBadge.vue';
 import Sidebar from './components/Sidebar.vue';
 import DashboardView from './views/DashboardView.vue';
 import ResourceListView from './views/ResourceListView.vue';
+import DocsView from './views/DocsView.vue';
 
 const ui = useUiStore();
 
@@ -30,6 +31,7 @@ onMounted(async () => {
       <Sidebar />
       <main class="content">
         <DashboardView v-if="ui.view === 'dashboard'" />
+        <DocsView v-else-if="ui.view === 'docs'" />
         <ResourceListView v-else />
       </main>
     </div>

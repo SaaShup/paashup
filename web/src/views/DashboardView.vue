@@ -14,8 +14,19 @@ interface SectionUsage {
   types: number;
   total: number;
 }
+interface PluginUsage {
+  name: string;
+  label: string;
+  types: number;
+  total: number;
+}
 const usage = ref<SectionUsage[]>([]);
+const pluginUsage = ref<PluginUsage[]>([]);
+const zoom = ref<string | null>(null); // drill-down: 'plugins' shows the per-plugin grid
 const loading = ref(false);
+
+const titleize = (s: string) => s.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+const pluginOf = (endpoint: string) => endpoint.split('/').filter(Boolean)[2] ?? '';
 
 /** run async fn over items with limited concurrency */
 async function mapLimit<T, R>(items: T[], limit: number, fn: (x: T) => Promise<R>): Promise<R[]> {
@@ -38,11 +49,12 @@ async function loadUsage() {
     const counts = await mapLimit(ui.resources, 8, async (r) => {
       try {
         const page = await api.list(r.endpoint, { limit: 1 });
-        return { section: r.section, count: page.count };
+        return { section: r.section, endpoint: r.endpoint, count: page.count };
       } catch {
-        return { section: r.section, count: 0 };
+        return { section: r.section, endpoint: r.endpoint, count: 0 };
       }
     });
+    // aggregate per section
     const by = new Map<string, SectionUsage>();
     for (const c of counts) {
       const u =
@@ -54,9 +66,31 @@ async function loadUsage() {
     usage.value = [...by.values()].sort(
       (a, b) => sectionRank(a.section) - sectionRank(b.section) || a.label.localeCompare(b.label),
     );
+    // aggregate per plugin (for the drill-down)
+    const pby = new Map<string, PluginUsage>();
+    for (const c of counts) {
+      if (c.section !== 'plugins') continue;
+      const name = pluginOf(c.endpoint);
+      const p =
+        pby.get(name) ?? pby.set(name, { name, label: titleize(name), types: 0, total: 0 }).get(name)!;
+      p.types += 1;
+      p.total += c.count;
+    }
+    pluginUsage.value = [...pby.values()].sort((a, b) => a.label.localeCompare(b.label));
+    if (zoom.value === 'plugins' && !pluginUsage.value.length) zoom.value = null;
   } finally {
     loading.value = false;
   }
+}
+
+function openSectionCard(u: SectionUsage) {
+  if (u.section === 'plugins') zoom.value = 'plugins'; // zoom into per-plugin view
+  else ui.expandedSections[u.section] = true; // expand that section in the menu
+}
+
+function openPlugin(name: string) {
+  const r = ui.resources.find((x) => x.section === 'plugins' && pluginOf(x.endpoint) === name);
+  if (r) ui.openResource(r); // jump into the plugin's first resource
 }
 
 const grandTotal = computed(() => usage.value.reduce((n, u) => n + u.total, 0));
@@ -91,24 +125,45 @@ watch(
     </div>
 
     <div class="usage-head">
-      <h3>Usage by section</h3>
+      <button v-if="zoom" class="refresh back" @click="zoom = null">← Back</button>
+      <h3>{{ zoom === 'plugins' ? 'Usage by plugin' : 'Usage by section' }}</h3>
       <button class="refresh" :disabled="loading" @click="loadUsage">
         {{ loading ? 'Counting…' : '↻ Refresh' }}
       </button>
     </div>
-    <div class="usage-grid">
+
+    <!-- section overview -->
+    <div v-if="!zoom" class="usage-grid">
       <button
         v-for="u in usage"
         :key="u.section"
         class="usage-card"
-        title="Open this section in the menu"
-        @click="ui.expandedSections[u.section] = true"
+        :class="{ zoomable: u.section === 'plugins' }"
+        :title="u.section === 'plugins' ? 'Zoom in — view usage per plugin' : 'Open this section in the menu'"
+        @click="openSectionCard(u)"
       >
+        <span v-if="u.section === 'plugins'" class="zoom-hint">⤢</span>
         <div class="u-total">{{ fmt(u.total) }}</div>
         <div class="u-name">{{ u.label }}</div>
         <div class="u-types">{{ u.types }} type{{ u.types === 1 ? '' : 's' }}</div>
       </button>
       <p v-if="!usage.length && !loading" class="muted">No data.</p>
+    </div>
+
+    <!-- per-plugin drill-down -->
+    <div v-else class="usage-grid">
+      <button
+        v-for="p in pluginUsage"
+        :key="p.name"
+        class="usage-card"
+        title="Open this plugin"
+        @click="openPlugin(p.name)"
+      >
+        <div class="u-total">{{ fmt(p.total) }}</div>
+        <div class="u-name">{{ p.label }}</div>
+        <div class="u-types">{{ p.types }} type{{ p.types === 1 ? '' : 's' }}</div>
+      </button>
+      <p v-if="!pluginUsage.length && !loading" class="muted">No plugins loaded.</p>
     </div>
 
     <h3>Live activity</h3>
@@ -169,6 +224,7 @@ watch(
   margin: 12px 0 8px;
 }
 .usage-card {
+  position: relative;
   text-align: left;
   background: #fff;
   border: 1px solid var(--border);
@@ -179,6 +235,20 @@ watch(
 }
 .usage-card:hover {
   border-color: var(--primary);
+}
+.usage-card.zoomable {
+  border-left: 4px solid var(--primary);
+}
+.zoom-hint {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  color: var(--primary-d);
+  font-size: 0.95rem;
+}
+.refresh.back {
+  border-color: var(--primary);
+  color: var(--primary-d);
 }
 .u-total {
   font-size: 1.7rem;

@@ -4,10 +4,28 @@
 // ipam_ipaddress record: existing ones are edited (PATCH), free ones are created (POST).
 import { ref, computed, watch, onMounted } from 'vue';
 import { api, type Obj } from '../api/client.js';
-import { isV6, maskOf, ipToBig, bigToV4 } from '../api/ip.js';
+import { isV6, maskOf, bare, ipToBig, bigToV4 } from '../api/ip.js';
 
 const props = defineProps<{ range: Obj }>();
 const emit = defineEmits<{ (e: 'close'): void }>();
+
+// The range's gateway (one address must be the gateway). Reuses ipam_iprange.gateway.
+const gatewayIp = ref(bare(String(props.range.gateway ?? '')));
+const settingGw = ref(false);
+
+async function setGateway(ip: string) {
+  settingGw.value = true;
+  error.value = '';
+  try {
+    await api.update('/api/ipam/ip-ranges/', (props.range as { id: number }).id, { gateway: ip });
+    gatewayIp.value = ip;
+    (props.range as { gateway?: string }).gateway = ip; // reflect in the list row
+  } catch (e) {
+    error.value = `Could not set gateway: ${String(e)}`;
+  } finally {
+    settingGw.value = false;
+  }
+}
 
 const PAGE = 256;
 const startStr = String(props.range.start_address ?? '');
@@ -119,6 +137,10 @@ async function save(row: { ip: string; existing: Obj | null }) {
       </header>
 
       <p v-if="error" class="error">{{ error }}</p>
+      <p v-if="!v6 && !gatewayIp" class="warn">
+        ⚠ This range has no gateway — select one below (at least one address must be the gateway).
+      </p>
+      <p v-else-if="!v6" class="gw-now">Gateway: <strong>{{ gatewayIp }}</strong></p>
       <p v-if="v6" class="muted note">
         IPv6 ranges are too large to enumerate. Manage individual addresses from IPAM → IP Addresses.
       </p>
@@ -127,6 +149,7 @@ async function save(row: { ip: string; existing: Obj | null }) {
         <table>
           <thead>
             <tr>
+              <th>GW</th>
               <th>Address</th>
               <th>Status</th>
               <th>Name (DNS)</th>
@@ -135,7 +158,17 @@ async function save(row: { ip: string; existing: Obj | null }) {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in rows" :key="r.ip" :class="{ used: r.existing }">
+            <tr v-for="r in rows" :key="r.ip" :class="{ used: r.existing, gw: gatewayIp === r.ip }">
+              <td class="gwcell">
+                <input
+                  type="radio"
+                  name="range-gw"
+                  :checked="gatewayIp === r.ip"
+                  :disabled="settingGw"
+                  title="Make this address the gateway"
+                  @change="setGateway(r.ip)"
+                />
+              </td>
               <td class="mono">{{ r.ip }}</td>
               <td>
                 <span class="tag" :class="r.existing ? 'on' : 'off'">
@@ -208,6 +241,29 @@ async function save(row: { ip: string; existing: Obj | null }) {
 }
 .note {
   padding: 14px 0;
+}
+.warn {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+}
+.gw-now {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.gw-now strong {
+  color: var(--primary-d);
+  font-family: ui-monospace, monospace;
+}
+tr.gw {
+  background: #eff6ff;
+}
+.gwcell {
+  text-align: center;
+  width: 38px;
 }
 table {
   border-collapse: collapse;

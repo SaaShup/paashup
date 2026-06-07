@@ -34,7 +34,11 @@ before(async () => {
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${server.address().port}`;
 });
-after(async () => { await new Promise((r) => server.close(r)); await db.close(); rmSync(DB, { force: true }); });
+after(async () => {
+  await new Promise((r) => server.close(r));
+  await db.close();
+  rmSync(DB, { force: true });
+});
 
 test('gateway field is exposed (null by default)', async () => {
   const r = await api('POST', '/api/ipam/ip-ranges/', range());

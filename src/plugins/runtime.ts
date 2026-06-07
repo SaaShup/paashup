@@ -127,7 +127,10 @@ export function matchAsset(pathname: string): { dir: string; rel: string } | nul
   let best: { dir: string; rel: string } | null = null;
   let bestLen = -1;
   for (const m of assetMounts) {
-    if ((pathname === m.urlPrefix || pathname.startsWith(m.urlPrefix)) && m.urlPrefix.length > bestLen) {
+    if (
+      (pathname === m.urlPrefix || pathname.startsWith(m.urlPrefix)) &&
+      m.urlPrefix.length > bestLen
+    ) {
       let rel = pathname.slice(m.urlPrefix.length);
       if (rel === '' || rel.endsWith('/')) rel += 'index.html';
       best = { dir: m.dir, rel };

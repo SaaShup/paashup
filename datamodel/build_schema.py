@@ -166,6 +166,12 @@ class MariaDB(Dialect):
 
 
 # ------------------------------------------------------------- helpers --------
+# When False, paas2box "extra" fields (added beyond the NetBox spec) are omitted —
+# used so the 0001 initial migration stays as the base schema and extras ship as
+# their own incremental migrations (which also upgrade already-deployed databases).
+_INCLUDE_EXTRA = True
+
+
 def persisted_fields(ent):
     """Yield (field, column_name) for columns we actually create."""
     for f in ent["fields"]:
@@ -175,6 +181,8 @@ def persisted_fields(ent):
         if name in COMPUTED:
             continue
         if f["read_only"] and name not in TIMESTAMPS:
+            continue
+        if f.get("paas2box_extra") and not _INCLUDE_EXTRA:
             continue
         col = name + "_id" if f["kind"] == "fk" else name
         yield f, col
@@ -354,7 +362,9 @@ def unique_indexes(d):
 
 
 # ------------------------------------------------------------- assemble -------
-def build(d):
+def build(d, include_extra=True):
+    global _INCLUDE_EXTRA
+    _INCLUDE_EXTRA = include_extra
     parts = [
         f"-- paas2box initial schema ({d.name}) — generated from data-model.json",
         f"-- NetBox {MODEL.get('source')} compatible. Do not edit by hand; "
@@ -382,15 +392,16 @@ def main():
     os.makedirs(os.path.join(ROOT, "datamodel", "sql"), exist_ok=True)
     os.makedirs(os.path.join(ROOT, "migrations"), exist_ok=True)
     for d in (SQLite(), MariaDB()):
-        sql = build(d)
-        for path in (
-            os.path.join(ROOT, "datamodel", "sql", f"schema.{d.name}.sql"),
-            os.path.join(ROOT, "migrations", f"0001_initial.{d.name}.sql"),
-        ):
-            with open(path, "w") as f:
-                f.write(sql)
-        ntab = sql.count("CREATE TABLE")
-        nidx = sql.count("CREATE UNIQUE INDEX")
+        # schema.<d>.sql = full current schema (incl. paas2box extras, used by tests)
+        full = build(d, include_extra=True)
+        with open(os.path.join(ROOT, "datamodel", "sql", f"schema.{d.name}.sql"), "w") as f:
+            f.write(full)
+        # 0001 = base initial migration; extras ship as later incremental migrations
+        base = build(d, include_extra=False)
+        with open(os.path.join(ROOT, "migrations", f"0001_initial.{d.name}.sql"), "w") as f:
+            f.write(base)
+        ntab = full.count("CREATE TABLE")
+        nidx = full.count("CREATE UNIQUE INDEX")
         print(f"{d.name}: {ntab} tables, {nidx} unique indexes")
 
 

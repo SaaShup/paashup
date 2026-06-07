@@ -1035,7 +1035,6 @@ CREATE TABLE ipam_iprange (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     start_address TEXT NOT NULL,
     end_address TEXT NOT NULL,
-    gateway TEXT,
     vrf_id INTEGER,
     tenant_id INTEGER,
     status TEXT CHECK (status IN ('active', 'reserved', 'deprecated')),

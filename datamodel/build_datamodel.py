@@ -354,6 +354,7 @@ EXTRA_FIELDS = {
                 "required_on_create": False,
                 "writable": True,
                 "read_only": False,
+                "paas2box_extra": True,
             },
         ),
     ],

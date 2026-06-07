@@ -30,6 +30,8 @@ export interface ColumnMeta {
   readonly enum?: readonly (string | number)[];
   /** value -> human label for enum columns (NetBox `{value, label}` choices). */
   readonly enumLabels?: Readonly<Record<string, string>>;
+  /** Server-generated read-only value, e.g. "uuid" (set on create). */
+  readonly auto?: string;
 }
 
 /** A many-to-many relation (NetBox `tags` or an explicit join-table M2M). */

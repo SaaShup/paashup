@@ -191,6 +191,7 @@ CREATE TABLE dcim_device_type (
 CREATE TABLE dcim_device (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT,
+    uuid TEXT,
     device_type_id INTEGER NOT NULL,
     role_id INTEGER NOT NULL,
     tenant_id INTEGER,

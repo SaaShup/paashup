@@ -180,8 +180,8 @@ def persisted_fields(ent):
             continue  # join tables
         if name in COMPUTED:
             continue
-        if f["read_only"] and name not in TIMESTAMPS:
-            continue
+        if f["read_only"] and name not in TIMESTAMPS and not f.get("auto"):
+            continue  # read-only, but server-auto fields (e.g. uuid) are persisted
         if f.get("paas2box_extra") and not _INCLUDE_EXTRA:
             continue
         col = name + "_id" if f["kind"] == "fk" else name

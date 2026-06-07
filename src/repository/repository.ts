@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Db, Param } from '../db/types.js';
 import type { ColumnMeta, RelationMeta, TableMeta } from '../model/meta-types.js';
 import { ApiError } from '../errors.js';
@@ -187,6 +188,13 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
   /** INSERT scalar columns only; returns the new id. */
   private async insertScalar(data: Record<string, unknown>): Promise<number> {
     const { columns, values } = this.writeColumns(data);
+    // server-generated read-only values (e.g. uuid) — set on create only
+    for (const col of this.meta.columns) {
+      if (col.auto === 'uuid' && !columns.includes(col.column)) {
+        columns.push(col.column);
+        values.push(randomUUID());
+      }
+    }
     if (!columns.length)
       throw new ApiError(400, `No writable fields supplied for ${this.meta.model}`);
     const placeholders = columns.map(() => '?').join(', ');

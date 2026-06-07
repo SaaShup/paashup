@@ -61,7 +61,7 @@ function persistedColumns(ent) {
   for (const f of ent.fields) {
     if (f.kind === 'm2m') continue;
     if (COMPUTED.has(f.name)) continue;
-    if (f.read_only && !TIMESTAMPS.has(f.name)) continue;
+    if (f.read_only && !TIMESTAMPS.has(f.name) && !f.auto) continue;
     const column = f.kind === 'fk' ? `${f.name}_id` : f.name;
     const writable = !!f.writable && !f.read_only && !TIMESTAMPS.has(f.name);
     const required = !!f.required_on_create && !f.nullable;
@@ -73,6 +73,7 @@ function persistedColumns(ent) {
       writable,
       required,
     };
+    if (f.auto) meta.auto = f.auto;
     if (f.references) meta.references = f.references;
     if (f.kind === 'generic_type') meta.genericRel = f.name.replace(/_type$/, '');
     else if (f.kind === 'generic_id') meta.genericRel = f.name.replace(/_id$/, '');
@@ -212,6 +213,7 @@ for (const ent of Object.values(ENTITIES)) {
     if (c.maxLength) parts.push(`maxLength: ${c.maxLength}`);
     if (c.enum) parts.push(`enum: ${JSON.stringify(c.enum)}`);
     if (c.enumLabels) parts.push(`enumLabels: ${JSON.stringify(c.enumLabels)}`);
+    if (c.auto) parts.push(`auto: ${JSON.stringify(c.auto)}`);
     mlines.push(`      { ${parts.join(', ')} },`);
   }
   mlines.push('    ],');

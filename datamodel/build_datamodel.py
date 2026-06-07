@@ -371,6 +371,22 @@ EXTRA_FIELDS = {
             },
         ),
     ],
+    "dcim/devices": [
+        (
+            "name",  # insert after name
+            {
+                "name": "uuid",
+                "kind": "scalar",
+                "type": "string",
+                "nullable": True,
+                "required_on_create": False,
+                "writable": False,
+                "read_only": True,  # auto-generated server-side, not user-editable
+                "auto": "uuid",
+                "paas2box_extra": True,
+            },
+        ),
+    ],
 }
 for key, extras in EXTRA_FIELDS.items():
     ent = entities.get(key)

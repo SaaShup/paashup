@@ -190,6 +190,7 @@ CREATE TABLE dcim_device_type (
 CREATE TABLE dcim_device (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(64),
+    uuid TEXT,
     device_type_id BIGINT NOT NULL,
     role_id BIGINT NOT NULL,
     tenant_id BIGINT,

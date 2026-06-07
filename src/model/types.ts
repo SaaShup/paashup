@@ -310,6 +310,7 @@ export type DeviceTypeUpdate = Partial<DeviceTypeCreate>;
 export interface Device {
   id: number;
   name: string | null;
+  uuid: string | null;
   device_type: number;
   role: number;
   tenant: number | null;

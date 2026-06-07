@@ -279,6 +279,7 @@ export const tables = {
     ],
     columns: [
       { name: "name", column: "name", tsKind: "string", nullable: true, writable: true, required: false, maxLength: 64 },
+      { name: "uuid", column: "uuid", tsKind: "string", nullable: true, writable: false, required: false, auto: "uuid" },
       { name: "device_type", column: "device_type_id", tsKind: "number", nullable: false, writable: true, required: true, references: "DeviceType" },
       { name: "role", column: "role_id", tsKind: "number", nullable: false, writable: true, required: true, references: "DeviceRole" },
       { name: "tenant", column: "tenant_id", tsKind: "number", nullable: true, writable: true, required: false, references: "Tenant" },

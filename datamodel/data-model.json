@@ -2624,6 +2624,17 @@
           "max_length": 64
         },
         {
+          "name": "uuid",
+          "kind": "scalar",
+          "type": "string",
+          "nullable": true,
+          "required_on_create": false,
+          "writable": false,
+          "read_only": true,
+          "auto": "uuid",
+          "paas2box_extra": true
+        },
+        {
           "name": "device_type",
           "kind": "fk",
           "type": "integer (fk)",

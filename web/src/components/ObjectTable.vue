@@ -46,6 +46,15 @@ function cell(value: unknown): string {
       <tr v-for="row in items" :key="(row as any).id">
         <td v-for="c in columns" :key="c">{{ cell(row[c]) }}</td>
         <td class="ops">
+          <a
+            v-if="(row as any).url"
+            class="api"
+            :href="(row as any).url"
+            target="_blank"
+            rel="noopener"
+            title="Open this object's API endpoint"
+            >API</a
+          >
           <button v-if="editable" class="edit" title="Edit" @click="emit('edit', row)">✎</button>
           <button v-if="editable" class="del" title="Delete" @click="emit('delete', (row as any).id)">
             ✕
@@ -81,6 +90,19 @@ tbody tr:hover {
 }
 .ops {
   white-space: nowrap;
+  text-align: right;
+}
+.api {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--primary-d);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 1px 6px;
+  margin-right: 8px;
+}
+.api:hover {
+  background: var(--surface-2);
 }
 .del,
 .edit {

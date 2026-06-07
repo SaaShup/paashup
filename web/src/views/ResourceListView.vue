@@ -18,6 +18,23 @@ const editing = ref<Obj | null>(null);
 
 const resource = computed(() => ui.selected!);
 const slot = computed(() => (resource.value ? objects.byTable[resource.value.table] : undefined));
+const apiUrl = computed(() => (resource.value ? location.origin + resource.value.endpoint : ''));
+const copied = ref(false);
+
+async function copyApi() {
+  try {
+    await navigator.clipboard.writeText(apiUrl.value);
+  } catch {
+    const t = document.createElement('textarea');
+    t.value = apiUrl.value;
+    document.body.appendChild(t);
+    t.select();
+    document.execCommand('copy');
+    t.remove();
+  }
+  copied.value = true;
+  setTimeout(() => (copied.value = false), 1200);
+}
 const rangeFrom = computed(() => (slot.value?.count ? offset.value + 1 : 0));
 const rangeTo = computed(() => Math.min(offset.value + PAGE, slot.value?.count ?? 0));
 
@@ -82,6 +99,13 @@ function edit(row: Obj) {
       />
       <button class="btn btn-ghost" @click="((offset = 0), load())">Search</button>
       <span v-if="slot?.loading" class="muted">loading…</span>
+      <span class="spacer" />
+      <a class="api-pill" :href="apiUrl" target="_blank" rel="noopener" title="Open this endpoint's JSON">
+        {&nbsp;} API ↗
+      </a>
+      <button class="btn btn-ghost copy" :title="apiUrl" @click="copyApi">
+        {{ copied ? '✓ Copied' : 'Copy URL' }}
+      </button>
     </div>
 
     <p v-if="error" class="error">{{ error }}</p>
@@ -135,6 +159,24 @@ function edit(row: Obj) {
 .search {
   flex: 1;
   max-width: 360px;
+}
+.api-pill {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--primary-d);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+.api-pill:hover {
+  background: var(--surface-2);
+  border-color: var(--secondary);
+}
+.copy {
+  white-space: nowrap;
 }
 .table-wrap {
   overflow-x: auto;

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useUiStore } from '../stores/ui.js';
 import { api } from '../api/client.js';
 import { sectionLabel, sectionRank } from '../groups.js';
@@ -62,7 +62,15 @@ async function loadUsage() {
 const grandTotal = computed(() => usage.value.reduce((n, u) => n + u.total, 0));
 const fmt = (n: number) => n.toLocaleString();
 
-onMounted(loadUsage);
+// Load as soon as the resource catalog is available (App fetches it async), and on
+// every revisit to the dashboard — so the counters always appear by default.
+watch(
+  () => ui.resources.length,
+  (n) => {
+    if (n && !usage.value.length && !loading.value) loadUsage();
+  },
+  { immediate: true },
+);
 </script>
 
 <template>

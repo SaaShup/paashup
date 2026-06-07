@@ -57,8 +57,9 @@ const frameStyle = computed(() => {
 
 <style scoped>
 .plugin-page {
-  position: absolute;
-  inset: 0;
+  /* fill the content area by height (the app shell forces position:relative on
+     content children for the watermark layer, which would void absolute insets) */
+  height: 100%;
   display: flex;
   flex-direction: column;
 }

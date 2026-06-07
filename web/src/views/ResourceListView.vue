@@ -5,6 +5,7 @@ import { useObjectsStore } from '../stores/objects.js';
 import type { Obj } from '../api/client.js';
 import ObjectTable from '../components/ObjectTable.vue';
 import ObjectForm from '../components/ObjectForm.vue';
+import IpRangeAddresses from '../components/IpRangeAddresses.vue';
 
 const PAGE = 50;
 const ui = useUiStore();
@@ -15,6 +16,7 @@ const search = ref('');
 const error = ref('');
 const formOpen = ref(false);
 const editing = ref<Obj | null>(null);
+const addrRange = ref<Obj | null>(null); // IP range whose addresses are being browsed
 
 const resource = computed(() => ui.selected!);
 const slot = computed(() => (resource.value ? objects.byTable[resource.value.table] : undefined));
@@ -111,7 +113,15 @@ function edit(row: Obj) {
     <p v-if="error" class="error">{{ error }}</p>
 
     <div class="card table-wrap">
-      <ObjectTable v-if="slot" :items="slot.items" :editable="resource.writable" @delete="del" @edit="edit" />
+      <ObjectTable
+        v-if="slot"
+        :items="slot.items"
+        :editable="resource.writable"
+        :extra-action="resource.table === 'ipam_iprange' ? 'IPs' : undefined"
+        @delete="del"
+        @edit="edit"
+        @action="(row) => (addrRange = row)"
+      />
     </div>
 
     <div v-if="slot" class="pager">
@@ -128,6 +138,8 @@ function edit(row: Obj) {
       @saved="formOpen = false"
       @cancel="formOpen = false"
     />
+
+    <IpRangeAddresses v-if="addrRange" :range="addrRange" @close="addrRange = null" />
   </div>
 </template>
 

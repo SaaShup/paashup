@@ -2,10 +2,11 @@
 import { computed } from 'vue';
 import type { Obj } from '../api/client.js';
 
-const props = defineProps<{ items: Obj[]; editable?: boolean }>();
+const props = defineProps<{ items: Obj[]; editable?: boolean; extraAction?: string }>();
 const emit = defineEmits<{
   (e: 'delete', id: number): void;
   (e: 'edit', row: Obj): void;
+  (e: 'action', row: Obj): void;
 }>();
 
 const HIDE = new Set(['url', 'display_url', 'custom_fields', 'tags']);
@@ -46,6 +47,9 @@ function cell(value: unknown): string {
       <tr v-for="row in items" :key="(row as any).id">
         <td v-for="c in columns" :key="c">{{ cell(row[c]) }}</td>
         <td class="ops">
+          <button v-if="extraAction" class="extra" @click="emit('action', row)">
+            {{ extraAction }}
+          </button>
           <a
             v-if="(row as any).url"
             class="api"
@@ -92,7 +96,8 @@ tbody tr:hover {
   white-space: nowrap;
   text-align: right;
 }
-.api {
+.api,
+.extra {
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--primary-d);
@@ -100,8 +105,11 @@ tbody tr:hover {
   border-radius: 5px;
   padding: 1px 6px;
   margin-right: 8px;
+  cursor: pointer;
+  background: #fff;
 }
-.api:hover {
+.api:hover,
+.extra:hover {
   background: var(--surface-2);
 }
 .del,

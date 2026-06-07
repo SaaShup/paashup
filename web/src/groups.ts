@@ -55,7 +55,7 @@ const SECTION_GROUPS: Record<string, SubGroup[]> = {
 const OTHER = 'Other';
 
 // Section display order (listed sections come first, in this order) + label overrides.
-const SECTION_ORDER = ['extras'];
+const SECTION_ORDER = ['extras', 'plugins'];
 const SECTION_LABELS: Record<string, string> = { extras: 'OPERATIONS' };
 
 export function sectionLabel(section: string): string {

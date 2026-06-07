@@ -23,7 +23,7 @@ FROM node:24-slim AS runtime
 ENV NODE_ENV=production \
     PORT=8000 \
     PB_DIALECT=sqlite \
-    PB_SQLITE_FILE=/data/paasbox.db \
+    PB_SQLITE_FILE=/data/paas2box.db \
     PB_WEB_ROOT=/app/web
 WORKDIR /app
 

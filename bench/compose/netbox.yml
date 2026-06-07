@@ -1,6 +1,6 @@
 # NetBox 4.6 full stack (PostgreSQL + Redis + NetBox/gunicorn) for comparison.
 # A fixed superuser API token is created on first boot for the benchmark.
-# Adjust the image tag to match the paasbox-targeted NetBox version if needed.
+# Adjust the image tag to match the paas2box-targeted NetBox version if needed.
 services:
   postgres:
     image: postgres:16-alpine

@@ -1,4 +1,4 @@
-# paasbox
+# paas2box
 
 A NetBox-compatible REST API for the **DCIM**, **IPAM**, and **Virtualization**
 sections — same OpenAPI contract as the [NetBox community
@@ -28,13 +28,13 @@ npm install
 npm run build                              # tsc -> dist/
 
 # SQLite
-python3 migrations/migrate.py --dialect sqlite --database ./paasbox.db
-PB_DIALECT=sqlite PB_SQLITE_FILE=./paasbox.db PORT=8000 npm start
+python3 migrations/migrate.py --dialect sqlite --database ./paas2box.db
+PB_DIALECT=sqlite PB_SQLITE_FILE=./paas2box.db PORT=8000 npm start
 
 # MariaDB
-python3 migrations/migrate.py --dialect mariadb --database paasbox \
-  --host 127.0.0.1 --user paasbox --password secret
-PB_DIALECT=mariadb DB_NAME=paasbox DB_USER=paasbox DB_PASSWORD=secret npm start
+python3 migrations/migrate.py --dialect mariadb --database paas2box \
+  --host 127.0.0.1 --user paas2box --password secret
+PB_DIALECT=mariadb DB_NAME=paas2box DB_USER=paas2box DB_PASSWORD=secret npm start
 ```
 
 Then e.g. `curl localhost:8000/api/dcim/manufacturers/`. The live OpenAPI schema is
@@ -44,9 +44,9 @@ registry so it always reflects core **and** any loaded plugins.
 ### Docker
 
 ```bash
-docker build -t paasbox .
+docker build -t paas2box .
 # SQLite, auto-migrated on startup (data persisted in a volume):
-docker run -p 8000:8000 -e PB_MIGRATE=1 -v paasbox-data:/data paasbox
+docker run -p 8000:8000 -e PB_MIGRATE=1 -v paas2box-data:/data paas2box
 ```
 
 The image is multi-stage and runs as a non-root user. It bundles the built Vue UI
@@ -64,8 +64,8 @@ two ways.
 **Single container (simplest — UI + API + schema + WebSocket on one port):**
 
 ```bash
-docker build -t paasbox .
-docker run --rm -p 8000:8000 -e PB_MIGRATE=1 paasbox
+docker build -t paas2box .
+docker run --rm -p 8000:8000 -e PB_MIGRATE=1 paas2box
 # then open http://localhost:8000/
 ```
 
@@ -74,8 +74,8 @@ docker run --rm -p 8000:8000 -e PB_MIGRATE=1 paasbox
 ```bash
 # Terminal 1 — backend (API + WebSocket on :8000)
 npm install && npm run build
-node scripts/migrate-sqlite.mjs ./paasbox.db          # create the SQLite schema (no Python)
-PB_SQLITE_FILE=./paasbox.db node dist/main.js
+node scripts/migrate-sqlite.mjs ./paas2box.db          # create the SQLite schema (no Python)
+PB_SQLITE_FILE=./paas2box.db node dist/main.js
 
 # Terminal 2 — Vue dev server (proxies /api and /api/ws to :8000)
 cd web && npm install && npm run dev                  # then open http://localhost:5173
@@ -162,7 +162,7 @@ five jobs: **test** (SQLite), **test-mariadb** (service container), **lint**
   (NetBox field-error shape), and optional token auth (`Authorization: Token …`).
 - **OpenAPI conformance** enforced by `test/contract.test.mjs` (validates live
   responses against the NetBox read schemas with `ajv`).
-- **Plugins** ([src/plugins/](src/plugins/)): third parties extend paasbox by
+- **Plugins** ([src/plugins/](src/plugins/)): third parties extend paas2box by
   registering entity metadata (+ DDL) — the engine then exposes a full NetBox-shaped
   CRUD API under `/api/plugins/<name>/…` automatically — plus custom routes and write
   hooks. Load via `PB_PLUGINS=<module,…>`.

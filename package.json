@@ -1,5 +1,5 @@
 {
-  "name": "paasbox",
+  "name": "paas2box",
   "version": "0.1.0",
   "private": true,
   "description": "NetBox-compatible API (DCIM/IPAM/Virtualization) — no-ORM data layer over SQLite/MariaDB",

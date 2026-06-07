@@ -124,13 +124,13 @@ test('discoverPluginSpecifiers reads package.json', () => {
   writeFileSync(
     join(dir, 'package.json'),
     JSON.stringify({
-      paasbox: { plugins: ['./local-plugin.js'] },
-      dependencies: { 'paasbox-plugin-foo': '^1.0.0', mysql2: '^3' },
+      paas2box: { plugins: ['./local-plugin.js'] },
+      dependencies: { 'paas2box-plugin-foo': '^1.0.0', mysql2: '^3' },
     }),
   );
   const specs = discoverPluginSpecifiers(dir);
   assert.ok(specs.includes('./local-plugin.js'));
-  assert.ok(specs.includes('paasbox-plugin-foo'));
+  assert.ok(specs.includes('paas2box-plugin-foo'));
   assert.ok(!specs.includes('mysql2'));
   rmSync(dir, { recursive: true, force: true });
 });

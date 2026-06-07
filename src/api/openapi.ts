@@ -234,7 +234,7 @@ export function buildOpenApi(): Schema {
   return {
     openapi: '3.0.3',
     info: {
-      title: 'paasbox REST API',
+      title: 'paas2box REST API',
       version: NETBOX_VERSION,
       description:
         'NetBox-compatible API (DCIM, IPAM, Virtualization) — generated from the live registry.',

@@ -1,4 +1,4 @@
-// Thin REST client for the paasbox API. Same-origin (Vite proxies /api in dev,
+// Thin REST client for the paas2box API. Same-origin (Vite proxies /api in dev,
 // the API serves the built SPA in prod). Optional token from localStorage.
 
 export interface Page<T = Record<string, unknown>> {

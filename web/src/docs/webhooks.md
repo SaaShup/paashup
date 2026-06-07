@@ -1,6 +1,6 @@
 # Webhooks & realtime
 
-paasbox can notify other systems whenever objects change — either by **pushing HTTP
+paas2box can notify other systems whenever objects change — either by **pushing HTTP
 webhooks**, or by **streaming a live feed** over WebSocket.
 
 ## Webhooks
@@ -35,9 +35,9 @@ object type, including those added by plugins.
 }
 ```
 
-### Signing (verify it really came from paasbox)
+### Signing (verify it really came from paas2box)
 
-If a `secret` is set, paasbox adds an `X-Hook-Signature` header — the **HMAC-SHA512**
+If a `secret` is set, paas2box adds an `X-Hook-Signature` header — the **HMAC-SHA512**
 of the exact request body. Recompute it on your side with the same secret and compare.
 
 ### Conditions (fire only when it matters)

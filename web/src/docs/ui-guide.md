@@ -48,7 +48,7 @@ Opening a resource shows a list page with:
 
 ## Live updates
 
-paasbox streams every create / update / delete over a WebSocket. Open two browser
+paas2box streams every create / update / delete over a WebSocket. Open two browser
 tabs: create or edit a record in one, and watch the list and the Dashboard activity
 log update in the other in real time.
 

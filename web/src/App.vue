@@ -24,7 +24,7 @@ onMounted(async () => {
 <template>
   <div class="app">
     <header class="topbar">
-      <div class="brand"><span class="logo">▌</span> paasbox</div>
+      <div class="brand"><span class="logo">▌</span> paas2box</div>
       <input class="globalsearch" type="search" placeholder="Search resources…" v-model="ui.search" />
       <span class="spacer" />
       <img v-show="logoOk" class="topbar-logo" :src="logoUrl" alt="paas2box" @error="logoOk = false" />

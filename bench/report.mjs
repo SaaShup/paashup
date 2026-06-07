@@ -11,7 +11,7 @@ if (!files.length) {
   process.exit(1);
 }
 const results = files.map((f) => JSON.parse(readFileSync(join(DIR, f), 'utf8')));
-const order = ['paasbox-sqlite', 'paasbox-mariadb', 'netbox'];
+const order = ['paas2box-sqlite', 'paas2box-mariadb', 'netbox'];
 results.sort((a, b) => order.indexOf(a.label) - order.indexOf(b.label));
 
 const fmtMs = (ms) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`);
@@ -48,7 +48,7 @@ for (const [phase, title] of [
 // speedup vs netbox, if present
 const nb = results.find((r) => r.label === 'netbox');
 if (nb) {
-  md += `\n\n## paasbox speedup vs NetBox (req/s ratio)\n\n`;
+  md += `\n\n## paas2box speedup vs NetBox (req/s ratio)\n\n`;
   const rows = results
     .filter((r) => r.label !== 'netbox')
     .map((r) => [

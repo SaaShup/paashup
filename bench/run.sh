@@ -3,10 +3,10 @@
 # time, runs the POST/GET benchmark, tears it down, and writes bench/results/<target>.json.
 #
 # Usage:
-#   bench/run.sh paasbox-sqlite
-#   bench/run.sh paasbox-mariadb
+#   bench/run.sh paas2box-sqlite
+#   bench/run.sh paas2box-mariadb
 #   bench/run.sh netbox
-#   REQUESTS=1000 CONCURRENCY=32 bench/run.sh paasbox-sqlite
+#   REQUESTS=1000 CONCURRENCY=32 bench/run.sh paas2box-sqlite
 #   bench/run.sh report                 # combine results into a markdown table
 set -uo pipefail
 cd "$(dirname "$0")" || exit 1
@@ -31,8 +31,8 @@ http_code() { # $1=token (optional)
 run_target() {
   local target="$1" token="" acquire_ms boot_ms t0
   case "$target" in
-    paasbox-sqlite)  COMPOSE="compose/paasbox-sqlite.yml" ;;
-    paasbox-mariadb) COMPOSE="compose/paasbox-mariadb.yml" ;;
+    paas2box-sqlite)  COMPOSE="compose/paas2box-sqlite.yml" ;;
+    paas2box-mariadb) COMPOSE="compose/paas2box-mariadb.yml" ;;
     netbox)          COMPOSE="compose/netbox.yml"; token="0123456789abcdef0123456789abcdef01234567" ;;
     *) echo "unknown target: $target"; exit 1 ;;
   esac
@@ -40,7 +40,7 @@ run_target() {
   echo "### $target — tearing down any previous run"
   dc down -v >/dev/null 2>&1 || true
 
-  # ---- acquire image (build for paasbox, pull for netbox) ----
+  # ---- acquire image (build for paas2box, pull for netbox) ----
   echo "### $target — acquiring image"
   t0=$(now_ms)
   if [ "$target" = "netbox" ]; then dc pull >/dev/null 2>&1; else dc build >/dev/null 2>&1; fi
@@ -53,13 +53,13 @@ run_target() {
 
   local tries=240   # netbox first boot can take minutes
 
-  if [ "$target" = "paasbox-mariadb" ]; then
+  if [ "$target" = "paas2box-mariadb" ]; then
     # wait for db health, then apply migrations (part of "deployment")
     for _ in $(seq 1 60); do
       [ "$(dc ps db --format '{{.Health}}' 2>/dev/null)" = "healthy" ] && break; sleep 2
     done
-    dc exec -T db mariadb -uroot -proot paasbox < ../migrations/0001_initial.mariadb.sql
-    dc exec -T db mariadb -uroot -proot paasbox < ../migrations/0002_auth_token.mariadb.sql
+    dc exec -T db mariadb -uroot -proot paas2box < ../migrations/0001_initial.mariadb.sql
+    dc exec -T db mariadb -uroot -proot paas2box < ../migrations/0002_auth_token.mariadb.sql
   fi
 
   if [ "$target" = "netbox" ]; then
@@ -112,5 +112,5 @@ print('token-ready')
 }
 
 if [ "${1:-}" = "report" ]; then node report.mjs; exit 0; fi
-[ $# -lt 1 ] && { echo "usage: run.sh <paasbox-sqlite|paasbox-mariadb|netbox|report>"; exit 1; }
+[ $# -lt 1 ] && { echo "usage: run.sh <paas2box-sqlite|paas2box-mariadb|netbox|report>"; exit 1; }
 run_target "$1"

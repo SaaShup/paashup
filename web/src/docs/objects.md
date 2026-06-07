@@ -1,6 +1,6 @@
 # The object model
 
-paasbox models three domains. Understanding how their objects relate makes data entry
+paas2box models three domains. Understanding how their objects relate makes data entry
 fast and avoids dead-ends.
 
 ## DCIM — physical infrastructure

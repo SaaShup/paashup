@@ -15,7 +15,7 @@ let db, server, base, webRoot;
 
 before(async () => {
   webRoot = mkdtempSync(join(tmpdir(), 'pbx-web-'));
-  writeFileSync(join(webRoot, 'index.html'), '<!doctype html><title>paasbox spa</title>');
+  writeFileSync(join(webRoot, 'index.html'), '<!doctype html><title>paas2box spa</title>');
   mkdirSync(join(webRoot, 'assets'));
   writeFileSync(join(webRoot, 'assets', 'app.js'), 'console.log("hi")');
 
@@ -35,7 +35,7 @@ test('serves index.html at /', async () => {
   const r = await fetch(`${base}/`);
   assert.equal(r.status, 200);
   assert.match(r.headers.get('content-type'), /text\/html/);
-  assert.match(await r.text(), /paasbox spa/);
+  assert.match(await r.text(), /paas2box spa/);
 });
 
 test('serves static assets with correct content-type', async () => {
@@ -48,7 +48,7 @@ test('serves static assets with correct content-type', async () => {
 test('SPA fallback: unknown non-API path returns index.html', async () => {
   const r = await fetch(`${base}/some/client/route`);
   assert.equal(r.status, 200);
-  assert.match(await r.text(), /paasbox spa/);
+  assert.match(await r.text(), /paas2box spa/);
 });
 
 test('API still works (not shadowed by static)', async () => {

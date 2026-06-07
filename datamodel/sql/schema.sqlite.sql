@@ -1,4 +1,4 @@
--- paasbox initial schema (sqlite) — generated from data-model.json
+-- paas2box initial schema (sqlite) — generated from data-model.json
 -- NetBox 4.6.2 (4.6) compatible. Do not edit by hand; run datamodel/build_schema.py.
 PRAGMA foreign_keys = ON;
 

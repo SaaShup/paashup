@@ -36,7 +36,7 @@ jobs:
         image: mariadb:11
         env:
           MARIADB_ROOT_PASSWORD: root
-          MARIADB_DATABASE: paasbox
+          MARIADB_DATABASE: paas2box
         ports:
           - 3306:3306
         options: >-
@@ -47,7 +47,7 @@ jobs:
       DB_PORT: '3306'
       DB_USER: root
       DB_PASSWORD: root
-      DB_NAME: paasbox
+      DB_NAME: paas2box
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -137,10 +137,10 @@ jobs:
           if-no-files-found: error
 
       - name: Build Docker image
-        run: docker build -t paasbox:ci .
+        run: docker build -t paas2box:ci .
       - name: Smoke-test image (migrate + serve + request)
         run: |
-          docker run -d --name pbx -e PB_MIGRATE=1 -p 8000:8000 paasbox:ci
+          docker run -d --name pbx -e PB_MIGRATE=1 -p 8000:8000 paas2box:ci
           for i in $(seq 1 30); do
             code=$(curl -s -o /dev/null -w "%{http_code}" localhost:8000/api/dcim/manufacturers/ || echo 000)
             if [ "$code" = "200" ]; then echo "API up (HTTP $code)"; break; fi

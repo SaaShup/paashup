@@ -1,4 +1,4 @@
-// paasbox data-access layer — NetBox-compatible (DCIM/IPAM/Virtualization),
+// paas2box data-access layer — NetBox-compatible (DCIM/IPAM/Virtualization),
 // no ORM, raw SQL over SQLite (small customers) or MariaDB (big customers).
 
 export { createDb, SqliteDb, MariaDb } from './db/index.js';

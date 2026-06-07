@@ -1,5 +1,5 @@
 // Entry point: start the HTTP API. Configure via environment:
-//   PB_DIALECT=sqlite  PB_SQLITE_FILE=./paasbox.db
+//   PB_DIALECT=sqlite  PB_SQLITE_FILE=./paas2box.db
 //   PB_DIALECT=mariadb DB_HOST=.. DB_PORT=.. DB_USER=.. DB_PASSWORD=.. DB_NAME=..
 //   PORT=8000  BASE_URL=http://localhost:8000
 import { createDb, type DbConfig } from './db/index.js';
@@ -11,7 +11,7 @@ import type { Plugin } from './plugins/types.js';
 function configFromEnv(): DbConfig {
   const dialect = (process.env.PB_DIALECT ?? 'sqlite') as 'sqlite' | 'mariadb';
   if (dialect === 'sqlite') {
-    return { dialect, filename: process.env.PB_SQLITE_FILE ?? './paasbox.db' };
+    return { dialect, filename: process.env.PB_SQLITE_FILE ?? './paas2box.db' };
   }
   return {
     dialect,
@@ -19,7 +19,7 @@ function configFromEnv(): DbConfig {
     port: process.env.DB_PORT ? Number(process.env.DB_PORT) : undefined,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME ?? 'paasbox',
+    database: process.env.DB_NAME ?? 'paas2box',
   };
 }
 
@@ -28,7 +28,7 @@ const baseUrl = process.env.BASE_URL ?? `http://localhost:${port}`;
 const db = createDb(configFromEnv());
 
 // Load plugins before the server is created, so their entities/routes are part of
-// the routing table. Sources: package.json (`paasbox.plugins` + `paasbox-plugin-*`
+// the routing table. Sources: package.json (`paas2box.plugins` + `paas2box-plugin-*`
 // deps) merged with the PB_PLUGINS env list.
 const pluginPaths = [
   ...discoverPluginSpecifiers(process.cwd()),
@@ -60,7 +60,7 @@ const server = createApiServer({
 });
 
 server.listen(port, () => {
-  console.log(`paasbox API listening on ${baseUrl}`);
+  console.log(`paas2box API listening on ${baseUrl}`);
 });
 
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {

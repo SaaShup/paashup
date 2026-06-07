@@ -356,7 +356,7 @@ def unique_indexes(d):
 # ------------------------------------------------------------- assemble -------
 def build(d):
     parts = [
-        f"-- paasbox initial schema ({d.name}) — generated from data-model.json",
+        f"-- paas2box initial schema ({d.name}) — generated from data-model.json",
         f"-- NetBox {MODEL.get('source')} compatible. Do not edit by hand; "
         f"run datamodel/build_schema.py.",
         d.header(),

@@ -1,6 +1,6 @@
-# Welcome to paasbox
+# Welcome to paas2box
 
-**paasbox** is a fast, lightweight infrastructure source-of-truth for your
+**paas2box** is a fast, lightweight infrastructure source-of-truth for your
 **data center (DCIM)**, **IP address management (IPAM)** and **virtualization**.
 It exposes the same REST API as NetBox, so existing tools, scripts and integrations
 work unchanged — but it boots in seconds and runs from a single container on either
@@ -26,5 +26,5 @@ SQLite or MariaDB.
 New here? Read **Using the interface** next, then **The object model** to understand
 how things fit together.
 
-> Tip: there is nothing to install to *use* paasbox — it is all in the browser and the
+> Tip: there is nothing to install to *use* paas2box — it is all in the browser and the
 > API. You only need credentials if your administrator turned authentication on.

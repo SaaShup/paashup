@@ -1,4 +1,4 @@
-// Typed messages from the paasbox WebSocket change-feed (/api/ws/).
+// Typed messages from the paas2box WebSocket change-feed (/api/ws/).
 
 export interface HelloEvent {
   type: 'hello';

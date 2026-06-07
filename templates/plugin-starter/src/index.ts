@@ -1,10 +1,10 @@
-// A paasbox plugin: one default-exported `Plugin` object. The host paasbox loads
+// A paas2box plugin: one default-exported `Plugin` object. The host paas2box loads
 // it (via PB_PLUGINS or the package.json discovery convention) and turns your
 // entity metadata into a full NetBox-shaped CRUD API automatically.
 //
 // Rename "example" throughout to your plugin's name, and replace the Widget entity
-// with your own (see docs/PLUGIN-PORTING.md for the NetBox → paasbox mapping).
-import type { Plugin, TableMeta } from 'paasbox';
+// with your own (see docs/PLUGIN-PORTING.md for the NetBox → paas2box mapping).
+import type { Plugin, TableMeta } from 'paas2box';
 
 const NAME = 'example';
 const TABLE = `plugin_${NAME}_widget`;

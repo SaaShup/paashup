@@ -1349,6 +1349,7 @@ export const tables = {
       { name: "start_address", column: "start_address", tsKind: "string", nullable: false, writable: true, required: true },
       { name: "end_address", column: "end_address", tsKind: "string", nullable: false, writable: true, required: true },
       { name: "gateway", column: "gateway", tsKind: "string", nullable: true, writable: true, required: false },
+      { name: "dhcp_relays", column: "dhcp_relays", tsKind: "json", nullable: true, writable: true, required: false },
       { name: "vrf", column: "vrf_id", tsKind: "number", nullable: true, writable: true, required: false, references: "VRF" },
       { name: "tenant", column: "tenant_id", tsKind: "number", nullable: true, writable: true, required: false, references: "Tenant" },
       { name: "status", column: "status", tsKind: "string", nullable: false, writable: true, required: false, enum: ["active","reserved","deprecated"], enumLabels: {"active":"Active","reserved":"Reserved","deprecated":"Deprecated"} },

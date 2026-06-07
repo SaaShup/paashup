@@ -6,7 +6,7 @@ export function getSchemaDoc(): Promise<Record<string, any>> {
   return (cached ??= api.schema() as unknown as Promise<Record<string, any>>);
 }
 
-export type FieldKind = 'text' | 'number' | 'boolean' | 'select' | 'fk' | 'json';
+export type FieldKind = 'text' | 'number' | 'boolean' | 'select' | 'fk' | 'json' | 'iplist';
 
 export interface FieldDef {
   name: string;
@@ -49,6 +49,7 @@ export async function formFields(model: string): Promise<FieldDef[]> {
       choices = p.enum;
     } else if (p.type === 'boolean') kind = 'boolean';
     else if (p.type === 'integer' || p.type === 'number') kind = 'number';
+    else if (name === 'dhcp_relays') kind = 'iplist'; // friendly one-IP-per-line editor
     else if (p.type === 'object' || p.type === 'array') kind = 'json';
     out.push({
       name,

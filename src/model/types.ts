@@ -1684,6 +1684,7 @@ export interface IPRange {
   start_address: string;
   end_address: string;
   gateway: string | null;
+  dhcp_relays: Json | null;
   vrf: number | null;
   tenant: number | null;
   status: 'active' | 'reserved' | 'deprecated';
@@ -1701,6 +1702,7 @@ export interface IPRangeCreate {
   start_address: string;
   end_address: string;
   gateway?: string | null;
+  dhcp_relays?: Json | null;
   vrf?: number | null;
   tenant?: number | null;
   status?: 'active' | 'reserved' | 'deprecated';

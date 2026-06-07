@@ -73,3 +73,25 @@ test('PATCH gateway is validated against stored bounds when sent with them', asy
   assert.equal(ok.status, 200);
   assert.equal(ok.body.gateway, '10.0.0.9');
 });
+
+test('dhcp_relays accepts a list of valid IPs', async () => {
+  const r = await api(
+    'POST',
+    '/api/ipam/ip-ranges/',
+    range({ dhcp_relays: ['10.1.0.1', '10.1.0.2'] }),
+  );
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.deepEqual(r.body.dhcp_relays, ['10.1.0.1', '10.1.0.2']);
+});
+
+test('dhcp_relays rejects an invalid IP in the list', async () => {
+  const r = await api('POST', '/api/ipam/ip-ranges/', range({ dhcp_relays: ['10.1.0.1', 'nope'] }));
+  assert.equal(r.status, 400);
+  assert.ok(Array.isArray(r.body.dhcp_relays));
+});
+
+test('dhcp_relays rejects a non-list value', async () => {
+  const r = await api('POST', '/api/ipam/ip-ranges/', range({ dhcp_relays: '10.1.0.1' }));
+  assert.equal(r.status, 400);
+  assert.ok(Array.isArray(r.body.dhcp_relays));
+});

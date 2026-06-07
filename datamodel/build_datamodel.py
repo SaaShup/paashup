@@ -357,6 +357,19 @@ EXTRA_FIELDS = {
                 "paas2box_extra": True,
             },
         ),
+        (
+            "gateway",  # insert after gateway
+            {
+                "name": "dhcp_relays",
+                "kind": "scalar",
+                "type": "json",  # JSON array of IP strings
+                "nullable": True,
+                "required_on_create": False,
+                "writable": True,
+                "read_only": False,
+                "paas2box_extra": True,
+            },
+        ),
     ],
 }
 for key, extras in EXTRA_FIELDS.items():

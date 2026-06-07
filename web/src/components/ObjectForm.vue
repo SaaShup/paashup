@@ -19,6 +19,7 @@ function initValue(f: FieldDef): unknown {
   if (v === undefined || v === null) return f.kind === 'boolean' ? false : '';
   if (f.kind === 'fk') return (v as { id?: number }).id ?? '';
   if (f.kind === 'select') return (v as { value?: unknown }).value ?? v;
+  if (f.kind === 'iplist') return Array.isArray(v) ? v.join('\n') : String(v ?? '');
   if (f.kind === 'json') return JSON.stringify(v, null, 2);
   return v;
 }
@@ -64,6 +65,14 @@ function buildPayload(): Obj | null {
         if (v !== '') out[f.name] = v;
         else if (f.nullable) out[f.name] = null;
         break;
+      case 'iplist': {
+        const list = String(v)
+          .split(/[\n,]/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        out[f.name] = list.length ? list : f.nullable ? null : [];
+        break;
+      }
       case 'json':
         if (String(v).trim() !== '') {
           try {
@@ -125,6 +134,12 @@ async function submit() {
                 {{ o.display }}
               </option>
             </select>
+            <textarea
+              v-else-if="f.kind === 'iplist'"
+              v-model="values[f.name]"
+              rows="3"
+              placeholder="one IP per line"
+            />
             <textarea v-else-if="f.kind === 'json'" v-model="values[f.name]" rows="3" placeholder="{ }" />
             <input
               v-else

@@ -76,6 +76,20 @@ export function validateWrite(
     }
   }
 
+  // dhcp_relays must be a list of valid IP addresses (paas2box extension).
+  if (byName.has('dhcp_relays') && data.dhcp_relays != null) {
+    const v = data.dhcp_relays;
+    if (!Array.isArray(v)) {
+      add('dhcp_relays', 'Expected a list of IP addresses.');
+    } else {
+      v.forEach((item, i) => {
+        if (typeof item !== 'string' || ipToInt(item) === null) {
+          add('dhcp_relays', `Entry ${i + 1} ("${String(item)}") is not a valid IP address.`);
+        }
+      });
+    }
+  }
+
   const cfErrors = validateCustomFields(meta.table, data.custom_fields, partial);
   if (cfErrors) errors.custom_fields = cfErrors;
 

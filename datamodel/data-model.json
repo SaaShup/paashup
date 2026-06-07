@@ -14996,6 +14996,16 @@
           "paas2box_extra": true
         },
         {
+          "name": "dhcp_relays",
+          "kind": "scalar",
+          "type": "json",
+          "nullable": true,
+          "required_on_create": false,
+          "writable": true,
+          "read_only": false,
+          "paas2box_extra": true
+        },
+        {
           "name": "size",
           "kind": "scalar",
           "type": "integer",

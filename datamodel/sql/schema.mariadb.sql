@@ -1035,6 +1035,7 @@ CREATE TABLE ipam_iprange (
     start_address TEXT NOT NULL,
     end_address TEXT NOT NULL,
     gateway TEXT,
+    dhcp_relays JSON,
     vrf_id BIGINT,
     tenant_id BIGINT,
     status VARCHAR(32) CHECK (status IN ('active', 'reserved', 'deprecated')),

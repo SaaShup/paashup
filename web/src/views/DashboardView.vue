@@ -22,7 +22,7 @@ interface PluginUsage {
 }
 const usage = ref<SectionUsage[]>([]);
 const pluginUsage = ref<PluginUsage[]>([]);
-const zoom = ref<string | null>(null); // drill-down: 'plugins' shows the per-plugin grid
+const pluginsOpen = ref(false); // inline sub-tree under the Plugins card
 const loading = ref(false);
 
 const titleize = (s: string) => s.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -77,14 +77,14 @@ async function loadUsage() {
       p.total += c.count;
     }
     pluginUsage.value = [...pby.values()].sort((a, b) => a.label.localeCompare(b.label));
-    if (zoom.value === 'plugins' && !pluginUsage.value.length) zoom.value = null;
+    if (!pluginUsage.value.length) pluginsOpen.value = false;
   } finally {
     loading.value = false;
   }
 }
 
-function openSectionCard(u: SectionUsage) {
-  if (u.section === 'plugins') zoom.value = 'plugins'; // zoom into per-plugin view
+function onCard(u: SectionUsage) {
+  if (u.section === 'plugins') pluginsOpen.value = !pluginsOpen.value; // expand inline sub-tree
   else ui.expandedSections[u.section] = true; // expand that section in the menu
 }
 
@@ -125,24 +125,22 @@ watch(
     </div>
 
     <div class="usage-head">
-      <button v-if="zoom" class="refresh back" @click="zoom = null">← Back</button>
-      <h3>{{ zoom === 'plugins' ? 'Usage by plugin' : 'Usage by section' }}</h3>
+      <h3>Usage by section</h3>
       <button class="refresh" :disabled="loading" @click="loadUsage">
         {{ loading ? 'Counting…' : '↻ Refresh' }}
       </button>
     </div>
 
-    <!-- section overview -->
-    <div v-if="!zoom" class="usage-grid">
+    <div class="usage-grid">
       <button
         v-for="u in usage"
         :key="u.section"
         class="usage-card"
-        :class="{ zoomable: u.section === 'plugins' }"
-        :title="u.section === 'plugins' ? 'Zoom in — view usage per plugin' : 'Open this section in the menu'"
-        @click="openSectionCard(u)"
+        :class="{ expandable: u.section === 'plugins', open: u.section === 'plugins' && pluginsOpen }"
+        :title="u.section === 'plugins' ? 'Expand — usage per plugin' : 'Open this section in the menu'"
+        @click="onCard(u)"
       >
-        <span v-if="u.section === 'plugins'" class="zoom-hint">⤢</span>
+        <span v-if="u.section === 'plugins'" class="caret">{{ pluginsOpen ? '▾' : '▸' }}</span>
         <div class="u-total">{{ fmt(u.total) }}</div>
         <div class="u-name">{{ u.label }}</div>
         <div class="u-types">{{ u.types }} type{{ u.types === 1 ? '' : 's' }}</div>
@@ -150,20 +148,20 @@ watch(
       <p v-if="!usage.length && !loading" class="muted">No data.</p>
     </div>
 
-    <!-- per-plugin drill-down -->
-    <div v-else class="usage-grid">
+    <!-- inline sub-tree under the Plugins card (like a menu) -->
+    <div v-if="pluginsOpen && pluginUsage.length" class="subtree">
+      <div class="subtree-title">Plugins</div>
       <button
         v-for="p in pluginUsage"
         :key="p.name"
-        class="usage-card"
+        class="subtree-item"
         title="Open this plugin"
         @click="openPlugin(p.name)"
       >
-        <div class="u-total">{{ fmt(p.total) }}</div>
-        <div class="u-name">{{ p.label }}</div>
-        <div class="u-types">{{ p.types }} type{{ p.types === 1 ? '' : 's' }}</div>
+        <span class="tw-name">{{ p.label }}</span>
+        <span class="tw-types">{{ p.types }} type{{ p.types === 1 ? '' : 's' }}</span>
+        <span class="tw-total">{{ fmt(p.total) }}</span>
       </button>
-      <p v-if="!pluginUsage.length && !loading" class="muted">No plugins loaded.</p>
     </div>
 
     <h3>Live activity</h3>
@@ -236,18 +234,74 @@ watch(
 .usage-card:hover {
   border-color: var(--primary);
 }
-.usage-card.zoomable {
+.usage-card.expandable {
   border-left: 4px solid var(--primary);
 }
-.zoom-hint {
+.usage-card.open {
+  background: var(--surface);
+}
+.caret {
   position: absolute;
   top: 8px;
   right: 10px;
   color: var(--primary-d);
-  font-size: 0.95rem;
+  font-size: 0.8rem;
 }
-.refresh.back {
-  border-color: var(--primary);
+/* inline sub-tree (menu) under the Plugins card */
+.subtree {
+  margin: 4px 0 8px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--primary);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 6px;
+  max-width: 520px;
+}
+.subtree-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 6px 10px 4px;
+}
+.subtree-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px 10px 8px 22px;
+  border-radius: 6px;
+  position: relative;
+}
+.subtree-item::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 0;
+  bottom: 50%;
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  width: 6px;
+}
+.subtree-item:hover {
+  background: var(--surface-2);
+}
+.tw-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.tw-types {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.tw-total {
+  margin-left: auto;
+  font-weight: 700;
   color: var(--primary-d);
 }
 .u-total {

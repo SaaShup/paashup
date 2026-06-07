@@ -54,6 +54,14 @@ const webhookMeta: TableMeta = {
       required: false,
     },
     {
+      name: 'conditions',
+      column: 'conditions',
+      tsKind: 'json',
+      nullable: false,
+      writable: true,
+      required: false,
+    },
+    {
       name: 'payload_url',
       column: 'payload_url',
       tsKind: 'string',
@@ -136,11 +144,56 @@ const webhookMeta: TableMeta = {
 
 registerEntity(webhookMeta);
 
+// ---- the (read-only) delivery log entity ----
+export const DELIVERY_TABLE = 'extras_webhook_delivery';
+
+const col = (name: string, tsKind: 'string' | 'number' | 'boolean', nullable = false) => ({
+  name,
+  column: name,
+  tsKind,
+  nullable,
+  writable: false,
+  required: false,
+});
+
+const deliveryMeta: TableMeta = {
+  model: 'WebhookDelivery',
+  table: DELIVERY_TABLE,
+  section: 'extras',
+  endpoint: '/api/extras/webhook-deliveries/',
+  origin: 'core',
+  pk: 'id',
+  objectType: 'extras.webhookdelivery',
+  readOnly: true,
+  relations: [],
+  counts: [],
+  columns: [
+    col('webhook_name', 'string'),
+    col('event', 'string'),
+    col('object_type', 'string'),
+    col('object_id', 'number', true),
+    col('payload_url', 'string'),
+    col('success', 'boolean'),
+    col('status_code', 'number', true),
+    col('attempts', 'number'),
+    col('error', 'string'),
+    col('created', 'string', true),
+  ],
+};
+
+registerEntity(deliveryMeta);
+
+// retry/backoff is configurable via env (kept small + deterministic for tests)
+const MAX_TRIES = Math.max(1, Number(process.env.PB_WEBHOOK_RETRIES ?? 2) + 1);
+const BACKOFF_MS = Math.max(0, Number(process.env.PB_WEBHOOK_BACKOFF_MS ?? 500));
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 // ---- dispatch ----
 interface WebhookRow {
   name: string;
   object_types: unknown;
   events: unknown;
+  conditions: unknown;
   payload_url: string;
   http_method: string | null;
   http_content_type: string | null;
@@ -153,6 +206,7 @@ interface Webhook {
   name: string;
   objectTypes: string[];
   events: string[];
+  conditions: unknown; // null/empty = always; see evalConditions
   url: string;
   method: string;
   contentType: string;
@@ -186,10 +240,22 @@ function parseHeaders(text: string | null): Record<string, string> {
   return out;
 }
 
+function parseJson(v: unknown): unknown {
+  if (v && typeof v === 'object') return v;
+  if (typeof v === 'string' && v.trim()) {
+    try {
+      return JSON.parse(v);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 async function loadCache(db: Db): Promise<Webhook[]> {
   try {
     const rows = await db.query<WebhookRow>(
-      `SELECT name, object_types, events, payload_url, http_method, http_content_type,
+      `SELECT name, object_types, events, conditions, payload_url, http_method, http_content_type,
               additional_headers, secret, ssl_verification
          FROM ${WEBHOOK_TABLE} WHERE enabled = 1`,
     );
@@ -197,6 +263,7 @@ async function loadCache(db: Db): Promise<Webhook[]> {
       name: r.name,
       objectTypes: parseList(r.object_types),
       events: parseList(r.events),
+      conditions: parseJson(r.conditions),
       url: r.payload_url,
       method: r.http_method || 'POST',
       contentType: r.http_content_type || 'application/json',
@@ -207,6 +274,63 @@ async function loadCache(db: Db): Promise<Webhook[]> {
   } catch {
     return []; // table not present (e.g. migration not applied) → no webhooks
   }
+}
+
+/** Resolve a dotted path; for choice fields ({value,label}) `status` ⇒ status.value. */
+function resolvePath(obj: unknown, path: string): unknown {
+  let cur: unknown = obj;
+  for (const key of path.split('.')) {
+    if (cur && typeof cur === 'object' && key in (cur as Record<string, unknown>)) {
+      cur = (cur as Record<string, unknown>)[key];
+    } else return undefined;
+  }
+  if (cur && typeof cur === 'object' && 'value' in (cur as Record<string, unknown>)) {
+    return (cur as Record<string, unknown>).value; // choice {value,label}
+  }
+  return cur;
+}
+
+function applyOp(actual: unknown, op: string, value: unknown): boolean {
+  switch (op) {
+    case 'eq':
+      return actual === value;
+    case 'ne':
+      return actual !== value;
+    case 'in':
+      return Array.isArray(value) && value.includes(actual);
+    case 'contains':
+      return typeof actual === 'string' && actual.includes(String(value));
+    case 'gt':
+      return Number(actual) > Number(value);
+    case 'gte':
+      return Number(actual) >= Number(value);
+    case 'lt':
+      return Number(actual) < Number(value);
+    case 'lte':
+      return Number(actual) <= Number(value);
+    case 'empty':
+      return value
+        ? actual === null || actual === undefined || actual === ''
+        : !(actual === null || actual === undefined || actual === '');
+    default:
+      return false;
+  }
+}
+
+/**
+ * NetBox-style conditions. Supports `{and:[…]}` / `{or:[…]}`, leaf rules
+ * `{attr, op, value}`, and a plain `{field: value}` map (AND of equality, where a
+ * choice field matches its `.value`). Empty/null ⇒ always true.
+ */
+function evalConditions(cond: unknown, data: Record<string, unknown>): boolean {
+  if (!cond || typeof cond !== 'object') return true;
+  const c = cond as Record<string, unknown>;
+  if (Array.isArray(c.and)) return c.and.every((s) => evalConditions(s, data));
+  if (Array.isArray(c.or)) return c.or.some((s) => evalConditions(s, data));
+  if (typeof c.attr === 'string') {
+    return applyOp(resolvePath(data, c.attr), String(c.op ?? 'eq'), c.value);
+  }
+  return Object.entries(c).every(([k, v]) => resolvePath(data, k) === v);
 }
 
 /** Invalidate the cached webhook config (call when the webhook table changes). */
@@ -223,18 +347,20 @@ function matches(wh: Webhook, meta: TableMeta, event: string): boolean {
   );
 }
 
-async function deliver(wh: Webhook, body: string): Promise<void> {
+interface DeliveryResult {
+  success: boolean;
+  status: number | null;
+  attempts: number;
+  error: string;
+}
+
+async function deliver(wh: Webhook, body: string): Promise<DeliveryResult> {
   const headers: Record<string, string> = { 'Content-Type': wh.contentType, ...wh.headers };
   if (wh.secret) {
     headers['X-Hook-Signature'] = createHmac('sha512', wh.secret).update(body).digest('hex');
   }
   const hasBody = wh.method !== 'GET' && wh.method !== 'DELETE';
-  const opts: RequestInit = {
-    method: wh.method,
-    headers,
-    signal: AbortSignal.timeout(8000),
-    ...(hasBody ? { body } : {}),
-  };
+  const opts: RequestInit = { method: wh.method, headers, ...(hasBody ? { body } : {}) };
   if (!wh.sslVerify) {
     try {
       if (!insecureAgent) {
@@ -246,7 +372,22 @@ async function deliver(wh: Webhook, body: string): Promise<void> {
       /* undici unavailable: fall back to verified TLS */
     }
   }
-  await fetch(wh.url, opts);
+
+  let status: number | null = null;
+  let error = '';
+  for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+    try {
+      const res = await fetch(wh.url, { ...opts, signal: AbortSignal.timeout(8000) });
+      status = res.status;
+      if (res.ok) return { success: true, status, attempts: attempt, error: '' };
+      error = `HTTP ${res.status}`;
+    } catch (e) {
+      status = null;
+      error = e instanceof Error ? e.message : String(e);
+    }
+    if (attempt < MAX_TRIES) await sleep(BACKOFF_MS * 2 ** (attempt - 1)); // exp. backoff
+  }
+  return { success: false, status, attempts: MAX_TRIES, error };
 }
 
 /**
@@ -262,9 +403,14 @@ export async function dispatchWebhooks(
   data?: unknown,
 ): Promise<void> {
   if (meta.table === WEBHOOK_TABLE) cache = null; // config changed → reload next time
+  if (meta.table === DELIVERY_TABLE) return; // never recurse on the log itself
   cache ??= await loadCache(db);
   if (!cache.length) return;
-  const targets = cache.filter((wh) => matches(wh, meta, event));
+
+  const obj = (data ?? {}) as Record<string, unknown>;
+  const targets = cache.filter(
+    (wh) => matches(wh, meta, event) && evalConditions(wh.conditions, obj),
+  );
   if (!targets.length) return;
 
   const payload = JSON.stringify({
@@ -274,11 +420,44 @@ export async function dispatchWebhooks(
     object_id: id,
     data: data ?? null,
   });
-  const results = await Promise.allSettled(targets.map((wh) => deliver(wh, payload)));
-  for (let i = 0; i < results.length; i++) {
-    const r = results[i]!;
-    if (r.status === 'rejected') {
-      console.error(`[webhook] "${targets[i]!.name}" -> ${targets[i]!.url} failed:`, r.reason);
-    }
+
+  await Promise.all(
+    targets.map(async (wh) => {
+      const r = await deliver(wh, payload);
+      if (!r.success) {
+        console.error(`[webhook] "${wh.name}" -> ${wh.url} failed after ${r.attempts}: ${r.error}`);
+      }
+      await logDelivery(db, wh, meta, event, id, r);
+    }),
+  );
+}
+
+async function logDelivery(
+  db: Db,
+  wh: Webhook,
+  meta: TableMeta,
+  event: string,
+  id: number,
+  r: DeliveryResult,
+): Promise<void> {
+  try {
+    await db.execute(
+      `INSERT INTO ${DELIVERY_TABLE}
+         (webhook_name, event, object_type, object_id, payload_url, success, status_code, attempts, error)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        wh.name,
+        event,
+        meta.objectType,
+        id,
+        wh.url,
+        r.success ? 1 : 0,
+        r.status,
+        r.attempts,
+        r.error,
+      ],
+    );
+  } catch {
+    /* delivery-log table absent → skip logging */
   }
 }

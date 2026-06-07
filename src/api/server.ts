@@ -243,6 +243,9 @@ export function createApiServer(opts: ServerOptions): http.Server {
       if (!route) throw new ApiError(404, 'Not found');
 
       const meta = getTable(route.table) as TableMeta;
+      if (meta.readOnly && !SAFE_METHODS.has(method)) {
+        throw new ApiError(405, `${meta.model} is read-only`);
+      }
       const repo = new Repository<Record<string, unknown>>(db, meta);
       const ser = new Serializer(db, baseUrl);
 

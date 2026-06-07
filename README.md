@@ -168,8 +168,11 @@ five jobs: **test** (SQLite), **test-mariadb** (service container), **lint**
   hooks. Load via `PB_PLUGINS=<module,…>`.
 - **Webhooks** ([src/webhooks.ts](src/webhooks.ts)): configurable HTTP webhooks fired
   on object **create/update/delete**, managed as a normal CRUD resource at
-  `/api/extras/webhooks/` (object-type + event filtering, optional HMAC-SHA512
-  signature, custom headers, TLS-verify toggle). Works for **core and plugin**
+  `/api/extras/webhooks/` — object-type + event filtering, **conditions** (fire only
+  when fields match, NetBox event-rule style: `{and/or}`, `{attr,op,value}`, or a
+  plain `{field: value}` map), optional **HMAC-SHA512** signature, custom headers,
+  TLS-verify toggle, **retry with exponential backoff**, and an auditable read-only
+  **delivery log** at `/api/extras/webhook-deliveries/`. Works for **core and plugin**
   entities alike. The change feed is also available live over a **WebSocket** at
   `/api/ws/`.
 

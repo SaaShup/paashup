@@ -80,16 +80,25 @@ before(async () => {
   db = new SqliteDb(DB);
   db.exec(readFileSync(join(ROOT, 'datamodel', 'sql', 'schema.sqlite.sql'), 'utf8'));
   db.exec(readFileSync(join(ROOT, 'migrations', '0003_webhook.sqlite.sql'), 'utf8'));
+  db.exec(
+    readFileSync(join(ROOT, 'migrations', '0004_webhook_conditions_delivery.sqlite.sql'), 'utf8'),
+  );
   await loadPlugins(db, [demoPlugin]);
 
-  // webhook receiver: records each request by URL path
+  // webhook receiver: records each request by URL path. /flaky fails the first hit.
+  let flakyHits = 0;
   recv = http.createServer((req, res) => {
     let raw = '';
     req.on('data', (c) => (raw += c));
     req.on('end', () => {
       (got[req.url] ??= []).push({ headers: req.headers, raw, json: raw ? JSON.parse(raw) : null });
-      res.writeHead(200);
-      res.end('ok');
+      if (req.url === '/flaky' && ++flakyHits === 1) {
+        res.writeHead(500);
+        res.end('boom');
+      } else {
+        res.writeHead(200);
+        res.end('ok');
+      }
     });
   });
   await new Promise((r) => recv.listen(0, '127.0.0.1', r));
@@ -119,6 +128,21 @@ before(async () => {
     object_types: ['plugins.thing'],
     events: ['created'],
   });
+  // conditions: only fire when slug == "match-me"
+  await api('POST', '/api/extras/webhooks/', {
+    name: 'cond',
+    payload_url: `${recvBase}/cond`,
+    object_types: ['dcim.manufacturer'],
+    events: ['created'],
+    conditions: { slug: 'match-me' },
+  });
+  // flaky endpoint to exercise retry/backoff
+  await api('POST', '/api/extras/webhooks/', {
+    name: 'flaky',
+    payload_url: `${recvBase}/flaky`,
+    object_types: ['ipam.rir'],
+    events: ['created'],
+  });
 });
 
 after(async () => {
@@ -131,7 +155,7 @@ after(async () => {
 test('webhook is itself a CRUD resource (registered entity)', async () => {
   const list = await api('GET', '/api/extras/webhooks/');
   assert.equal(list.status, 200);
-  assert.equal(list.body.count, 3);
+  assert.equal(list.body.count, 5);
   assert.equal(list.body.results[0].object_types instanceof Array, true);
 });
 
@@ -172,6 +196,36 @@ test('object-type filtering: non-matching webhook never fires', async () => {
   // we created/updated/deleted a manufacturer and a thing, but never a site
   await sleep(150);
   assert.equal((got['/sites'] || []).length, 0);
+});
+
+test('conditions: webhook fires only when object fields match', async () => {
+  await api('POST', '/api/dcim/manufacturers/', { name: 'NoMatch', slug: 'nomatch' });
+  await api('POST', '/api/dcim/manufacturers/', { name: 'Match', slug: 'match-me' });
+  const [c] = await waitFor('/cond', 1);
+  assert.equal(c.json.data.slug, 'match-me');
+  await sleep(150);
+  assert.equal((got['/cond'] || []).length, 1); // the "nomatch" create did not fire
+});
+
+test('failed delivery is retried with backoff', async () => {
+  await api('POST', '/api/ipam/rirs/', { name: 'RIPE', slug: 'ripe' });
+  // /flaky 500s once then 200s -> at least 2 attempts recorded at the receiver
+  await waitFor('/flaky', 2);
+  const deliveries = await api('GET', '/api/extras/webhook-deliveries/?ordering=-id');
+  const flaky = deliveries.body.results.find((d) => d.webhook_name === 'flaky');
+  assert.ok(flaky, 'flaky delivery logged');
+  assert.equal(flaky.success, true);
+  assert.ok(flaky.attempts >= 2, `attempts=${flaky.attempts}`);
+});
+
+test('delivery log is a read-only resource', async () => {
+  const list = await api('GET', '/api/extras/webhook-deliveries/');
+  assert.equal(list.status, 200);
+  assert.ok(list.body.count >= 1);
+  const r = list.body.results[0];
+  assert.ok('success' in r && 'attempts' in r && 'payload_url' in r);
+  const blocked = await api('POST', '/api/extras/webhook-deliveries/', { event: 'x' });
+  assert.equal(blocked.status, 405); // read-only
 });
 
 test('disabled webhooks do not fire', async () => {

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import type { Resource } from '../api/resources.js';
+import { subgroupsFor, type SubGroupView } from '../groups.js';
 
 /** UI navigation state: which view is shown, the resource catalog, group collapse. */
 export const useUiStore = defineStore('ui', {
@@ -11,15 +12,17 @@ export const useUiStore = defineStore('ui', {
     search: '',
   }),
   getters: {
-    /** resources grouped by section, filtered by the top-bar search. */
-    grouped(state): [string, Resource[]][] {
+    /** Sections → functional sub-groups → resources, filtered by the top-bar search. */
+    grouped(state): { section: string; groups: SubGroupView[] }[] {
       const q = state.search.trim().toLowerCase();
       const by = new Map<string, Resource[]>();
       for (const r of state.resources) {
         if (q && !`${r.section} ${r.label} ${r.table}`.toLowerCase().includes(q)) continue;
         (by.get(r.section) ?? by.set(r.section, []).get(r.section)!).push(r);
       }
-      return [...by.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+      return [...by.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([section, items]) => ({ section, groups: subgroupsFor(section, items) }));
     },
   },
   actions: {

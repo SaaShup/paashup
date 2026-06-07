@@ -11,22 +11,25 @@ const sectionLabel = (s: string) => (s ? s.toUpperCase() : 'OTHER');
       <span class="ico">▦</span> Dashboard
     </button>
 
-    <div v-for="[section, items] in ui.grouped" :key="section" class="group">
-      <button class="group-head" @click="ui.toggleGroup(section)">
-        <span class="caret">{{ ui.collapsed[section] ? '▸' : '▾' }}</span>
-        {{ sectionLabel(section) }}
-        <span class="count">{{ items.length }}</span>
+    <div v-for="sec in ui.grouped" :key="sec.section" class="group">
+      <button class="group-head" @click="ui.toggleGroup(sec.section)">
+        <span class="caret">{{ ui.collapsed[sec.section] ? '▸' : '▾' }}</span>
+        {{ sectionLabel(sec.section) }}
+        <span class="count">{{ sec.groups.reduce((n, g) => n + g.items.length, 0) }}</span>
       </button>
-      <div v-show="!ui.collapsed[section]" class="links">
-        <button
-          v-for="r in items"
-          :key="r.table"
-          class="nav-item"
-          :class="{ active: ui.selected?.table === r.table }"
-          @click="ui.openResource(r)"
-        >
-          {{ r.label }}
-        </button>
+      <div v-show="!ui.collapsed[sec.section]" class="links">
+        <template v-for="g in sec.groups" :key="g.label">
+          <div v-if="g.label" class="subhead">{{ g.label }}</div>
+          <button
+            v-for="r in g.items"
+            :key="r.table"
+            class="nav-item"
+            :class="{ active: ui.selected?.table === r.table }"
+            @click="ui.openResource(r)"
+          >
+            {{ r.label }}
+          </button>
+        </template>
       </div>
     </div>
   </aside>
@@ -71,6 +74,14 @@ const sectionLabel = (s: string) => (s ? s.toUpperCase() : 'OTHER');
 .links {
   display: flex;
   flex-direction: column;
+}
+.subhead {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--secondary);
+  text-transform: uppercase;
+  padding: 8px 10px 2px 18px;
 }
 .nav-item {
   text-align: left;

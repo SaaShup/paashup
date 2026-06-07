@@ -8,7 +8,9 @@ export const useUiStore = defineStore('ui', {
     resources: [] as Resource[],
     view: 'dashboard' as 'dashboard' | 'list',
     selected: null as Resource | null,
-    collapsed: {} as Record<string, boolean>,
+    // accordion: everything collapsed by default; user expands by clicking.
+    expandedSections: {} as Record<string, boolean>,
+    expandedGroups: {} as Record<string, boolean>,
     search: '',
   }),
   getters: {
@@ -37,8 +39,12 @@ export const useUiStore = defineStore('ui', {
       this.view = 'list';
       this.selected = r;
     },
-    toggleGroup(section: string) {
-      this.collapsed[section] = !this.collapsed[section];
+    toggleSection(section: string) {
+      this.expandedSections[section] = !this.expandedSections[section];
+    },
+    toggleGroup(section: string, label: string) {
+      const key = `${section}::${label}`;
+      this.expandedGroups[key] = !this.expandedGroups[key];
     },
   },
 });

@@ -1,8 +1,15 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useUiStore } from '../stores/ui.js';
 
 const ui = useUiStore();
+const searchActive = computed(() => ui.search.trim() !== '');
 const sectionLabel = (s: string) => (s ? s.toUpperCase() : 'OTHER');
+
+// While searching, force everything open so matches are visible.
+const sectionOpen = (s: string) => searchActive.value || !!ui.expandedSections[s];
+const groupOpen = (section: string, label: string) =>
+  searchActive.value || !!ui.expandedGroups[`${section}::${label}`];
 </script>
 
 <template>
@@ -12,23 +19,44 @@ const sectionLabel = (s: string) => (s ? s.toUpperCase() : 'OTHER');
     </button>
 
     <div v-for="sec in ui.grouped" :key="sec.section" class="group">
-      <button class="group-head" @click="ui.toggleGroup(sec.section)">
-        <span class="caret">{{ ui.collapsed[sec.section] ? '▸' : '▾' }}</span>
+      <button class="group-head" @click="ui.toggleSection(sec.section)">
+        <span class="caret">{{ sectionOpen(sec.section) ? '▾' : '▸' }}</span>
         {{ sectionLabel(sec.section) }}
         <span class="count">{{ sec.groups.reduce((n, g) => n + g.items.length, 0) }}</span>
       </button>
-      <div v-show="!ui.collapsed[sec.section]" class="links">
+
+      <div v-show="sectionOpen(sec.section)" class="links">
         <template v-for="g in sec.groups" :key="g.label">
-          <div v-if="g.label" class="subhead">{{ g.label }}</div>
-          <button
-            v-for="r in g.items"
-            :key="r.table"
-            class="nav-item"
-            :class="{ active: ui.selected?.table === r.table }"
-            @click="ui.openResource(r)"
-          >
-            {{ r.label }}
-          </button>
+          <!-- functional sub-group: collapsible header -->
+          <template v-if="g.label">
+            <button class="subhead" @click="ui.toggleGroup(sec.section, g.label)">
+              <span class="caret sm">{{ groupOpen(sec.section, g.label) ? '▾' : '▸' }}</span>
+              {{ g.label }}
+              <span class="count sm">{{ g.items.length }}</span>
+            </button>
+            <button
+              v-for="r in g.items"
+              v-show="groupOpen(sec.section, g.label)"
+              :key="r.table"
+              class="nav-item deep"
+              :class="{ active: ui.selected?.table === r.table }"
+              @click="ui.openResource(r)"
+            >
+              {{ r.label }}
+            </button>
+          </template>
+          <!-- section without sub-groups: items directly -->
+          <template v-else>
+            <button
+              v-for="r in g.items"
+              :key="r.table"
+              class="nav-item"
+              :class="{ active: ui.selected?.table === r.table }"
+              @click="ui.openResource(r)"
+            >
+              {{ r.label }}
+            </button>
+          </template>
         </template>
       </div>
     </div>
@@ -44,7 +72,7 @@ const sectionLabel = (s: string) => (s ? s.toUpperCase() : 'OTHER');
   padding: 10px 8px 40px;
 }
 .group {
-  margin-top: 6px;
+  margin-top: 2px;
 }
 .group-head {
   width: 100%;
@@ -54,34 +82,57 @@ const sectionLabel = (s: string) => (s ? s.toUpperCase() : 'OTHER');
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--muted);
-  font-size: 0.72rem;
+  color: var(--text);
+  font-size: 0.78rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  padding: 8px 10px 4px;
+  letter-spacing: 0.03em;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+.group-head:hover {
+  background: var(--surface-2);
 }
 .caret {
   width: 10px;
+  color: var(--muted);
 }
-.group-head .count {
+.caret.sm {
+  font-size: 0.7rem;
+}
+.count {
   margin-left: auto;
   font-weight: 600;
   background: var(--surface-2);
   color: var(--primary-d);
   border-radius: 10px;
   padding: 0 7px;
+  font-size: 0.72rem;
 }
 .links {
   display: flex;
   flex-direction: column;
 }
 .subhead {
-  font-size: 0.66rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--secondary);
+  font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.04em;
-  color: var(--secondary);
   text-transform: uppercase;
-  padding: 8px 10px 2px 18px;
+  padding: 6px 10px 6px 22px;
+  border-radius: 6px;
+}
+.subhead:hover {
+  background: var(--surface-2);
+}
+.subhead .count {
+  background: transparent;
 }
 .nav-item {
   text-align: left;
@@ -93,10 +144,13 @@ const sectionLabel = (s: string) => (s ? s.toUpperCase() : 'OTHER');
   border-radius: 6px;
   font-size: 0.88rem;
 }
+.nav-item.deep {
+  padding-left: 38px;
+}
 .nav-item.top {
   padding-left: 12px;
   font-weight: 600;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 .nav-item:hover {
   background: var(--surface-2);

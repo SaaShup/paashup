@@ -342,7 +342,7 @@ _46 entities._
 | `display` | string |  |  | ✓ |  |
 | `name` | string(64) | ✓ |  |  |  |
 | `device_type` | integer (fk) |  | ✓ |  | → **DeviceType** (FK) |
-| `role` | integer (fk) |  | ✓ |  | → **DeviceRole** (FK) |
+| `role` | integer (fk) | ✓ |  |  | → **DeviceRole** (FK) |
 | `tenant` | integer (fk) | ✓ |  |  | → **Tenant** (FK) |
 | `platform` | integer (fk) | ✓ |  |  | → **Platform** (FK) |
 | `serial` | string(50) |  |  |  | Chassis serial number, assigned by the manufacturer |

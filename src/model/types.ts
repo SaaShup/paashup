@@ -311,7 +311,7 @@ export interface Device {
   id: number;
   name: string | null;
   device_type: number;
-  role: number;
+  role: number | null;
   tenant: number | null;
   platform: number | null;
   serial: string;
@@ -344,7 +344,7 @@ export interface Device {
 export interface DeviceCreate {
   name?: string | null;
   device_type: number;
-  role: number;
+  role?: number | null;
   tenant?: number | null;
   platform?: number | null;
   serial?: string;

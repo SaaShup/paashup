@@ -2638,8 +2638,8 @@
           "kind": "fk",
           "type": "integer (fk)",
           "references": "DeviceRole",
-          "nullable": false,
-          "required_on_create": true,
+          "nullable": true,
+          "required_on_create": false,
           "writable": true,
           "read_only": false
         },

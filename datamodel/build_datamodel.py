@@ -393,6 +393,19 @@ for key, extras in EXTRA_FIELDS.items():
         else:
             ent["fields"].insert(idx + 1, field)
 
+# paas2box overrides to existing (NetBox-derived) fields, e.g. relaxing required-ness.
+FIELD_OVERRIDES = {
+    "dcim/devices": {"role": {"nullable": True, "required_on_create": False}},
+}
+for key, patches in FIELD_OVERRIDES.items():
+    ent = entities.get(key)
+    if not ent:
+        continue
+    for fname, patch in patches.items():
+        for f in ent["fields"]:
+            if f["name"] == fname:
+                f.update(patch)
+
 # ---- external entities ------------------------------------------------------
 # FK/M2M targets that live in other NetBox apps. Per project decision:
 #   * "full"  -> Tag, Tenant, TenantGroup, Owner, OwnerGroup (extracted from the

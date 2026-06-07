@@ -78,6 +78,17 @@ test('uniqueness is on the UUID only (duplicate name+site allowed)', async () =>
   assert.notEqual(a.body.id, b.body.id);
 });
 
+test('device role is optional', async () => {
+  const r = await api('POST', '/api/dcim/devices/', {
+    name: 'no-role',
+    device_type: fixtures.dt,
+    site: fixtures.site,
+    status: 'active',
+  });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(r.body.role, null);
+});
+
 test('FKs to a device use the UUID (interface -> device brief)', async () => {
   const dev = await mkDevice('with-iface');
   const iface = await api('POST', '/api/dcim/interfaces/', {

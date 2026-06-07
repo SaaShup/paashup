@@ -54,6 +54,20 @@ const SECTION_GROUPS: Record<string, SubGroup[]> = {
 
 const OTHER = 'Other';
 
+// Section display order (listed sections come first, in this order) + label overrides.
+const SECTION_ORDER = ['extras'];
+const SECTION_LABELS: Record<string, string> = { extras: 'OPERATIONS' };
+
+export function sectionLabel(section: string): string {
+  return SECTION_LABELS[section] ?? (section ? section.toUpperCase() : 'OTHER');
+}
+
+/** Lower sorts earlier; unlisted sections keep their (alphabetical) order after. */
+export function sectionRank(section: string): number {
+  const i = SECTION_ORDER.indexOf(section);
+  return i === -1 ? SECTION_ORDER.length : i;
+}
+
 export function resourceSlug(r: Resource): string {
   return r.endpoint.split('/').filter(Boolean).pop() ?? r.table;
 }

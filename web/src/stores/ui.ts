@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import type { Resource } from '../api/resources.js';
-import { subgroupsFor, type SubGroupView } from '../groups.js';
+import { subgroupsFor, sectionRank, type SubGroupView } from '../groups.js';
 
 /** UI navigation state: which view is shown, the resource catalog, group collapse. */
 export const useUiStore = defineStore('ui', {
@@ -23,7 +23,7 @@ export const useUiStore = defineStore('ui', {
         (by.get(r.section) ?? by.set(r.section, []).get(r.section)!).push(r);
       }
       return [...by.entries()]
-        .sort((a, b) => a[0].localeCompare(b[0]))
+        .sort((a, b) => sectionRank(a[0]) - sectionRank(b[0]) || a[0].localeCompare(b[0]))
         .map(([section, items]) => ({ section, groups: subgroupsFor(section, items) }));
     },
   },

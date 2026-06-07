@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useUiStore } from '../stores/ui.js';
+import { sectionLabel } from '../groups.js';
 
 const ui = useUiStore();
 const searchActive = computed(() => ui.search.trim() !== '');
-const sectionLabel = (s: string) => (s ? s.toUpperCase() : 'OTHER');
 
 // While searching, force everything open so matches are visible.
 const sectionOpen = (s: string) => searchActive.value || !!ui.expandedSections[s];

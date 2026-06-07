@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { loadResources } from './api/resources.js';
+import { discoverPluginMenus } from './api/pluginMenus.js';
 import { useUiStore } from './stores/ui.js';
 import StatusBadge from './components/StatusBadge.vue';
 import Sidebar from './components/Sidebar.vue';
 import DashboardView from './views/DashboardView.vue';
 import ResourceListView from './views/ResourceListView.vue';
 import DocsView from './views/DocsView.vue';
+import PluginPageView from './views/PluginPageView.vue';
 
 const ui = useUiStore();
 const logoOk = ref(true);
@@ -14,7 +16,9 @@ const logoUrl = '/paas2box-logo.png';
 
 onMounted(async () => {
   try {
-    ui.setResources(await loadResources());
+    const resources = await loadResources();
+    ui.setResources(resources);
+    ui.setPluginMenus(await discoverPluginMenus(resources)); // plugin-contributed sidebar pages
   } catch {
     /* backend not up yet */
   }
@@ -36,6 +40,7 @@ onMounted(async () => {
         <div class="page-watermark" aria-hidden="true" />
         <DashboardView v-if="ui.view === 'dashboard'" />
         <DocsView v-else-if="ui.view === 'docs'" />
+        <PluginPageView v-else-if="ui.view === 'plugin-page'" />
         <ResourceListView v-else />
       </main>
     </div>

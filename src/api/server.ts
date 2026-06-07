@@ -7,7 +7,7 @@ import { allTables, getTable } from '../model/registry.js';
 import { Repository, type ListOptions } from '../repository/repository.js';
 import { ApiError, ValidationError } from '../errors.js';
 import { authenticate, type AuthOptions } from '../auth.js';
-import { matchRoute, fireHooks } from '../plugins/runtime.js';
+import { matchRoute, matchAsset, fireHooks } from '../plugins/runtime.js';
 import { attachRealtime, broadcast } from '../realtime.js';
 import { dispatchWebhooks } from '../webhooks.js';
 import { Serializer } from './serializer.js';
@@ -78,6 +78,25 @@ async function serveStatic(
       res.writeHead(404);
       res.end();
     }
+  }
+}
+
+/** Serve a single file under `dir` (no SPA index fallback — a miss is a 404). */
+async function serveAsset(res: http.ServerResponse, dir: string, rel: string): Promise<void> {
+  const rootAbs = resolvePath(dir);
+  const filePath = resolvePath(rootAbs, `.${rel.startsWith('/') ? rel : `/${rel}`}`);
+  if (filePath !== rootAbs && !filePath.startsWith(rootAbs + '/')) {
+    res.writeHead(403);
+    res.end();
+    return;
+  }
+  try {
+    const data = await readFile(filePath);
+    res.writeHead(200, { 'Content-Type': MIME[extname(filePath)] ?? 'application/octet-stream' });
+    res.end(data);
+  } catch {
+    res.writeHead(404);
+    res.end();
   }
 }
 
@@ -214,6 +233,11 @@ export function createApiServer(opts: ServerOptions): http.Server {
       const rawPath = (req.url ?? '/').split('?')[0]!;
       if (opts.webRoot && method === 'GET' && !rawPath.startsWith('/api/')) {
         return serveStatic(res, opts.webRoot, rawPath);
+      }
+      // Plugin-mounted static assets (a plugin shipping its own web UI). Public, like the SPA.
+      if (method === 'GET') {
+        const asset = matchAsset(rawPath);
+        if (asset) return serveAsset(res, asset.dir, asset.rel);
       }
       // Authentication (token). When `auth.required`, anonymous requests are rejected.
       const auth = await authenticate(db, req.headers.authorization);

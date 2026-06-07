@@ -1,7 +1,14 @@
 import type { Db } from '../db/types.js';
 import { getTable, registerEntity } from '../model/registry.js';
 import { registerCustomField, customFieldsFor } from '../customfields/registry.js';
-import type { Hook, HookEvent, Plugin, PluginMigration, PluginRoute } from './types.js';
+import type {
+  Hook,
+  HookEvent,
+  Plugin,
+  PluginAssetMount,
+  PluginMigration,
+  PluginRoute,
+} from './types.js';
 
 interface CompiledRoute {
   method: string;
@@ -12,6 +19,7 @@ interface CompiledRoute {
 
 const routes: CompiledRoute[] = [];
 const hooks = new Map<string, Hook[]>(); // key: `${table}:${event}`
+const assetMounts: PluginAssetMount[] = [];
 const loaded: { name: string; version: string }[] = [];
 
 function compile(route: PluginRoute): CompiledRoute {
@@ -104,8 +112,29 @@ export async function loadPlugins(db: Db, plugins: readonly Plugin[]): Promise<v
       const key = `${hook.table}:${hook.event}`;
       (hooks.get(key) ?? hooks.set(key, []).get(key)!).push(hook);
     }
+    for (const mount of plugin.assets ?? []) {
+      assetMounts.push(mount);
+    }
     loaded.push({ name: plugin.name, version: plugin.version });
   }
+}
+
+/**
+ * Match a request path against a plugin's mounted static assets. Returns the on-disk
+ * directory and the (sanitised) relative file path, or null. Longest prefix wins.
+ */
+export function matchAsset(pathname: string): { dir: string; rel: string } | null {
+  let best: { dir: string; rel: string } | null = null;
+  let bestLen = -1;
+  for (const m of assetMounts) {
+    if ((pathname === m.urlPrefix || pathname.startsWith(m.urlPrefix)) && m.urlPrefix.length > bestLen) {
+      let rel = pathname.slice(m.urlPrefix.length);
+      if (rel === '' || rel.endsWith('/')) rel += 'index.html';
+      best = { dir: m.dir, rel };
+      bestLen = m.urlPrefix.length;
+    }
+  }
+  return best;
 }
 
 /** Find a custom plugin route for a request, capturing path params. */

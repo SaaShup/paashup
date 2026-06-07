@@ -1,12 +1,16 @@
 import { defineStore } from 'pinia';
 import type { Resource } from '../api/resources.js';
+import type { PluginMenuItem } from '../api/pluginMenus.js';
 import { subgroupsFor, sectionRank, type SubGroupView } from '../groups.js';
 
 /** UI navigation state: which view is shown, the resource catalog, group collapse. */
 export const useUiStore = defineStore('ui', {
   state: () => ({
     resources: [] as Resource[],
-    view: 'dashboard' as 'dashboard' | 'list' | 'docs',
+    /** Plugin-contributed sidebar entries (each opens a plugin page in a frame). */
+    pluginMenus: [] as PluginMenuItem[],
+    pluginPage: null as PluginMenuItem | null,
+    view: 'dashboard' as 'dashboard' | 'list' | 'docs' | 'plugin-page',
     selected: null as Resource | null,
     // accordion: everything collapsed by default; user expands by clicking.
     expandedSections: {} as Record<string, boolean>,
@@ -30,6 +34,14 @@ export const useUiStore = defineStore('ui', {
   actions: {
     setResources(resources: Resource[]) {
       this.resources = resources;
+    },
+    setPluginMenus(items: PluginMenuItem[]) {
+      this.pluginMenus = items;
+    },
+    openPluginPage(item: PluginMenuItem) {
+      this.view = 'plugin-page';
+      this.pluginPage = item;
+      this.selected = null;
     },
     openDashboard() {
       this.view = 'dashboard';

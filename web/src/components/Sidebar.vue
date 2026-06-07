@@ -20,6 +20,15 @@ const groupOpen = (section: string, label: string) =>
     <button class="nav-item top" :class="{ active: ui.view === 'docs' }" @click="ui.openDocs()">
       <span class="ico">📖</span> Docs
     </button>
+    <button
+      v-for="m in ui.pluginMenus"
+      :key="m.plugin + '::' + m.label"
+      class="nav-item top"
+      :class="{ active: ui.view === 'plugin-page' && ui.pluginPage?.label === m.label }"
+      @click="ui.openPluginPage(m)"
+    >
+      <span class="ico">{{ m.icon || '🧩' }}</span> {{ m.label }}
+    </button>
 
     <div v-for="sec in ui.grouped" :key="sec.section" class="group">
       <button class="group-head" @click="ui.toggleSection(sec.section)">

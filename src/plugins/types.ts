@@ -20,6 +20,27 @@ export interface Plugin {
   readonly hooks?: readonly Hook[];
   /** Custom fields to attach to core/plugin entities (stored in `custom_fields`). */
   readonly customFields?: readonly CustomField[];
+  /**
+   * Static asset directories the engine serves verbatim (HTML/JS/CSS/…), letting a
+   * plugin ship its own web UI. Combined with a `…/ui/` route (see PluginUiMenu) the
+   * web app shows a sidebar entry for it. Served unauthenticated, like the core SPA.
+   */
+  readonly assets?: readonly PluginAssetMount[];
+}
+
+/** Mounts the files under `dir` at `urlPrefix` (must be under /api/plugins/<name>/). */
+export interface PluginAssetMount {
+  readonly urlPrefix: string;
+  readonly dir: string;
+}
+
+/**
+ * Optional convention: a plugin route `GET /api/plugins/<name>/ui/` returning this lets
+ * the web app render sidebar entries for plugin-served pages (opened in an embedded
+ * frame). `url` is a page to load (typically one of the plugin's own `assets`).
+ */
+export interface PluginUiMenu {
+  readonly menu: readonly { label: string; url: string; icon?: string }[];
 }
 
 /** An entity contributed by a plugin: table metadata (DDL lives in `migrations`). */

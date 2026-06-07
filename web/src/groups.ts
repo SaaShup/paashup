@@ -72,6 +72,14 @@ export function resourceSlug(r: Resource): string {
   return r.endpoint.split('/').filter(Boolean).pop() ?? r.table;
 }
 
+const titleize = (s: string) => s.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+/** Plugin display name from a /api/plugins/<name>/<resource>/ endpoint. */
+function pluginLabel(r: Resource): string {
+  const name = r.endpoint.split('/').filter(Boolean)[2]; // ["api","plugins",<name>,<resource>]
+  return name ? titleize(name) : 'Plugin';
+}
+
 function subgroupOf(section: string, slug: string): string {
   const cfg = SECTION_GROUPS[section];
   if (!cfg) return '';
@@ -86,6 +94,21 @@ export interface SubGroupView {
 
 /** Bucket a section's resources into ordered functional sub-groups. */
 export function subgroupsFor(section: string, resources: Resource[]): SubGroupView[] {
+  // Plugins: one sub-group per loaded plugin (by name), so several can coexist.
+  if (section === 'plugins') {
+    const byPlugin = new Map<string, Resource[]>();
+    for (const r of resources) {
+      const label = pluginLabel(r);
+      (byPlugin.get(label) ?? byPlugin.set(label, []).get(label)!).push(r);
+    }
+    return [...byPlugin.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([label, items]) => ({
+        label,
+        items: items.sort((a, b) => a.order - b.order || a.label.localeCompare(b.label)),
+      }));
+  }
+
   const cfg = SECTION_GROUPS[section];
   const byLabel = new Map<string, Resource[]>();
   for (const r of resources) {

@@ -1,12 +1,16 @@
 import { defineStore } from 'pinia';
 import type { Resource } from '../api/resources.js';
+import type { GraphSource } from '../api/graphs.js';
 import { subgroupsFor, sectionRank, type SubGroupView } from '../groups.js';
 
 /** UI navigation state: which view is shown, the resource catalog, group collapse. */
 export const useUiStore = defineStore('ui', {
   state: () => ({
     resources: [] as Resource[],
-    view: 'dashboard' as 'dashboard' | 'list' | 'docs',
+    /** Plugin-contributed graph endpoints (Visualization view). */
+    graphs: [] as GraphSource[],
+    selectedGraph: null as GraphSource | null,
+    view: 'dashboard' as 'dashboard' | 'list' | 'docs' | 'visualization',
     selected: null as Resource | null,
     // accordion: everything collapsed by default; user expands by clicking.
     expandedSections: {} as Record<string, boolean>,
@@ -31,8 +35,19 @@ export const useUiStore = defineStore('ui', {
     setResources(resources: Resource[]) {
       this.resources = resources;
     },
+    setGraphs(graphs: GraphSource[]) {
+      this.graphs = graphs;
+      if (!this.selectedGraph && graphs.length) this.selectedGraph = graphs[0]!;
+    },
+    selectGraph(g: GraphSource) {
+      this.selectedGraph = g;
+    },
     openDashboard() {
       this.view = 'dashboard';
+      this.selected = null;
+    },
+    openVisualization() {
+      this.view = 'visualization';
       this.selected = null;
     },
     openDocs() {

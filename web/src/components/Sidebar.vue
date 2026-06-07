@@ -20,6 +20,14 @@ const groupOpen = (section: string, label: string) =>
     <button class="nav-item top" :class="{ active: ui.view === 'docs' }" @click="ui.openDocs()">
       <span class="ico">📖</span> Docs
     </button>
+    <button
+      v-if="ui.graphs.length"
+      class="nav-item top"
+      :class="{ active: ui.view === 'visualization' }"
+      @click="ui.openVisualization()"
+    >
+      <span class="ico">🕸</span> Visualization
+    </button>
 
     <div v-for="sec in ui.grouped" :key="sec.section" class="group">
       <button class="group-head" @click="ui.toggleSection(sec.section)">

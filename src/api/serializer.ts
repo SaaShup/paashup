@@ -86,6 +86,11 @@ function scalarDefault(col: { tsKind: string }): unknown {
   }
 }
 
+/** Coerce a raw id to a table's pk type (UUID tables keep strings). */
+function pkId(meta: TableMeta, raw: unknown): number | string {
+  return meta.pkKind === 'string' ? String(raw) : Number(raw);
+}
+
 /**
  * Renders repository rows into NetBox-shaped API objects: adds `url` / `display`,
  * expands foreign keys to nested briefs, and renders choice fields as
@@ -99,9 +104,9 @@ function scalarDefault(col: { tsKind: string }): unknown {
 export class Serializer {
   private readonly cache = new Map<string, Serialized | null>();
   /** relationName -> (ownerId -> targetIds[]) for the rows being serialized. */
-  private relIds = new Map<string, Map<number, number[]>>();
+  private relIds = new Map<string, Map<number | string, (number | string)[]>>();
   /** ownerId -> computed fields (family, children, _depth). */
-  private computed = new Map<number, Record<string, unknown>>();
+  private computed = new Map<number | string, Record<string, unknown>>();
 
   constructor(
     private readonly db: Db,
@@ -125,8 +130,8 @@ export class Serializer {
     const { MODEL_TO_TABLE, CONTENTTYPE_TO_TABLE } = lookups();
     const meta = metaOf(table);
     const fkCols = meta.columns.filter((c) => c.references && MODEL_TO_TABLE[c.references]);
-    const wanted = new Map<string, Set<number>>(); // target table -> ids to brief
-    const want = (target: string, id: number) => {
+    const wanted = new Map<string, Set<number | string>>(); // target table -> ids to brief
+    const want = (target: string, id: number | string) => {
       if (!this.cache.has(`${target}:${id}`)) {
         (wanted.get(target) ?? wanted.set(target, new Set()).get(target)!).add(id);
       }
@@ -136,7 +141,9 @@ export class Serializer {
     for (const row of rows) {
       for (const col of fkCols) {
         const v = row[col.name];
-        if (v !== null && v !== undefined) want(MODEL_TO_TABLE[col.references!]!, Number(v));
+        if (v === null || v === undefined) continue;
+        const tt = MODEL_TO_TABLE[col.references!]!;
+        want(tt, pkId(metaOf(tt), v));
       }
     }
 
@@ -148,13 +155,13 @@ export class Serializer {
         const ct = row[g.typeCol];
         if (id == null || ct == null) continue;
         const target = CONTENTTYPE_TO_TABLE[String(ct)];
-        if (target) want(target, Number(id));
+        if (target) want(target, pkId(metaOf(target), id));
       }
     }
 
     // M2M / tags: one query per relation, then brief the targets in bulk
     if (meta.relations.length) {
-      const ownerIds = rows.map((r) => Number(r[meta.pk]));
+      const ownerIds = rows.map((r) => pkId(meta, r[meta.pk]));
       this.relIds = await readRelations(this.db, meta, ownerIds);
       for (const rel of meta.relations) {
         const perOwner = this.relIds.get(rel.name);
@@ -170,9 +177,9 @@ export class Serializer {
       const found = await new Repository<Record<string, unknown>>(this.db, tmeta).retrieveMany([
         ...ids,
       ]);
-      const seen = new Set<number>();
+      const seen = new Set<number | string>();
       for (const r of found) {
-        const id = Number(r[tmeta.pk]);
+        const id = pkId(tmeta, r[tmeta.pk]);
         seen.add(id);
         this.cache.set(`${target}:${id}`, this.briefOf(tmeta, r));
       }
@@ -184,7 +191,7 @@ export class Serializer {
   private render(table: string, row: Record<string, unknown>): Serialized {
     const { MODEL_TO_TABLE, CONTENTTYPE_TO_TABLE } = lookups();
     const meta = metaOf(table);
-    const id = Number(row[meta.pk]);
+    const id = pkId(meta, row[meta.pk]);
     const out: Serialized = {
       id,
       url: this.url(meta, id),
@@ -201,7 +208,9 @@ export class Serializer {
         out[col.name] = { value: v, label: col.enumLabels?.[String(v)] ?? String(v) };
       } else if (col.references) {
         const target = MODEL_TO_TABLE[col.references];
-        out[col.name] = target ? (this.cache.get(`${target}:${Number(v)}`) ?? null) : v;
+        out[col.name] = target
+          ? (this.cache.get(`${target}:${pkId(metaOf(target), v)}`) ?? null)
+          : v;
       } else {
         out[col.name] = v;
       }
@@ -214,7 +223,9 @@ export class Serializer {
         out[g.accessor] = null;
       } else {
         const target = CONTENTTYPE_TO_TABLE[String(ctVal)];
-        out[g.accessor] = target ? (this.cache.get(`${target}:${Number(idVal)}`) ?? null) : null;
+        out[g.accessor] = target
+          ? (this.cache.get(`${target}:${pkId(metaOf(target), idVal)}`) ?? null)
+          : null;
       }
     }
     // M2M / tags as brief arrays (preserve target order, drop dangling)
@@ -245,12 +256,12 @@ export class Serializer {
   }
 
   // ---- helpers --------------------------------------------------------------
-  private url(meta: TableMeta, id: number): string {
+  private url(meta: TableMeta, id: number | string): string {
     return `${this.baseUrl}${meta.endpoint}${id}/`;
   }
 
   /** Web-UI URL (NetBox `display_url`): like `url` but without the `/api` prefix. */
-  private displayUrl(meta: TableMeta, id: number): string {
+  private displayUrl(meta: TableMeta, id: number | string): string {
     return `${this.baseUrl}${meta.endpoint.replace('/api/', '/')}${id}/`;
   }
 
@@ -264,7 +275,7 @@ export class Serializer {
   }
 
   private briefOf(meta: TableMeta, row: Record<string, unknown>): Serialized {
-    const id = Number(row[meta.pk]);
+    const id = pkId(meta, row[meta.pk]);
     const brief: Serialized = { id, url: this.url(meta, id), display: this.display(meta, row) };
     for (const f of BRIEF_FIELDS) {
       if (f in row && row[f] !== undefined) brief[f] = row[f];

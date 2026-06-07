@@ -6,7 +6,7 @@ CREATE TABLE extras_webhook_delivery (
     webhook_name VARCHAR(150) NOT NULL DEFAULT '',
     event        VARCHAR(20) NOT NULL,
     object_type  VARCHAR(100) NOT NULL,
-    object_id    BIGINT,
+    object_id    VARCHAR(64),
     payload_url  VARCHAR(500) NOT NULL,
     success      TINYINT(1) NOT NULL DEFAULT 0,
     status_code  INT,

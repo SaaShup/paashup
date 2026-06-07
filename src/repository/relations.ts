@@ -19,7 +19,7 @@ function slugify(s: string): string {
 }
 
 /** Accepted forms for a relation value in a request body. */
-export type RelationItem = number | { id?: number; name?: string; slug?: string };
+export type RelationItem = number | string | { id?: number | string; name?: string; slug?: string };
 export type RelationInput = RelationItem[];
 
 /**
@@ -27,17 +27,22 @@ export type RelationInput = RelationItem[];
  *   relationName -> (ownerId -> targetIds[])
  * One query per relation (chunked), so a page of N rows is O(#relations), not O(N).
  */
+type Id = number | string;
+const coerce = (meta: TableMeta | undefined, raw: unknown): Id =>
+  meta?.pkKind === 'string' ? String(raw) : Number(raw);
+
 export async function readRelations(
   db: Db,
   owner: TableMeta,
-  ownerIds: readonly number[],
-): Promise<Map<string, Map<number, number[]>>> {
-  const result = new Map<string, Map<number, number[]>>();
+  ownerIds: readonly Id[],
+): Promise<Map<string, Map<Id, Id[]>>> {
+  const result = new Map<string, Map<Id, Id[]>>();
   if (!ownerIds.length) return result;
 
   for (const rel of owner.relations) {
-    const map = new Map<number, number[]>();
+    const map = new Map<Id, Id[]>();
     result.set(rel.name, map);
+    const tmeta = getTable(rel.targetTable);
     for (let i = 0; i < ownerIds.length; i += CHUNK) {
       const slice = ownerIds.slice(i, i + CHUNK);
       const ph = slice.map(() => '?').join(', ');
@@ -56,8 +61,8 @@ export async function readRelations(
         );
       }
       for (const r of rows) {
-        const o = Number(r.owner);
-        (map.get(o) ?? map.set(o, []).get(o)!).push(Number(r.target));
+        const o = coerce(owner, r.owner);
+        (map.get(o) ?? map.set(o, []).get(o)!).push(coerce(tmeta, r.target));
       }
     }
   }
@@ -69,12 +74,12 @@ async function resolveTargetIds(
   db: Db,
   rel: RelationMeta,
   items: RelationInput,
-): Promise<number[]> {
-  const ids: number[] = [];
+): Promise<(number | string)[]> {
+  const ids: (number | string)[] = [];
   for (const item of items) {
-    if (typeof item === 'number') {
+    if (typeof item === 'number' || typeof item === 'string') {
       ids.push(item);
-    } else if (item && typeof item.id === 'number') {
+    } else if (item && (typeof item.id === 'number' || typeof item.id === 'string')) {
       ids.push(item.id);
     } else if (item && (item.slug || item.name)) {
       const col = item.slug ? 'slug' : 'name';
@@ -83,7 +88,7 @@ async function resolveTargetIds(
       if (targetMeta && !targetMeta.columns.some((c) => c.column === col)) {
         throw new ApiError(400, `${rel.target} cannot be looked up by ${col}; use an id`);
       }
-      const found = await db.get<{ id: number }>(
+      const found = await db.get<{ id: number | string }>(
         `SELECT id FROM ${ident(rel.targetTable)} WHERE ${ident(col)} = ?`,
         [val],
       );
@@ -110,7 +115,7 @@ export async function syncRelation(
   db: Db,
   owner: TableMeta,
   rel: RelationMeta,
-  ownerId: number,
+  ownerId: number | string,
   items: RelationInput,
 ): Promise<void> {
   const targetIds = await resolveTargetIds(db, rel, items);

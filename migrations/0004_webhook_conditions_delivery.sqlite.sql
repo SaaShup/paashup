@@ -10,7 +10,7 @@ CREATE TABLE extras_webhook_delivery (
     webhook_name TEXT NOT NULL DEFAULT '',
     event        TEXT NOT NULL,
     object_type  TEXT NOT NULL,
-    object_id    INTEGER,
+    object_id    TEXT,
     payload_url  TEXT NOT NULL,
     success      INTEGER NOT NULL DEFAULT 0,
     status_code  INTEGER,

@@ -62,7 +62,7 @@ CREATE TABLE dcim_console_port_template (
 
 CREATE TABLE dcim_console_port (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    device_id BIGINT NOT NULL,
+    device_id VARCHAR(36) NOT NULL,
     module_id BIGINT,
     name VARCHAR(64) NOT NULL,
     label VARCHAR(64),
@@ -95,7 +95,7 @@ CREATE TABLE dcim_console_server_port_template (
 
 CREATE TABLE dcim_console_server_port (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    device_id BIGINT NOT NULL,
+    device_id VARCHAR(36) NOT NULL,
     module_id BIGINT,
     name VARCHAR(64) NOT NULL,
     label VARCHAR(64),
@@ -126,12 +126,12 @@ CREATE TABLE dcim_device_bay_template (
 
 CREATE TABLE dcim_device_bay (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    device_id BIGINT NOT NULL,
+    device_id VARCHAR(36) NOT NULL,
     name VARCHAR(64) NOT NULL,
     label VARCHAR(64),
     enabled TINYINT(1) DEFAULT 0,
     description VARCHAR(200),
-    installed_device_id BIGINT,
+    installed_device_id VARCHAR(36),
     owner_id BIGINT,
     custom_fields JSON,
     created DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6),
@@ -188,9 +188,8 @@ CREATE TABLE dcim_device_type (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE dcim_device (
-    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
     name VARCHAR(64),
-    uuid TEXT,
     device_type_id BIGINT NOT NULL,
     role_id BIGINT NOT NULL,
     tenant_id BIGINT,
@@ -256,7 +255,7 @@ CREATE TABLE dcim_front_port_template (
 
 CREATE TABLE dcim_front_port (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    device_id BIGINT NOT NULL,
+    device_id VARCHAR(36) NOT NULL,
     module_id BIGINT,
     name VARCHAR(64) NOT NULL,
     label VARCHAR(64),
@@ -298,7 +297,7 @@ CREATE TABLE dcim_interface_template (
 
 CREATE TABLE dcim_interface (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    device_id BIGINT NOT NULL,
+    device_id VARCHAR(36) NOT NULL,
     module_id BIGINT,
     name VARCHAR(64) NOT NULL,
     label VARCHAR(64),
@@ -379,7 +378,7 @@ CREATE TABLE dcim_inventory_item_template (
 
 CREATE TABLE dcim_inventory_item (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    device_id BIGINT NOT NULL,
+    device_id VARCHAR(36) NOT NULL,
     parent INT,
     name VARCHAR(64) NOT NULL,
     label VARCHAR(64),
@@ -468,7 +467,7 @@ CREATE TABLE dcim_module_bay_template (
 
 CREATE TABLE dcim_module_bay (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    device_id BIGINT NOT NULL,
+    device_id VARCHAR(36) NOT NULL,
     module_id BIGINT,
     name VARCHAR(64) NOT NULL,
     label VARCHAR(64),
@@ -522,7 +521,7 @@ CREATE TABLE dcim_module_type (
 
 CREATE TABLE dcim_module (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    device_id BIGINT NOT NULL,
+    device_id VARCHAR(36) NOT NULL,
     module_bay_id BIGINT NOT NULL,
     module_type_id BIGINT NOT NULL,
     status VARCHAR(32) CHECK (status IN ('offline', 'active', 'planned', 'staged', 'failed', 'decommissioning')),
@@ -607,7 +606,7 @@ CREATE TABLE dcim_power_outlet_template (
 
 CREATE TABLE dcim_power_outlet (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    device_id BIGINT NOT NULL,
+    device_id VARCHAR(36) NOT NULL,
     module_id BIGINT,
     name VARCHAR(64) NOT NULL,
     label VARCHAR(64),
@@ -662,7 +661,7 @@ CREATE TABLE dcim_power_port_template (
 
 CREATE TABLE dcim_power_port (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    device_id BIGINT NOT NULL,
+    device_id VARCHAR(36) NOT NULL,
     module_id BIGINT,
     name VARCHAR(64) NOT NULL,
     label VARCHAR(64),
@@ -815,7 +814,7 @@ CREATE TABLE dcim_rear_port_template (
 
 CREATE TABLE dcim_rear_port (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    device_id BIGINT NOT NULL,
+    device_id VARCHAR(36) NOT NULL,
     module_id BIGINT,
     name VARCHAR(64) NOT NULL,
     label VARCHAR(64),
@@ -894,7 +893,7 @@ CREATE TABLE dcim_virtual_chassis (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(64) NOT NULL,
     domain VARCHAR(30),
-    master_id BIGINT,
+    master_id VARCHAR(36),
     description VARCHAR(200),
     owner_id BIGINT,
     comments TEXT,
@@ -908,7 +907,7 @@ CREATE TABLE dcim_virtual_chassis (
 CREATE TABLE dcim_virtual_device_context (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(64) NOT NULL,
-    device_id BIGINT NOT NULL,
+    device_id VARCHAR(36) NOT NULL,
     identifier INT,
     tenant_id BIGINT,
     primary_ip4_id BIGINT,
@@ -1345,7 +1344,7 @@ CREATE TABLE virtualization_virtual_machine (
     start_on_boot VARCHAR(32) CHECK (start_on_boot IN ('on', 'off', 'laststate')),
     site_id BIGINT,
     cluster_id BIGINT,
-    device_id BIGINT,
+    device_id VARCHAR(36),
     platform_id BIGINT,
     primary_ip4_id BIGINT,
     primary_ip6_id BIGINT,
@@ -1479,7 +1478,7 @@ CREATE TABLE tagging_taggeditem (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     tag_id BIGINT NOT NULL,
     object_type VARCHAR(100) NOT NULL,
-    object_id BIGINT NOT NULL,
+    object_id VARCHAR(64) NOT NULL,
     FOREIGN KEY (tag_id) REFERENCES extras_tag(id) ON DELETE CASCADE,
     UNIQUE (tag_id, object_type, object_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -1584,10 +1583,6 @@ CREATE UNIQUE INDEX uq_dcim_device_role_parent_id_slug ON dcim_device_role (pare
 CREATE UNIQUE INDEX uq_dcim_device_type_slug ON dcim_device_type (slug);
 CREATE UNIQUE INDEX uq_dcim_device_type_manufacturer_id_model ON dcim_device_type (manufacturer_id, model);
 CREATE UNIQUE INDEX uq_dcim_device_type_manufacturer_id_slug ON dcim_device_type (manufacturer_id, slug);
-CREATE UNIQUE INDEX uq_dcim_device_asset_tag ON dcim_device (asset_tag);
-CREATE UNIQUE INDEX uq_dcim_device_name_site_id_tenant_id ON dcim_device (name, site_id, tenant_id);
-CREATE UNIQUE INDEX uq_dcim_device_rack_id_position_face ON dcim_device (rack_id, position, face);
-CREATE UNIQUE INDEX uq_dcim_device_virtual_chassis_id_vc_position ON dcim_device (virtual_chassis_id, vc_position);
 CREATE UNIQUE INDEX uq_dcim_front_port_template_device_type_id_name ON dcim_front_port_template (device_type_id, name);
 CREATE UNIQUE INDEX uq_dcim_front_port_template_module_type_id_name ON dcim_front_port_template (module_type_id, name);
 CREATE UNIQUE INDEX uq_dcim_front_port_device_id_name ON dcim_front_port (device_id, name);
@@ -1668,7 +1663,6 @@ CREATE UNIQUE INDEX uq_extras_config_template_name ON extras_config_template (na
 -- SKIP unique on dcim_cable_termination (cable, cable_end, connector): column not present in model
 -- APP-ENFORCED unique on dcim_device_role (name) WHERE parent IS NULL (partial index unsupported in MariaDB)
 -- APP-ENFORCED unique on dcim_device_role (slug) WHERE parent IS NULL (partial index unsupported in MariaDB)
--- APP-ENFORCED unique on dcim_device (name, site_id) WHERE tenant IS NULL (partial index unsupported in MariaDB)
 -- APP-ENFORCED unique on dcim_location (site_id, name) WHERE parent IS NULL (partial index unsupported in MariaDB)
 -- APP-ENFORCED unique on dcim_location (site_id, slug) WHERE parent IS NULL (partial index unsupported in MariaDB)
 -- APP-ENFORCED unique on dcim_platform (name) WHERE manufacturer IS NULL (partial index unsupported in MariaDB)

@@ -44,11 +44,19 @@ const TIMESTAMPS = new Set(['created', 'last_updated']);
 const snake = (s) => s.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
 const tableOf = (e) => `${e.section}_${snake(e.model)}`;
 
+// Models whose PK is a UUID (string) — FKs that point at them are string-typed.
+const UUID_PK_MODELS = new Set(
+  Object.values(model.entities)
+    .filter((e) => e.pk_kind === 'uuid')
+    .map((e) => e.model),
+);
+
 function tsKind(f) {
   const { kind, type } = f;
   if (kind === 'json' || kind === 'embedded') return 'json';
   if (type.startsWith('json') || type.startsWith('array')) return 'json';
   if (type === 'boolean') return 'boolean';
+  if (kind === 'fk' && UUID_PK_MODELS.has(f.references)) return 'string';
   if (kind === 'fk' || kind === 'generic_id') return 'number';
   if (kind === 'enum') return f.enum.every((v) => typeof v === 'number') ? 'number' : 'string';
   if (['integer', 'bigint', 'number', 'decimal'].includes(type)) return 'number';
@@ -172,7 +180,10 @@ for (const ent of Object.values(ENTITIES)) {
   mlines.push(
     `    section: ${JSON.stringify(ent.section)}, endpoint: ${JSON.stringify(ent.endpoint)},`,
   );
-  mlines.push(`    origin: ${JSON.stringify(ent.origin)}, pk: 'id', readOnly: ${ro},`);
+  const pkKind = ent.pk_kind === 'uuid' ? 'string' : 'number';
+  mlines.push(
+    `    origin: ${JSON.stringify(ent.origin)}, pk: 'id', pkKind: '${pkKind}', readOnly: ${ro},`,
+  );
   mlines.push(`    objectType: ${JSON.stringify(ent.object_type)},`);
   const rels = (ent.relations ?? []).map((r) => {
     const parts = [

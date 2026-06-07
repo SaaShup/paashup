@@ -102,7 +102,8 @@ async function serveAsset(res: http.ServerResponse, dir: string, rel: string): P
 
 interface Route {
   table: string;
-  id?: number;
+  /** Raw id segment from the URL; coerced to the table's pk type by the repository. */
+  id?: string;
 }
 
 /** endpoint path -> table name, built from the registry (includes plugin entities). */
@@ -116,7 +117,7 @@ function emitChange(
   db: Db,
   meta: TableMeta,
   event: 'created' | 'updated' | 'deleted',
-  id: number,
+  id: number | string,
   data?: unknown,
 ): void {
   broadcast({ type: 'change', event, object_type: meta.objectType, table: meta.table, id, data });
@@ -127,8 +128,9 @@ function resolve(pathname: string, collections: Map<string, string>): Route | nu
   const p = pathname.endsWith('/') ? pathname : `${pathname}/`;
   const collection = collections.get(p);
   if (collection) return { table: collection };
-  const m = p.match(/^(.*\/)(\d+)\/$/);
-  if (m && collections.has(m[1]!)) return { table: collections.get(m[1]!)!, id: Number(m[2]) };
+  // id segment is kept raw (string); the repository coerces it to the table's pk type
+  const m = p.match(/^(.*\/)([^/]+)\/$/);
+  if (m && collections.has(m[1]!)) return { table: collections.get(m[1]!)!, id: m[2] };
   return null;
 }
 
@@ -310,11 +312,11 @@ export function createApiServer(opts: ServerOptions): http.Server {
             });
             const out = await ser.objects(route.table, created as Record<string, unknown>[]);
             for (const o of out)
-              emitChange(db, meta, 'created', Number((o as { id: number }).id), o);
+              emitChange(db, meta, 'created', (o as { id: number | string }).id, o);
             return send(res, 201, out);
           }
           const created = await repo.create(body as Record<string, unknown>);
-          const createdId = (created as { id: number }).id;
+          const createdId = (created as { id: number | string }).id;
           await fireHooks(db, route.table, 'created', createdId, created);
           const obj = await ser.object(route.table, created);
           emitChange(db, meta, 'created', createdId, obj);
@@ -324,25 +326,27 @@ export function createApiServer(opts: ServerOptions): http.Server {
       }
 
       // ---- detail ----
+      // Coerce the raw URL id segment to the table's pk type (int vs uuid string).
+      const rid: number | string = meta.pkKind === 'string' ? route.id! : Number(route.id);
       if (method === 'GET') {
-        const row = await repo.retrieve(route.id);
+        const row = await repo.retrieve(rid);
         if (!row) throw new ApiError(404, 'Not found');
         return send(res, 200, await ser.object(route.table, row));
       }
       if (method === 'PUT' || method === 'PATCH') {
         const body = await readBody(req);
-        const updated = await repo.update(route.id, body as Record<string, unknown>);
+        const updated = await repo.update(rid, body as Record<string, unknown>);
         if (!updated) throw new ApiError(404, 'Not found');
-        await fireHooks(db, route.table, 'updated', route.id, updated);
+        await fireHooks(db, route.table, 'updated', rid, updated);
         const obj = await ser.object(route.table, updated);
-        emitChange(db, meta, 'updated', route.id, obj);
+        emitChange(db, meta, 'updated', rid, obj);
         return send(res, 200, obj);
       }
       if (method === 'DELETE') {
-        const ok = await repo.destroy(route.id);
+        const ok = await repo.destroy(rid);
         if (!ok) throw new ApiError(404, 'Not found');
-        await fireHooks(db, route.table, 'deleted', route.id);
-        emitChange(db, meta, 'deleted', route.id);
+        await fireHooks(db, route.table, 'deleted', rid);
+        emitChange(db, meta, 'deleted', rid);
         return send(res, 204);
       }
       throw new ApiError(405, `Method ${method} not allowed`);

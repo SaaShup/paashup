@@ -61,6 +61,9 @@ def snake(name):
 
 
 MODEL_TABLE = {e["model"]: f"{e['section']}_{snake(e['model'])}" for e in ENTITIES.values()}
+# Entities whose PK is a UUID (TEXT) rather than an integer.
+UUID_PK_MODELS = {e["model"] for e in ENTITIES.values() if e.get("pk_kind") == "uuid"}
+UUID_PK_TABLES = {MODEL_TABLE[m] for m in UUID_PK_MODELS}
 
 
 # ---------------------------------------------------------------- dialects ----
@@ -88,6 +91,9 @@ class SQLite(Dialect):
     def pk(self):
         return "id INTEGER PRIMARY KEY AUTOINCREMENT"
 
+    def uuid_pk(self):
+        return "id TEXT PRIMARY KEY"
+
     def header(self):
         return "PRAGMA foreign_keys = ON;\n\nBEGIN;\n"
 
@@ -96,6 +102,8 @@ class SQLite(Dialect):
 
     def coltype(self, f):
         k, t = f["kind"], f["type"]
+        if k == "fk" and f.get("references") in UUID_PK_MODELS:
+            return "TEXT"  # FK to a UUID-PK table
         if k in ("fk", "generic_id"):
             return "INTEGER"
         if k == "enum":
@@ -119,6 +127,9 @@ class MariaDB(Dialect):
     def pk(self):
         return "id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY"
 
+    def uuid_pk(self):
+        return "id VARCHAR(36) NOT NULL PRIMARY KEY"
+
     def header(self):
         return "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS = 0;\n"
 
@@ -130,6 +141,8 @@ class MariaDB(Dialect):
 
     def coltype(self, f):
         k, t = f["kind"], f["type"]
+        if k == "fk" and f.get("references") in UUID_PK_MODELS:
+            return "VARCHAR(36)"  # FK to a UUID-PK table
         if k in ("fk", "generic_id"):
             return "BIGINT"
         if k == "enum":
@@ -213,7 +226,8 @@ def not_null(f):
 # ------------------------------------------------------------- table DDL ------
 def create_table(ent, d):
     table = MODEL_TABLE[ent["model"]]
-    lines = [f"    {d.pk()}"]
+    pk_line = d.uuid_pk() if ent.get("pk_kind") == "uuid" else d.pk()
+    lines = [f"    {pk_line}"]
     fks = []
     for f, col in persisted_fields(ent):
         typ = d.coltype(f)
@@ -269,13 +283,15 @@ def m2m_join_tables(d):
 def tagging_table(d):
     """Single polymorphic tag join table (NetBox-style generic tagging)."""
     intt = "INTEGER" if d.name == "sqlite" else "BIGINT"
+    # object_id is TEXT so it can hold any PK type (integer or UUID).
+    objid = "TEXT" if d.name == "sqlite" else "VARCHAR(64)"
     return (
         "-- Polymorphic tagging: links any row (object_type + object_id) to a tag.\n"
         f"CREATE TABLE tagging_taggeditem (\n"
         f"    {d.pk()},\n"
         f"    tag_id {intt} NOT NULL,\n"
         f"    object_type VARCHAR(100) NOT NULL,\n"
-        f"    object_id {intt} NOT NULL,\n"
+        f"    object_id {objid} NOT NULL,\n"
         f"    FOREIGN KEY (tag_id) REFERENCES {MODEL_TABLE['Tag']}(id) ON DELETE CASCADE,\n"
         f"    UNIQUE (tag_id, object_type, object_id)\n"
         f"){d.table_suffix()};\n"
@@ -306,6 +322,8 @@ def unique_indexes(d):
     for ent in ENTITIES.values():
         model = ent["model"]
         table = MODEL_TABLE[model]
+        if table in UUID_PK_TABLES:
+            continue  # uniqueness is on the UUID primary key only
         cons = CONSTRAINTS.get(model, {})
         # single-column uniques: NetBox field-level unique ∪ slug heuristic
         singles = set(cons.get("unique_fields", []))

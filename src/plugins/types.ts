@@ -87,5 +87,5 @@ export type HookEvent = 'created' | 'updated' | 'deleted';
 export interface Hook {
   readonly table: string;
   readonly event: HookEvent;
-  readonly handler: (ctx: { db: Db; id: number; row?: unknown }) => Promise<void> | void;
+  readonly handler: (ctx: { db: Db; id: number | string; row?: unknown }) => Promise<void> | void;
 }

@@ -17,9 +17,11 @@ export async function computeFields(
   db: Db,
   meta: TableMeta,
   rows: Record<string, unknown>[],
-): Promise<Map<number, Record<string, unknown>>> {
-  const out = new Map<number, Record<string, unknown>>();
-  for (const r of rows) out.set(Number(r[meta.pk]), {});
+): Promise<Map<number | string, Record<string, unknown>>> {
+  const pid = (raw: unknown): number | string =>
+    meta.pkKind === 'string' ? String(raw) : Number(raw);
+  const out = new Map<number | string, Record<string, unknown>>();
+  for (const r of rows) out.set(pid(r[meta.pk]), {});
   if (!rows.length) return out;
 
   // family
@@ -29,25 +31,25 @@ export async function computeFields(
       const v = r[ipField];
       if (typeof v === 'string') {
         const fam = v.includes(':') ? 6 : 4;
-        out.get(Number(r[meta.pk]))!.family = { value: fam, label: `IPv${fam}` };
+        out.get(pid(r[meta.pk]))!.family = { value: fam, label: `IPv${fam}` };
       }
     }
   }
 
   // reverse-FK counts (device_count, prefix_count, …): one grouped query each
   if (meta.counts.length) {
-    const ids = rows.map((r) => Number(r[meta.pk]));
+    const ids = rows.map((r) => pid(r[meta.pk]));
     const ph = ids.map(() => '?').join(', ');
     for (const spec of meta.counts) {
-      const counts = new Map<number, number>();
-      const grouped = await db.query<{ owner: number; n: number }>(
+      const counts = new Map<number | string, number>();
+      const grouped = await db.query<{ owner: unknown; n: number }>(
         `SELECT ${ident(spec.column)} AS owner, COUNT(*) AS n FROM ${ident(spec.table)} ` +
           `WHERE ${ident(spec.column)} IN (${ph}) GROUP BY ${ident(spec.column)}`,
         ids,
       );
-      for (const g of grouped) counts.set(Number(g.owner), Number(g.n));
+      for (const g of grouped) counts.set(pid(g.owner), Number(g.n));
       for (const r of rows) {
-        out.get(Number(r[meta.pk]))![spec.name] = counts.get(Number(r[meta.pk])) ?? 0;
+        out.get(pid(r[meta.pk]))![spec.name] = counts.get(pid(r[meta.pk])) ?? 0;
       }
     }
   }

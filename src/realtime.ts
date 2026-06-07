@@ -9,7 +9,7 @@ export interface ChangeEvent {
   object_type: string;
   /** Physical table name (e.g. "dcim_device"). */
   table: string;
-  id: number;
+  id: number | string;
   /** Serialized object for created/updated (omitted for deleted). */
   data?: unknown;
 }

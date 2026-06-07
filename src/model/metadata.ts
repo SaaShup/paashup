@@ -5,7 +5,7 @@ export const tables = {
   "dcim_cable_bundle": {
     model: "CableBundle", table: "dcim_cable_bundle",
     section: "dcim", endpoint: "/api/dcim/cable-bundles/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.cablebundle",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -26,7 +26,7 @@ export const tables = {
   "dcim_cable_termination": {
     model: "CableTermination", table: "dcim_cable_termination",
     section: "dcim", endpoint: "/api/dcim/cable-terminations/",
-    origin: "core", pk: 'id', readOnly: true,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: true,
     objectType: "dcim.cabletermination",
     relations: [],
     counts: [],
@@ -38,7 +38,7 @@ export const tables = {
   "dcim_cable": {
     model: "Cable", table: "dcim_cable",
     section: "dcim", endpoint: "/api/dcim/cables/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.cable",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -67,7 +67,7 @@ export const tables = {
   "dcim_console_port_template": {
     model: "ConsolePortTemplate", table: "dcim_console_port_template",
     section: "dcim", endpoint: "/api/dcim/console-port-templates/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.consoleporttemplate",
     relations: [],
     counts: [],
@@ -85,14 +85,14 @@ export const tables = {
   "dcim_console_port": {
     model: "ConsolePort", table: "dcim_console_port",
     section: "dcim", endpoint: "/api/dcim/console-ports/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.consoleport",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
     ],
     counts: [],
     columns: [
-      { name: "device", column: "device_id", tsKind: "number", nullable: false, writable: true, required: true, references: "Device" },
+      { name: "device", column: "device_id", tsKind: "string", nullable: false, writable: true, required: true, references: "Device" },
       { name: "module", column: "module_id", tsKind: "number", nullable: true, writable: true, required: false, references: "Module" },
       { name: "name", column: "name", tsKind: "string", nullable: false, writable: true, required: true, maxLength: 64 },
       { name: "label", column: "label", tsKind: "string", nullable: false, writable: true, required: false, maxLength: 64 },
@@ -109,7 +109,7 @@ export const tables = {
   "dcim_console_server_port_template": {
     model: "ConsoleServerPortTemplate", table: "dcim_console_server_port_template",
     section: "dcim", endpoint: "/api/dcim/console-server-port-templates/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.consoleserverporttemplate",
     relations: [],
     counts: [],
@@ -127,14 +127,14 @@ export const tables = {
   "dcim_console_server_port": {
     model: "ConsoleServerPort", table: "dcim_console_server_port",
     section: "dcim", endpoint: "/api/dcim/console-server-ports/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.consoleserverport",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
     ],
     counts: [],
     columns: [
-      { name: "device", column: "device_id", tsKind: "number", nullable: false, writable: true, required: true, references: "Device" },
+      { name: "device", column: "device_id", tsKind: "string", nullable: false, writable: true, required: true, references: "Device" },
       { name: "module", column: "module_id", tsKind: "number", nullable: true, writable: true, required: false, references: "Module" },
       { name: "name", column: "name", tsKind: "string", nullable: false, writable: true, required: true, maxLength: 64 },
       { name: "label", column: "label", tsKind: "string", nullable: false, writable: true, required: false, maxLength: 64 },
@@ -151,7 +151,7 @@ export const tables = {
   "dcim_device_bay_template": {
     model: "DeviceBayTemplate", table: "dcim_device_bay_template",
     section: "dcim", endpoint: "/api/dcim/device-bay-templates/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.devicebaytemplate",
     relations: [],
     counts: [],
@@ -168,19 +168,19 @@ export const tables = {
   "dcim_device_bay": {
     model: "DeviceBay", table: "dcim_device_bay",
     section: "dcim", endpoint: "/api/dcim/device-bays/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.devicebay",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
     ],
     counts: [],
     columns: [
-      { name: "device", column: "device_id", tsKind: "number", nullable: false, writable: true, required: true, references: "Device" },
+      { name: "device", column: "device_id", tsKind: "string", nullable: false, writable: true, required: true, references: "Device" },
       { name: "name", column: "name", tsKind: "string", nullable: false, writable: true, required: true, maxLength: 64 },
       { name: "label", column: "label", tsKind: "string", nullable: false, writable: true, required: false, maxLength: 64 },
       { name: "enabled", column: "enabled", tsKind: "boolean", nullable: false, writable: true, required: false },
       { name: "description", column: "description", tsKind: "string", nullable: false, writable: true, required: false, maxLength: 200 },
-      { name: "installed_device", column: "installed_device_id", tsKind: "number", nullable: true, writable: true, required: false, references: "Device" },
+      { name: "installed_device", column: "installed_device_id", tsKind: "string", nullable: true, writable: true, required: false, references: "Device" },
       { name: "owner", column: "owner_id", tsKind: "number", nullable: true, writable: true, required: false, references: "Owner" },
       { name: "custom_fields", column: "custom_fields", tsKind: "json", nullable: false, writable: true, required: false },
       { name: "created", column: "created", tsKind: "string", nullable: true, writable: false, required: false },
@@ -190,7 +190,7 @@ export const tables = {
   "dcim_device_role": {
     model: "DeviceRole", table: "dcim_device_role",
     section: "dcim", endpoint: "/api/dcim/device-roles/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.devicerole",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -217,7 +217,7 @@ export const tables = {
   "dcim_device_type": {
     model: "DeviceType", table: "dcim_device_type",
     section: "dcim", endpoint: "/api/dcim/device-types/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.devicetype",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -261,7 +261,7 @@ export const tables = {
   "dcim_device": {
     model: "Device", table: "dcim_device",
     section: "dcim", endpoint: "/api/dcim/devices/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'string', readOnly: false,
     objectType: "dcim.device",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -279,7 +279,6 @@ export const tables = {
     ],
     columns: [
       { name: "name", column: "name", tsKind: "string", nullable: true, writable: true, required: false, maxLength: 64 },
-      { name: "uuid", column: "uuid", tsKind: "string", nullable: true, writable: false, required: false, auto: "uuid" },
       { name: "device_type", column: "device_type_id", tsKind: "number", nullable: false, writable: true, required: true, references: "DeviceType" },
       { name: "role", column: "role_id", tsKind: "number", nullable: false, writable: true, required: true, references: "DeviceRole" },
       { name: "tenant", column: "tenant_id", tsKind: "number", nullable: true, writable: true, required: false, references: "Tenant" },
@@ -315,7 +314,7 @@ export const tables = {
   "dcim_front_port_template": {
     model: "FrontPortTemplate", table: "dcim_front_port_template",
     section: "dcim", endpoint: "/api/dcim/front-port-templates/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.frontporttemplate",
     relations: [],
     counts: [],
@@ -336,14 +335,14 @@ export const tables = {
   "dcim_front_port": {
     model: "FrontPort", table: "dcim_front_port",
     section: "dcim", endpoint: "/api/dcim/front-ports/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.frontport",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
     ],
     counts: [],
     columns: [
-      { name: "device", column: "device_id", tsKind: "number", nullable: false, writable: true, required: true, references: "Device" },
+      { name: "device", column: "device_id", tsKind: "string", nullable: false, writable: true, required: true, references: "Device" },
       { name: "module", column: "module_id", tsKind: "number", nullable: true, writable: true, required: false, references: "Module" },
       { name: "name", column: "name", tsKind: "string", nullable: false, writable: true, required: true, maxLength: 64 },
       { name: "label", column: "label", tsKind: "string", nullable: false, writable: true, required: false, maxLength: 64 },
@@ -362,7 +361,7 @@ export const tables = {
   "dcim_interface_template": {
     model: "InterfaceTemplate", table: "dcim_interface_template",
     section: "dcim", endpoint: "/api/dcim/interface-templates/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.interfacetemplate",
     relations: [],
     counts: [],
@@ -386,7 +385,7 @@ export const tables = {
   "dcim_interface": {
     model: "Interface", table: "dcim_interface",
     section: "dcim", endpoint: "/api/dcim/interfaces/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.interface",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -396,7 +395,7 @@ export const tables = {
     ],
     counts: [],
     columns: [
-      { name: "device", column: "device_id", tsKind: "number", nullable: false, writable: true, required: true, references: "Device" },
+      { name: "device", column: "device_id", tsKind: "string", nullable: false, writable: true, required: true, references: "Device" },
       { name: "module", column: "module_id", tsKind: "number", nullable: true, writable: true, required: false, references: "Module" },
       { name: "name", column: "name", tsKind: "string", nullable: false, writable: true, required: true, maxLength: 64 },
       { name: "label", column: "label", tsKind: "string", nullable: false, writable: true, required: false, maxLength: 64 },
@@ -434,7 +433,7 @@ export const tables = {
   "dcim_inventory_item_role": {
     model: "InventoryItemRole", table: "dcim_inventory_item_role",
     section: "dcim", endpoint: "/api/dcim/inventory-item-roles/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.inventoryitemrole",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -457,7 +456,7 @@ export const tables = {
   "dcim_inventory_item_template": {
     model: "InventoryItemTemplate", table: "dcim_inventory_item_template",
     section: "dcim", endpoint: "/api/dcim/inventory-item-templates/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.inventoryitemtemplate",
     relations: [],
     counts: [],
@@ -479,14 +478,14 @@ export const tables = {
   "dcim_inventory_item": {
     model: "InventoryItem", table: "dcim_inventory_item",
     section: "dcim", endpoint: "/api/dcim/inventory-items/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.inventoryitem",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
     ],
     counts: [],
     columns: [
-      { name: "device", column: "device_id", tsKind: "number", nullable: false, writable: true, required: true, references: "Device" },
+      { name: "device", column: "device_id", tsKind: "string", nullable: false, writable: true, required: true, references: "Device" },
       { name: "parent", column: "parent", tsKind: "number", nullable: true, writable: true, required: false },
       { name: "name", column: "name", tsKind: "string", nullable: false, writable: true, required: true, maxLength: 64 },
       { name: "label", column: "label", tsKind: "string", nullable: false, writable: true, required: false, maxLength: 64 },
@@ -509,7 +508,7 @@ export const tables = {
   "dcim_location": {
     model: "Location", table: "dcim_location",
     section: "dcim", endpoint: "/api/dcim/locations/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.location",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -537,7 +536,7 @@ export const tables = {
   "dcim_macaddress": {
     model: "MACAddress", table: "dcim_macaddress",
     section: "dcim", endpoint: "/api/dcim/mac-addresses/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.macaddress",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -558,7 +557,7 @@ export const tables = {
   "dcim_manufacturer": {
     model: "Manufacturer", table: "dcim_manufacturer",
     section: "dcim", endpoint: "/api/dcim/manufacturers/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.manufacturer",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -583,7 +582,7 @@ export const tables = {
   "dcim_module_bay_template": {
     model: "ModuleBayTemplate", table: "dcim_module_bay_template",
     section: "dcim", endpoint: "/api/dcim/module-bay-templates/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.modulebaytemplate",
     relations: [],
     counts: [],
@@ -602,14 +601,14 @@ export const tables = {
   "dcim_module_bay": {
     model: "ModuleBay", table: "dcim_module_bay",
     section: "dcim", endpoint: "/api/dcim/module-bays/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.modulebay",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
     ],
     counts: [],
     columns: [
-      { name: "device", column: "device_id", tsKind: "number", nullable: false, writable: true, required: true, references: "Device" },
+      { name: "device", column: "device_id", tsKind: "string", nullable: false, writable: true, required: true, references: "Device" },
       { name: "module", column: "module_id", tsKind: "number", nullable: true, writable: true, required: false, references: "Module" },
       { name: "name", column: "name", tsKind: "string", nullable: false, writable: true, required: true, maxLength: 64 },
       { name: "label", column: "label", tsKind: "string", nullable: false, writable: true, required: false, maxLength: 64 },
@@ -626,7 +625,7 @@ export const tables = {
   "dcim_module_type_profile": {
     model: "ModuleTypeProfile", table: "dcim_module_type_profile",
     section: "dcim", endpoint: "/api/dcim/module-type-profiles/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.moduletypeprofile",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -646,7 +645,7 @@ export const tables = {
   "dcim_module_type": {
     model: "ModuleType", table: "dcim_module_type",
     section: "dcim", endpoint: "/api/dcim/module-types/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.moduletype",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -682,14 +681,14 @@ export const tables = {
   "dcim_module": {
     model: "Module", table: "dcim_module",
     section: "dcim", endpoint: "/api/dcim/modules/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.module",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
     ],
     counts: [],
     columns: [
-      { name: "device", column: "device_id", tsKind: "number", nullable: false, writable: true, required: true, references: "Device" },
+      { name: "device", column: "device_id", tsKind: "string", nullable: false, writable: true, required: true, references: "Device" },
       { name: "module_bay", column: "module_bay_id", tsKind: "number", nullable: false, writable: true, required: true, references: "ModuleBay" },
       { name: "module_type", column: "module_type_id", tsKind: "number", nullable: false, writable: true, required: true, references: "ModuleType" },
       { name: "status", column: "status", tsKind: "string", nullable: false, writable: true, required: false, enum: ["offline","active","planned","staged","failed","decommissioning"], enumLabels: {"offline":"Offline","active":"Active","planned":"Planned","staged":"Staged","failed":"Failed","decommissioning":"Decommissioning"} },
@@ -708,7 +707,7 @@ export const tables = {
   "dcim_platform": {
     model: "Platform", table: "dcim_platform",
     section: "dcim", endpoint: "/api/dcim/platforms/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.platform",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -734,7 +733,7 @@ export const tables = {
   "dcim_power_feed": {
     model: "PowerFeed", table: "dcim_power_feed",
     section: "dcim", endpoint: "/api/dcim/power-feeds/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.powerfeed",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -764,7 +763,7 @@ export const tables = {
   "dcim_power_outlet_template": {
     model: "PowerOutletTemplate", table: "dcim_power_outlet_template",
     section: "dcim", endpoint: "/api/dcim/power-outlet-templates/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.poweroutlettemplate",
     relations: [],
     counts: [],
@@ -785,14 +784,14 @@ export const tables = {
   "dcim_power_outlet": {
     model: "PowerOutlet", table: "dcim_power_outlet",
     section: "dcim", endpoint: "/api/dcim/power-outlets/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.poweroutlet",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
     ],
     counts: [],
     columns: [
-      { name: "device", column: "device_id", tsKind: "number", nullable: false, writable: true, required: true, references: "Device" },
+      { name: "device", column: "device_id", tsKind: "string", nullable: false, writable: true, required: true, references: "Device" },
       { name: "module", column: "module_id", tsKind: "number", nullable: true, writable: true, required: false, references: "Module" },
       { name: "name", column: "name", tsKind: "string", nullable: false, writable: true, required: true, maxLength: 64 },
       { name: "label", column: "label", tsKind: "string", nullable: false, writable: true, required: false, maxLength: 64 },
@@ -812,7 +811,7 @@ export const tables = {
   "dcim_power_panel": {
     model: "PowerPanel", table: "dcim_power_panel",
     section: "dcim", endpoint: "/api/dcim/power-panels/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.powerpanel",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -835,7 +834,7 @@ export const tables = {
   "dcim_power_port_template": {
     model: "PowerPortTemplate", table: "dcim_power_port_template",
     section: "dcim", endpoint: "/api/dcim/power-port-templates/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.powerporttemplate",
     relations: [],
     counts: [],
@@ -855,14 +854,14 @@ export const tables = {
   "dcim_power_port": {
     model: "PowerPort", table: "dcim_power_port",
     section: "dcim", endpoint: "/api/dcim/power-ports/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.powerport",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
     ],
     counts: [],
     columns: [
-      { name: "device", column: "device_id", tsKind: "number", nullable: false, writable: true, required: true, references: "Device" },
+      { name: "device", column: "device_id", tsKind: "string", nullable: false, writable: true, required: true, references: "Device" },
       { name: "module", column: "module_id", tsKind: "number", nullable: true, writable: true, required: false, references: "Module" },
       { name: "name", column: "name", tsKind: "string", nullable: false, writable: true, required: true, maxLength: 64 },
       { name: "label", column: "label", tsKind: "string", nullable: false, writable: true, required: false, maxLength: 64 },
@@ -880,7 +879,7 @@ export const tables = {
   "dcim_rack_group": {
     model: "RackGroup", table: "dcim_rack_group",
     section: "dcim", endpoint: "/api/dcim/rack-groups/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.rackgroup",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -902,7 +901,7 @@ export const tables = {
   "dcim_rack_reservation": {
     model: "RackReservation", table: "dcim_rack_reservation",
     section: "dcim", endpoint: "/api/dcim/rack-reservations/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.rackreservation",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -925,7 +924,7 @@ export const tables = {
   "dcim_rack_role": {
     model: "RackRole", table: "dcim_rack_role",
     section: "dcim", endpoint: "/api/dcim/rack-roles/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.rackrole",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -948,7 +947,7 @@ export const tables = {
   "dcim_rack_type": {
     model: "RackType", table: "dcim_rack_type",
     section: "dcim", endpoint: "/api/dcim/rack-types/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.racktype",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -984,7 +983,7 @@ export const tables = {
   "dcim_rack": {
     model: "Rack", table: "dcim_rack",
     section: "dcim", endpoint: "/api/dcim/racks/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.rack",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1030,7 +1029,7 @@ export const tables = {
   "dcim_rear_port_template": {
     model: "RearPortTemplate", table: "dcim_rear_port_template",
     section: "dcim", endpoint: "/api/dcim/rear-port-templates/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.rearporttemplate",
     relations: [],
     counts: [],
@@ -1051,14 +1050,14 @@ export const tables = {
   "dcim_rear_port": {
     model: "RearPort", table: "dcim_rear_port",
     section: "dcim", endpoint: "/api/dcim/rear-ports/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.rearport",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
     ],
     counts: [],
     columns: [
-      { name: "device", column: "device_id", tsKind: "number", nullable: false, writable: true, required: true, references: "Device" },
+      { name: "device", column: "device_id", tsKind: "string", nullable: false, writable: true, required: true, references: "Device" },
       { name: "module", column: "module_id", tsKind: "number", nullable: true, writable: true, required: false, references: "Module" },
       { name: "name", column: "name", tsKind: "string", nullable: false, writable: true, required: true, maxLength: 64 },
       { name: "label", column: "label", tsKind: "string", nullable: false, writable: true, required: false, maxLength: 64 },
@@ -1077,7 +1076,7 @@ export const tables = {
   "dcim_region": {
     model: "Region", table: "dcim_region",
     section: "dcim", endpoint: "/api/dcim/regions/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.region",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1100,7 +1099,7 @@ export const tables = {
   "dcim_site_group": {
     model: "SiteGroup", table: "dcim_site_group",
     section: "dcim", endpoint: "/api/dcim/site-groups/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.sitegroup",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1123,7 +1122,7 @@ export const tables = {
   "dcim_site": {
     model: "Site", table: "dcim_site",
     section: "dcim", endpoint: "/api/dcim/sites/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.site",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1159,7 +1158,7 @@ export const tables = {
   "dcim_virtual_chassis": {
     model: "VirtualChassis", table: "dcim_virtual_chassis",
     section: "dcim", endpoint: "/api/dcim/virtual-chassis/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.virtualchassis",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1168,7 +1167,7 @@ export const tables = {
     columns: [
       { name: "name", column: "name", tsKind: "string", nullable: false, writable: true, required: true, maxLength: 64 },
       { name: "domain", column: "domain", tsKind: "string", nullable: false, writable: true, required: false, maxLength: 30 },
-      { name: "master", column: "master_id", tsKind: "number", nullable: true, writable: true, required: false, references: "Device" },
+      { name: "master", column: "master_id", tsKind: "string", nullable: true, writable: true, required: false, references: "Device" },
       { name: "description", column: "description", tsKind: "string", nullable: false, writable: true, required: false, maxLength: 200 },
       { name: "owner", column: "owner_id", tsKind: "number", nullable: true, writable: true, required: false, references: "Owner" },
       { name: "comments", column: "comments", tsKind: "string", nullable: false, writable: true, required: false },
@@ -1180,7 +1179,7 @@ export const tables = {
   "dcim_virtual_device_context": {
     model: "VirtualDeviceContext", table: "dcim_virtual_device_context",
     section: "dcim", endpoint: "/api/dcim/virtual-device-contexts/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "dcim.virtualdevicecontext",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1188,7 +1187,7 @@ export const tables = {
     counts: [],
     columns: [
       { name: "name", column: "name", tsKind: "string", nullable: false, writable: true, required: true, maxLength: 64 },
-      { name: "device", column: "device_id", tsKind: "number", nullable: false, writable: true, required: true, references: "Device" },
+      { name: "device", column: "device_id", tsKind: "string", nullable: false, writable: true, required: true, references: "Device" },
       { name: "identifier", column: "identifier", tsKind: "number", nullable: true, writable: true, required: false },
       { name: "tenant", column: "tenant_id", tsKind: "number", nullable: true, writable: true, required: false, references: "Tenant" },
       { name: "primary_ip4", column: "primary_ip4_id", tsKind: "number", nullable: true, writable: true, required: false, references: "IPAddress" },
@@ -1205,7 +1204,7 @@ export const tables = {
   "ipam_aggregate": {
     model: "Aggregate", table: "ipam_aggregate",
     section: "ipam", endpoint: "/api/ipam/aggregates/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "ipam.aggregate",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1227,7 +1226,7 @@ export const tables = {
   "ipam_asnrange": {
     model: "ASNRange", table: "ipam_asnrange",
     section: "ipam", endpoint: "/api/ipam/asn-ranges/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "ipam.asnrange",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1251,7 +1250,7 @@ export const tables = {
   "ipam_asn": {
     model: "ASN", table: "ipam_asn",
     section: "ipam", endpoint: "/api/ipam/asns/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "ipam.asn",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1274,7 +1273,7 @@ export const tables = {
   "ipam_fhrpgroup_assignment": {
     model: "FHRPGroupAssignment", table: "ipam_fhrpgroup_assignment",
     section: "ipam", endpoint: "/api/ipam/fhrp-group-assignments/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "ipam.fhrpgroupassignment",
     relations: [],
     counts: [],
@@ -1290,7 +1289,7 @@ export const tables = {
   "ipam_fhrpgroup": {
     model: "FHRPGroup", table: "ipam_fhrpgroup",
     section: "ipam", endpoint: "/api/ipam/fhrp-groups/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "ipam.fhrpgroup",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1313,7 +1312,7 @@ export const tables = {
   "ipam_ipaddress": {
     model: "IPAddress", table: "ipam_ipaddress",
     section: "ipam", endpoint: "/api/ipam/ip-addresses/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "ipam.ipaddress",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1340,7 +1339,7 @@ export const tables = {
   "ipam_iprange": {
     model: "IPRange", table: "ipam_iprange",
     section: "ipam", endpoint: "/api/ipam/ip-ranges/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "ipam.iprange",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1368,7 +1367,7 @@ export const tables = {
   "ipam_prefix": {
     model: "Prefix", table: "ipam_prefix",
     section: "ipam", endpoint: "/api/ipam/prefixes/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "ipam.prefix",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1396,7 +1395,7 @@ export const tables = {
   "ipam_rir": {
     model: "RIR", table: "ipam_rir",
     section: "ipam", endpoint: "/api/ipam/rirs/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "ipam.rir",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1419,7 +1418,7 @@ export const tables = {
   "ipam_role": {
     model: "Role", table: "ipam_role",
     section: "ipam", endpoint: "/api/ipam/roles/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "ipam.role",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1444,7 +1443,7 @@ export const tables = {
   "ipam_route_target": {
     model: "RouteTarget", table: "ipam_route_target",
     section: "ipam", endpoint: "/api/ipam/route-targets/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "ipam.routetarget",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1464,7 +1463,7 @@ export const tables = {
   "ipam_service_template": {
     model: "ServiceTemplate", table: "ipam_service_template",
     section: "ipam", endpoint: "/api/ipam/service-templates/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "ipam.servicetemplate",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1485,7 +1484,7 @@ export const tables = {
   "ipam_service": {
     model: "Service", table: "ipam_service",
     section: "ipam", endpoint: "/api/ipam/services/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "ipam.service",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1509,7 +1508,7 @@ export const tables = {
   "ipam_vlangroup": {
     model: "VLANGroup", table: "ipam_vlangroup",
     section: "ipam", endpoint: "/api/ipam/vlan-groups/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "ipam.vlangroup",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1535,7 +1534,7 @@ export const tables = {
   "ipam_vlantranslation_policy": {
     model: "VLANTranslationPolicy", table: "ipam_vlantranslation_policy",
     section: "ipam", endpoint: "/api/ipam/vlan-translation-policies/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "ipam.vlantranslationpolicy",
     relations: [],
     counts: [],
@@ -1549,7 +1548,7 @@ export const tables = {
   "ipam_vlantranslation_rule": {
     model: "VLANTranslationRule", table: "ipam_vlantranslation_rule",
     section: "ipam", endpoint: "/api/ipam/vlan-translation-rules/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "ipam.vlantranslationrule",
     relations: [],
     counts: [],
@@ -1563,7 +1562,7 @@ export const tables = {
   "ipam_vlan": {
     model: "VLAN", table: "ipam_vlan",
     section: "ipam", endpoint: "/api/ipam/vlans/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "ipam.vlan",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1592,7 +1591,7 @@ export const tables = {
   "ipam_vrf": {
     model: "VRF", table: "ipam_vrf",
     section: "ipam", endpoint: "/api/ipam/vrfs/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "ipam.vrf",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1619,7 +1618,7 @@ export const tables = {
   "virtualization_cluster_group": {
     model: "ClusterGroup", table: "virtualization_cluster_group",
     section: "virtualization", endpoint: "/api/virtualization/cluster-groups/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "virtualization.clustergroup",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1641,7 +1640,7 @@ export const tables = {
   "virtualization_cluster_type": {
     model: "ClusterType", table: "virtualization_cluster_type",
     section: "virtualization", endpoint: "/api/virtualization/cluster-types/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "virtualization.clustertype",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1663,7 +1662,7 @@ export const tables = {
   "virtualization_cluster": {
     model: "Cluster", table: "virtualization_cluster",
     section: "virtualization", endpoint: "/api/virtualization/clusters/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "virtualization.cluster",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1691,7 +1690,7 @@ export const tables = {
   "virtualization_vminterface": {
     model: "VMInterface", table: "virtualization_vminterface",
     section: "virtualization", endpoint: "/api/virtualization/interfaces/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "virtualization.vminterface",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1721,7 +1720,7 @@ export const tables = {
   "virtualization_virtual_disk": {
     model: "VirtualDisk", table: "virtualization_virtual_disk",
     section: "virtualization", endpoint: "/api/virtualization/virtual-disks/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "virtualization.virtualdisk",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1741,7 +1740,7 @@ export const tables = {
   "virtualization_virtual_machine_type": {
     model: "VirtualMachineType", table: "virtualization_virtual_machine_type",
     section: "virtualization", endpoint: "/api/virtualization/virtual-machine-types/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "virtualization.virtualmachinetype",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1766,7 +1765,7 @@ export const tables = {
   "virtualization_virtual_machine": {
     model: "VirtualMachine", table: "virtualization_virtual_machine",
     section: "virtualization", endpoint: "/api/virtualization/virtual-machines/",
-    origin: "core", pk: 'id', readOnly: false,
+    origin: "core", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "virtualization.virtualmachine",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1782,7 +1781,7 @@ export const tables = {
       { name: "start_on_boot", column: "start_on_boot", tsKind: "string", nullable: false, writable: true, required: false, enum: ["on","off","laststate"], enumLabels: {"on":"On","off":"Off","laststate":"Last State"} },
       { name: "site", column: "site_id", tsKind: "number", nullable: true, writable: true, required: false, references: "Site" },
       { name: "cluster", column: "cluster_id", tsKind: "number", nullable: true, writable: true, required: false, references: "Cluster" },
-      { name: "device", column: "device_id", tsKind: "number", nullable: true, writable: true, required: false, references: "Device" },
+      { name: "device", column: "device_id", tsKind: "string", nullable: true, writable: true, required: false, references: "Device" },
       { name: "platform", column: "platform_id", tsKind: "number", nullable: true, writable: true, required: false, references: "Platform" },
       { name: "primary_ip4", column: "primary_ip4_id", tsKind: "number", nullable: true, writable: true, required: false, references: "IPAddress" },
       { name: "primary_ip6", column: "primary_ip6_id", tsKind: "number", nullable: true, writable: true, required: false, references: "IPAddress" },
@@ -1804,7 +1803,7 @@ export const tables = {
   "extras_tag": {
     model: "Tag", table: "extras_tag",
     section: "extras", endpoint: "/api/extras/tags/",
-    origin: "external-full", pk: 'id', readOnly: false,
+    origin: "external-full", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "extras.tag",
     relations: [],
     counts: [],
@@ -1822,7 +1821,7 @@ export const tables = {
   "tenancy_tenant": {
     model: "Tenant", table: "tenancy_tenant",
     section: "tenancy", endpoint: "/api/tenancy/tenants/",
-    origin: "external-full", pk: 'id', readOnly: false,
+    origin: "external-full", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "tenancy.tenant",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1843,7 +1842,7 @@ export const tables = {
   "tenancy_tenant_group": {
     model: "TenantGroup", table: "tenancy_tenant_group",
     section: "tenancy", endpoint: "/api/tenancy/tenant-groups/",
-    origin: "external-full", pk: 'id', readOnly: false,
+    origin: "external-full", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "tenancy.tenantgroup",
     relations: [
       { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
@@ -1864,7 +1863,7 @@ export const tables = {
   "users_owner": {
     model: "Owner", table: "users_owner",
     section: "users", endpoint: "/api/users/owners/",
-    origin: "external-full", pk: 'id', readOnly: false,
+    origin: "external-full", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "users.owner",
     relations: [
       { name: "user_groups", kind: "m2m", target: "Group", targetTable: "users_group", joinTable: "users_owner_user_groups", selfColumn: "owner_id", targetColumn: "group_id" },
@@ -1880,7 +1879,7 @@ export const tables = {
   "users_owner_group": {
     model: "OwnerGroup", table: "users_owner_group",
     section: "users", endpoint: "/api/users/owner-groups/",
-    origin: "external-full", pk: 'id', readOnly: false,
+    origin: "external-full", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "users.ownergroup",
     relations: [],
     counts: [],
@@ -1892,7 +1891,7 @@ export const tables = {
   "users_user": {
     model: "User", table: "users_user",
     section: "users", endpoint: "/api/users/users/",
-    origin: "external-stub", pk: 'id', readOnly: false,
+    origin: "external-stub", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "users.user",
     relations: [],
     counts: [],
@@ -1909,7 +1908,7 @@ export const tables = {
   "users_group": {
     model: "Group", table: "users_group",
     section: "users", endpoint: "/api/users/groups/",
-    origin: "external-stub", pk: 'id', readOnly: false,
+    origin: "external-stub", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "users.group",
     relations: [],
     counts: [],
@@ -1920,7 +1919,7 @@ export const tables = {
   "extras_config_template": {
     model: "ConfigTemplate", table: "extras_config_template",
     section: "extras", endpoint: "/api/extras/config-templates/",
-    origin: "external-stub", pk: 'id', readOnly: false,
+    origin: "external-stub", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "extras.configtemplate",
     relations: [],
     counts: [],
@@ -1933,7 +1932,7 @@ export const tables = {
   "vpn_l2_vpntermination": {
     model: "L2VPNTermination", table: "vpn_l2_vpntermination",
     section: "vpn", endpoint: "/api/vpn/l2vpn-terminations/",
-    origin: "external-stub", pk: 'id', readOnly: false,
+    origin: "external-stub", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "vpn.l2vpntermination",
     relations: [],
     counts: [],
@@ -1946,7 +1945,7 @@ export const tables = {
   "wireless_wireless_lan": {
     model: "WirelessLAN", table: "wireless_wireless_lan",
     section: "wireless", endpoint: "/api/wireless/wireless-lans/",
-    origin: "external-stub", pk: 'id', readOnly: false,
+    origin: "external-stub", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "wireless.wirelesslan",
     relations: [],
     counts: [],
@@ -1958,7 +1957,7 @@ export const tables = {
   "wireless_wireless_link": {
     model: "WirelessLink", table: "wireless_wireless_link",
     section: "wireless", endpoint: "/api/wireless/wireless-links/",
-    origin: "external-stub", pk: 'id', readOnly: false,
+    origin: "external-stub", pk: 'id', pkKind: 'number', readOnly: false,
     objectType: "wireless.wirelesslink",
     relations: [],
     counts: [],

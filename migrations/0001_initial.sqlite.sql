@@ -63,7 +63,7 @@ CREATE TABLE dcim_console_port_template (
 
 CREATE TABLE dcim_console_port (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    device_id INTEGER NOT NULL,
+    device_id TEXT NOT NULL,
     module_id INTEGER,
     name TEXT NOT NULL,
     label TEXT,
@@ -96,7 +96,7 @@ CREATE TABLE dcim_console_server_port_template (
 
 CREATE TABLE dcim_console_server_port (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    device_id INTEGER NOT NULL,
+    device_id TEXT NOT NULL,
     module_id INTEGER,
     name TEXT NOT NULL,
     label TEXT,
@@ -127,12 +127,12 @@ CREATE TABLE dcim_device_bay_template (
 
 CREATE TABLE dcim_device_bay (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    device_id INTEGER NOT NULL,
+    device_id TEXT NOT NULL,
     name TEXT NOT NULL,
     label TEXT,
     enabled INTEGER DEFAULT 0,
     description TEXT,
-    installed_device_id INTEGER,
+    installed_device_id TEXT,
     owner_id INTEGER,
     custom_fields TEXT,
     created TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -189,7 +189,7 @@ CREATE TABLE dcim_device_type (
 );
 
 CREATE TABLE dcim_device (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT PRIMARY KEY,
     name TEXT,
     device_type_id INTEGER NOT NULL,
     role_id INTEGER NOT NULL,
@@ -256,7 +256,7 @@ CREATE TABLE dcim_front_port_template (
 
 CREATE TABLE dcim_front_port (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    device_id INTEGER NOT NULL,
+    device_id TEXT NOT NULL,
     module_id INTEGER,
     name TEXT NOT NULL,
     label TEXT,
@@ -298,7 +298,7 @@ CREATE TABLE dcim_interface_template (
 
 CREATE TABLE dcim_interface (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    device_id INTEGER NOT NULL,
+    device_id TEXT NOT NULL,
     module_id INTEGER,
     name TEXT NOT NULL,
     label TEXT,
@@ -379,7 +379,7 @@ CREATE TABLE dcim_inventory_item_template (
 
 CREATE TABLE dcim_inventory_item (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    device_id INTEGER NOT NULL,
+    device_id TEXT NOT NULL,
     parent INTEGER,
     name TEXT NOT NULL,
     label TEXT,
@@ -468,7 +468,7 @@ CREATE TABLE dcim_module_bay_template (
 
 CREATE TABLE dcim_module_bay (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    device_id INTEGER NOT NULL,
+    device_id TEXT NOT NULL,
     module_id INTEGER,
     name TEXT NOT NULL,
     label TEXT,
@@ -522,7 +522,7 @@ CREATE TABLE dcim_module_type (
 
 CREATE TABLE dcim_module (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    device_id INTEGER NOT NULL,
+    device_id TEXT NOT NULL,
     module_bay_id INTEGER NOT NULL,
     module_type_id INTEGER NOT NULL,
     status TEXT CHECK (status IN ('offline', 'active', 'planned', 'staged', 'failed', 'decommissioning')),
@@ -607,7 +607,7 @@ CREATE TABLE dcim_power_outlet_template (
 
 CREATE TABLE dcim_power_outlet (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    device_id INTEGER NOT NULL,
+    device_id TEXT NOT NULL,
     module_id INTEGER,
     name TEXT NOT NULL,
     label TEXT,
@@ -662,7 +662,7 @@ CREATE TABLE dcim_power_port_template (
 
 CREATE TABLE dcim_power_port (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    device_id INTEGER NOT NULL,
+    device_id TEXT NOT NULL,
     module_id INTEGER,
     name TEXT NOT NULL,
     label TEXT,
@@ -815,7 +815,7 @@ CREATE TABLE dcim_rear_port_template (
 
 CREATE TABLE dcim_rear_port (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    device_id INTEGER NOT NULL,
+    device_id TEXT NOT NULL,
     module_id INTEGER,
     name TEXT NOT NULL,
     label TEXT,
@@ -894,7 +894,7 @@ CREATE TABLE dcim_virtual_chassis (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     domain TEXT,
-    master_id INTEGER,
+    master_id TEXT,
     description TEXT,
     owner_id INTEGER,
     comments TEXT,
@@ -908,7 +908,7 @@ CREATE TABLE dcim_virtual_chassis (
 CREATE TABLE dcim_virtual_device_context (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    device_id INTEGER NOT NULL,
+    device_id TEXT NOT NULL,
     identifier INTEGER,
     tenant_id INTEGER,
     primary_ip4_id INTEGER,
@@ -1343,7 +1343,7 @@ CREATE TABLE virtualization_virtual_machine (
     start_on_boot TEXT CHECK (start_on_boot IN ('on', 'off', 'laststate')),
     site_id INTEGER,
     cluster_id INTEGER,
-    device_id INTEGER,
+    device_id TEXT,
     platform_id INTEGER,
     primary_ip4_id INTEGER,
     primary_ip6_id INTEGER,
@@ -1477,7 +1477,7 @@ CREATE TABLE tagging_taggeditem (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tag_id INTEGER NOT NULL,
     object_type VARCHAR(100) NOT NULL,
-    object_id INTEGER NOT NULL,
+    object_id TEXT NOT NULL,
     FOREIGN KEY (tag_id) REFERENCES extras_tag(id) ON DELETE CASCADE,
     UNIQUE (tag_id, object_type, object_id)
 );
@@ -1584,11 +1584,6 @@ CREATE UNIQUE INDEX uq_dcim_device_role_slug_partial ON dcim_device_role (slug) 
 CREATE UNIQUE INDEX uq_dcim_device_type_slug ON dcim_device_type (slug);
 CREATE UNIQUE INDEX uq_dcim_device_type_manufacturer_id_model ON dcim_device_type (manufacturer_id, model);
 CREATE UNIQUE INDEX uq_dcim_device_type_manufacturer_id_slug ON dcim_device_type (manufacturer_id, slug);
-CREATE UNIQUE INDEX uq_dcim_device_asset_tag ON dcim_device (asset_tag);
-CREATE UNIQUE INDEX uq_dcim_device_name_site_id_tenant_id ON dcim_device (lower(name), site_id, tenant_id);
-CREATE UNIQUE INDEX uq_dcim_device_name_site_id_partial ON dcim_device (lower(name), site_id) WHERE tenant_id IS NULL;
-CREATE UNIQUE INDEX uq_dcim_device_rack_id_position_face ON dcim_device (rack_id, position, face);
-CREATE UNIQUE INDEX uq_dcim_device_virtual_chassis_id_vc_position ON dcim_device (virtual_chassis_id, vc_position);
 CREATE UNIQUE INDEX uq_dcim_front_port_template_device_type_id_name ON dcim_front_port_template (device_type_id, name);
 CREATE UNIQUE INDEX uq_dcim_front_port_template_module_type_id_name ON dcim_front_port_template (module_type_id, name);
 CREATE UNIQUE INDEX uq_dcim_front_port_device_id_name ON dcim_front_port (device_id, name);

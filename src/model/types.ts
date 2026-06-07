@@ -100,7 +100,7 @@ export type ConsolePortTemplateUpdate = Partial<ConsolePortTemplateCreate>;
 /** ConsolePort — `/api/dcim/console-ports/` */
 export interface ConsolePort {
   id: number;
-  device: number;
+  device: string;
   module: number | null;
   name: string;
   label: string;
@@ -114,7 +114,7 @@ export interface ConsolePort {
   last_updated?: string | null;
 }
 export interface ConsolePortCreate {
-  device: number;
+  device: string;
   module?: number | null;
   name: string;
   label?: string;
@@ -153,7 +153,7 @@ export type ConsoleServerPortTemplateUpdate = Partial<ConsoleServerPortTemplateC
 /** ConsoleServerPort — `/api/dcim/console-server-ports/` */
 export interface ConsoleServerPort {
   id: number;
-  device: number;
+  device: string;
   module: number | null;
   name: string;
   label: string;
@@ -167,7 +167,7 @@ export interface ConsoleServerPort {
   last_updated?: string | null;
 }
 export interface ConsoleServerPortCreate {
-  device: number;
+  device: string;
   module?: number | null;
   name: string;
   label?: string;
@@ -204,24 +204,24 @@ export type DeviceBayTemplateUpdate = Partial<DeviceBayTemplateCreate>;
 /** DeviceBay — `/api/dcim/device-bays/` */
 export interface DeviceBay {
   id: number;
-  device: number;
+  device: string;
   name: string;
   label: string;
   enabled: boolean;
   description: string;
-  installed_device: number | null;
+  installed_device: string | null;
   owner: number | null;
   custom_fields: Json;
   created?: string | null;
   last_updated?: string | null;
 }
 export interface DeviceBayCreate {
-  device: number;
+  device: string;
   name: string;
   label?: string;
   enabled?: boolean;
   description?: string;
-  installed_device?: number | null;
+  installed_device?: string | null;
   owner?: number | null;
   custom_fields?: Json;
   tags?: RelationInput;
@@ -310,7 +310,6 @@ export type DeviceTypeUpdate = Partial<DeviceTypeCreate>;
 export interface Device {
   id: number;
   name: string | null;
-  uuid: string | null;
   device_type: number;
   role: number;
   tenant: number | null;
@@ -407,7 +406,7 @@ export type FrontPortTemplateUpdate = Partial<FrontPortTemplateCreate>;
 /** FrontPort — `/api/dcim/front-ports/` */
 export interface FrontPort {
   id: number;
-  device: number;
+  device: string;
   module: number | null;
   name: string;
   label: string;
@@ -423,7 +422,7 @@ export interface FrontPort {
   last_updated?: string | null;
 }
 export interface FrontPortCreate {
-  device: number;
+  device: string;
   module?: number | null;
   name: string;
   label?: string;
@@ -476,7 +475,7 @@ export type InterfaceTemplateUpdate = Partial<InterfaceTemplateCreate>;
 /** Interface — `/api/dcim/interfaces/` */
 export interface Interface {
   id: number;
-  device: number;
+  device: string;
   module: number | null;
   name: string;
   label: string;
@@ -511,7 +510,7 @@ export interface Interface {
   last_updated?: string | null;
 }
 export interface InterfaceCreate {
-  device: number;
+  device: string;
   module?: number | null;
   name: string;
   label?: string;
@@ -607,7 +606,7 @@ export type InventoryItemTemplateUpdate = Partial<InventoryItemTemplateCreate>;
 /** InventoryItem — `/api/dcim/inventory-items/` */
 export interface InventoryItem {
   id: number;
-  device: number;
+  device: string;
   parent: number | null;
   name: string;
   label: string;
@@ -627,7 +626,7 @@ export interface InventoryItem {
   last_updated?: string | null;
 }
 export interface InventoryItemCreate {
-  device: number;
+  device: string;
   parent?: number | null;
   name: string;
   label?: string;
@@ -755,7 +754,7 @@ export type ModuleBayTemplateUpdate = Partial<ModuleBayTemplateCreate>;
 /** ModuleBay — `/api/dcim/module-bays/` */
 export interface ModuleBay {
   id: number;
-  device: number;
+  device: string;
   module: number | null;
   name: string;
   label: string;
@@ -769,7 +768,7 @@ export interface ModuleBay {
   last_updated?: string | null;
 }
 export interface ModuleBayCreate {
-  device: number;
+  device: string;
   module?: number | null;
   name: string;
   label?: string;
@@ -844,7 +843,7 @@ export type ModuleTypeUpdate = Partial<ModuleTypeCreate>;
 /** Module — `/api/dcim/modules/` */
 export interface Module {
   id: number;
-  device: number;
+  device: string;
   module_bay: number;
   module_type: number;
   status: 'offline' | 'active' | 'planned' | 'staged' | 'failed' | 'decommissioning';
@@ -860,7 +859,7 @@ export interface Module {
   adopt_components: boolean;
 }
 export interface ModuleCreate {
-  device: number;
+  device: string;
   module_bay: number;
   module_type: number;
   status?: 'offline' | 'active' | 'planned' | 'staged' | 'failed' | 'decommissioning';
@@ -979,7 +978,7 @@ export type PowerOutletTemplateUpdate = Partial<PowerOutletTemplateCreate>;
 /** PowerOutlet — `/api/dcim/power-outlets/` */
 export interface PowerOutlet {
   id: number;
-  device: number;
+  device: string;
   module: number | null;
   name: string;
   label: string;
@@ -996,7 +995,7 @@ export interface PowerOutlet {
   last_updated?: string | null;
 }
 export interface PowerOutletCreate {
-  device: number;
+  device: string;
   module?: number | null;
   name: string;
   label?: string;
@@ -1067,7 +1066,7 @@ export type PowerPortTemplateUpdate = Partial<PowerPortTemplateCreate>;
 /** PowerPort — `/api/dcim/power-ports/` */
 export interface PowerPort {
   id: number;
-  device: number;
+  device: string;
   module: number | null;
   name: string;
   label: string;
@@ -1082,7 +1081,7 @@ export interface PowerPort {
   last_updated?: string | null;
 }
 export interface PowerPortCreate {
-  device: number;
+  device: string;
   module?: number | null;
   name: string;
   label?: string;
@@ -1325,7 +1324,7 @@ export type RearPortTemplateUpdate = Partial<RearPortTemplateCreate>;
 /** RearPort — `/api/dcim/rear-ports/` */
 export interface RearPort {
   id: number;
-  device: number;
+  device: string;
   module: number | null;
   name: string;
   label: string;
@@ -1341,7 +1340,7 @@ export interface RearPort {
   last_updated?: string | null;
 }
 export interface RearPortCreate {
-  device: number;
+  device: string;
   module?: number | null;
   name: string;
   label?: string;
@@ -1456,7 +1455,7 @@ export interface VirtualChassis {
   id: number;
   name: string;
   domain: string;
-  master: number | null;
+  master: string | null;
   description: string;
   owner: number | null;
   comments: string;
@@ -1467,7 +1466,7 @@ export interface VirtualChassis {
 export interface VirtualChassisCreate {
   name: string;
   domain?: string;
-  master?: number | null;
+  master?: string | null;
   description?: string;
   owner?: number | null;
   comments?: string;
@@ -1480,7 +1479,7 @@ export type VirtualChassisUpdate = Partial<VirtualChassisCreate>;
 export interface VirtualDeviceContext {
   id: number;
   name: string;
-  device: number;
+  device: string;
   identifier: number | null;
   tenant: number | null;
   primary_ip4: number | null;
@@ -1495,7 +1494,7 @@ export interface VirtualDeviceContext {
 }
 export interface VirtualDeviceContextCreate {
   name: string;
-  device: number;
+  device: string;
   identifier?: number | null;
   tenant?: number | null;
   primary_ip4?: number | null;
@@ -2197,7 +2196,7 @@ export interface VirtualMachine {
   start_on_boot: 'on' | 'off' | 'laststate';
   site: number | null;
   cluster: number | null;
-  device: number | null;
+  device: string | null;
   platform: number | null;
   primary_ip4: number | null;
   primary_ip6: number | null;
@@ -2223,7 +2222,7 @@ export interface VirtualMachineCreate {
   start_on_boot?: 'on' | 'off' | 'laststate';
   site?: number | null;
   cluster?: number | null;
-  device?: number | null;
+  device?: string | null;
   platform?: number | null;
   primary_ip4?: number | null;
   primary_ip6?: number | null;

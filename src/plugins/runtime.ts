@@ -163,7 +163,7 @@ export async function fireHooks(
   db: Db,
   table: string,
   event: HookEvent,
-  id: number,
+  id: number | string,
   row?: unknown,
 ): Promise<void> {
   for (const hook of hooks.get(`${table}:${event}`) ?? []) {

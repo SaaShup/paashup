@@ -371,23 +371,15 @@ EXTRA_FIELDS = {
             },
         ),
     ],
-    "dcim/devices": [
-        (
-            "name",  # insert after name
-            {
-                "name": "uuid",
-                "kind": "scalar",
-                "type": "string",
-                "nullable": True,
-                "required_on_create": False,
-                "writable": False,
-                "read_only": True,  # auto-generated server-side, not user-editable
-                "auto": "uuid",
-                "paas2box_extra": True,
-            },
-        ),
-    ],
 }
+
+# Entities whose primary key is a server-generated UUID (string) instead of an
+# auto-increment integer. The id column becomes TEXT, FKs that point at them become
+# TEXT, and only the PK is unique.
+UUID_PK = {"dcim/devices"}
+for _k in UUID_PK:
+    if _k in entities:
+        entities[_k]["pk_kind"] = "uuid"
 for key, extras in EXTRA_FIELDS.items():
     ent = entities.get(key)
     if not ent:

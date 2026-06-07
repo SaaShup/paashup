@@ -75,22 +75,27 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
     this.selectList = exprs.join(', ');
   }
 
+  /** Coerce a raw id (from a URL or FK) to the table's pk type. */
+  private pkValue(id: number | string): number | string {
+    return this.meta.pkKind === 'string' ? String(id) : Number(id);
+  }
+
   // ---- reads ----------------------------------------------------------------
-  async retrieve(id: number): Promise<TRow | undefined> {
+  async retrieve(id: number | string): Promise<TRow | undefined> {
     const row = await this.db.get<Record<string, unknown>>(
       `SELECT ${this.selectList} FROM ${ident(this.meta.table)} WHERE ${ident(this.meta.pk)} = ?`,
-      [id],
+      [this.pkValue(id)],
     );
     return row ? (this.rowOut(row) as TRow) : undefined;
   }
 
   /** Fetch many rows by id in chunked `IN (...)` queries (order not guaranteed). */
-  async retrieveMany(ids: readonly number[]): Promise<TRow[]> {
+  async retrieveMany(ids: readonly (number | string)[]): Promise<TRow[]> {
     if (!ids.length) return [];
     const CHUNK = 900; // stay under SQLite's default 999 bound-variable limit
     const out: TRow[] = [];
     for (let i = 0; i < ids.length; i += CHUNK) {
-      const slice = ids.slice(i, i + CHUNK);
+      const slice = ids.slice(i, i + CHUNK).map((x) => this.pkValue(x));
       const rows = await this.db.query<Record<string, unknown>>(
         `SELECT ${this.selectList} FROM ${ident(this.meta.table)} ` +
           `WHERE ${ident(this.meta.pk)} IN (${slice.map(() => '?').join(', ')})`,
@@ -164,7 +169,7 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
     });
   }
 
-  async update(id: number, data: TUpdate): Promise<TRow | undefined> {
+  async update(id: number | string, data: TUpdate): Promise<TRow | undefined> {
     if (this.meta.readOnly) throw new ApiError(405, `${this.meta.model} is read-only`);
     const d = data as Record<string, unknown>;
     validateWrite(this.meta, d, true);
@@ -177,7 +182,7 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
         const setClause = columns.map((c) => `${ident(c)} = ?`).join(', ');
         await tx.execute(
           `UPDATE ${ident(this.meta.table)} SET ${setClause} WHERE ${ident(this.meta.pk)} = ?`,
-          [...values, id],
+          [...values, this.pkValue(id)],
         );
       }
       for (const [rel, items] of rels) await syncRelation(tx, this.meta, rel, id, items);
@@ -185,8 +190,8 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
     });
   }
 
-  /** INSERT scalar columns only; returns the new id. */
-  private async insertScalar(data: Record<string, unknown>): Promise<number> {
+  /** INSERT scalar columns only; returns the new id (uuid string for string PKs). */
+  private async insertScalar(data: Record<string, unknown>): Promise<number | string> {
     const { columns, values } = this.writeColumns(data);
     // server-generated read-only values (e.g. uuid) — set on create only
     for (const col of this.meta.columns) {
@@ -195,6 +200,13 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
         values.push(randomUUID());
       }
     }
+    // UUID primary key: generate it here (the id column is read-only/never supplied)
+    let pkVal: string | undefined;
+    if (this.meta.pkKind === 'string' && !columns.includes(this.meta.pk)) {
+      pkVal = randomUUID();
+      columns.push(this.meta.pk);
+      values.push(pkVal);
+    }
     if (!columns.length)
       throw new ApiError(400, `No writable fields supplied for ${this.meta.model}`);
     const placeholders = columns.map(() => '?').join(', ');
@@ -202,7 +214,7 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
       `INSERT INTO ${ident(this.meta.table)} (${columns.map(ident).join(', ')}) VALUES (${placeholders})`,
       values,
     );
-    return res.insertId;
+    return pkVal ?? res.insertId;
   }
 
   /** Extract relation arrays present in the input body. */
@@ -217,11 +229,11 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
     return out;
   }
 
-  async destroy(id: number): Promise<boolean> {
+  async destroy(id: number | string): Promise<boolean> {
     if (this.meta.readOnly) throw new ApiError(405, `${this.meta.model} is read-only`);
     const res = await this.db.execute(
       `DELETE FROM ${ident(this.meta.table)} WHERE ${ident(this.meta.pk)} = ?`,
-      [id],
+      [this.pkValue(id)],
     );
     return res.affectedRows > 0;
   }
@@ -325,7 +337,10 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
 
   /** Coerce a DB row into a JS object (JSON parse, 0/1 -> boolean). */
   private rowOut(row: Record<string, unknown>): Record<string, unknown> {
-    const out: Record<string, unknown> = { [this.meta.pk]: Number(row[this.meta.pk]) };
+    const pkRaw = row[this.meta.pk];
+    const out: Record<string, unknown> = {
+      [this.meta.pk]: this.meta.pkKind === 'string' ? String(pkRaw) : Number(pkRaw),
+    };
     for (const c of this.meta.columns) {
       const v = row[c.name];
       if (v === null || v === undefined) {

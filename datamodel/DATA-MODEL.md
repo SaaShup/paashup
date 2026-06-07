@@ -6,7 +6,7 @@ Each entity below maps to one API collection endpoint and is intended as a datab
 
 > Foreign keys (`→`) are stored as the referenced row's integer `id`. Many-to-many (`⇄`) relations need a join table. `slug` columns are unique. Other unique constraints (e.g. `name` scoped to a parent) follow NetBox's models and are noted where derivable.
 
-**82 entities**, **1482 fields** total.
+**82 entities**, **1484 fields** total.
 
 
 > **Generic relations.** Where NetBox uses a polymorphic FK, this model stores a pair of columns: `<rel>_type` (a content-type reference such as `dcim.interface`) plus `<rel>_id` (the target row id). Affected: `Prefix.scope_*`, `Cluster.scope_*`, `IPAddress.assigned_object_*`, `Service.*`, `FHRPGroupAssignment.*`, `MACAddress.assigned_object_*`, etc.
@@ -1612,6 +1612,8 @@ _18 entities._
 | `family` | enum |  |  | ✓ | enum: `4`, `6` |
 | `start_address` | string |  | ✓ |  |  |
 | `end_address` | string |  | ✓ |  |  |
+| `gateway` | string | ✓ |  |  |  |
+| `dhcp_relays` | json | ✓ |  |  |  |
 | `size` | integer |  |  | ✓ |  |
 | `vrf` | integer (fk) | ✓ |  |  | → **VRF** (FK) |
 | `tenant` | integer (fk) | ✓ |  |  | → **Tenant** (FK) |

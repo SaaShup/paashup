@@ -171,7 +171,7 @@ const deliveryMeta: TableMeta = {
     col('webhook_name', 'string'),
     col('event', 'string'),
     col('object_type', 'string'),
-    col('object_id', 'number', true),
+    col('object_id', 'string', true), // string to hold integer or UUID ids
     col('payload_url', 'string'),
     col('success', 'boolean'),
     col('status_code', 'number', true),
@@ -399,7 +399,7 @@ export async function dispatchWebhooks(
   db: Db,
   meta: TableMeta,
   event: 'created' | 'updated' | 'deleted',
-  id: number,
+  id: number | string,
   data?: unknown,
 ): Promise<void> {
   if (meta.table === WEBHOOK_TABLE) cache = null; // config changed → reload next time
@@ -437,7 +437,7 @@ async function logDelivery(
   wh: Webhook,
   meta: TableMeta,
   event: string,
-  id: number,
+  id: number | string,
   r: DeliveryResult,
 ): Promise<void> {
   try {

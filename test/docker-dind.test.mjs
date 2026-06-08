@@ -39,7 +39,14 @@ if (!ENABLED) {
     // 1) boot a real dockerd inside a container
     await exec('docker', ['rm', '-f', DIND]).catch(() => {});
     await exec('docker', [
-      'run', '-d', '--privileged', '--name', DIND, '-e', 'DOCKER_TLS_CERTDIR=', 'docker:dind',
+      'run',
+      '-d',
+      '--privileged',
+      '--name',
+      DIND,
+      '-e',
+      'DOCKER_TLS_CERTDIR=',
+      'docker:dind',
     ]);
     // wait for the inner daemon
     for (let i = 0; i < 60; i++) {
@@ -61,7 +68,11 @@ if (!ENABLED) {
       req.on('end', () => {
         void (async () => {
           const body = raw ? JSON.parse(raw) : {};
-          if (req.url === '/webhook' && body.model === 'plugins.dockercontainer' && body.event === 'created') {
+          if (
+            req.url === '/webhook' &&
+            body.model === 'plugins.dockercontainer' &&
+            body.event === 'created'
+          ) {
             const cid = `pbx_${body.object_id}`;
             try {
               await dind('run', '-d', '--name', cid, IMG, 'sleep', '300'); // REAL container
@@ -87,7 +98,9 @@ if (!ENABLED) {
     db = new SqliteDb(DB);
     db.exec(readFileSync(join(ROOT, 'datamodel', 'sql', 'schema.sqlite.sql'), 'utf8'));
     db.exec(readFileSync(join(ROOT, 'migrations', '0003_webhook.sqlite.sql'), 'utf8'));
-    db.exec(readFileSync(join(ROOT, 'migrations', '0004_webhook_conditions_delivery.sqlite.sql'), 'utf8'));
+    db.exec(
+      readFileSync(join(ROOT, 'migrations', '0004_webhook_conditions_delivery.sqlite.sql'), 'utf8'),
+    );
     await loadPlugins(db, [dockerPlugin]);
     server = createApiServer({ db });
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -101,12 +114,24 @@ if (!ENABLED) {
         body: b ? JSON.stringify(b) : undefined,
       }).then((r) => r.json());
     await pb('POST', '/api/extras/webhooks/', {
-      name: 'docker-agent', payload_url: `${agentBase}/webhook`,
-      object_types: ['plugins.dockercontainer'], events: ['created'],
+      name: 'docker-agent',
+      payload_url: `${agentBase}/webhook`,
+      object_types: ['plugins.dockercontainer'],
+      events: ['created'],
     });
-    hostId = (await pb('POST', '/api/plugins/docker/hosts/', { endpoint: agentBase, name: 'dind-host' })).id;
-    const reg = (await pb('POST', '/api/plugins/docker/registries/', { host: hostId, name: 'r', serveraddress: 'https://r/v2/' })).id;
-    imageId = (await pb('POST', '/api/plugins/docker/images/', { host: hostId, registry: reg, name: IMG })).id;
+    hostId = (
+      await pb('POST', '/api/plugins/docker/hosts/', { endpoint: agentBase, name: 'dind-host' })
+    ).id;
+    const reg = (
+      await pb('POST', '/api/plugins/docker/registries/', {
+        host: hostId,
+        name: 'r',
+        serveraddress: 'https://r/v2/',
+      })
+    ).id;
+    imageId = (
+      await pb('POST', '/api/plugins/docker/images/', { host: hostId, registry: reg, name: IMG })
+    ).id;
   });
 
   after(async () => {
@@ -139,7 +164,17 @@ if (!ENABLED) {
     assert.equal(containerId, cid, 'agent never reported the ContainerID back to paasbox');
 
     // assert it is REALLY running inside dind
-    const { stdout } = await dind('ps', '--filter', `name=${cid}`, '--format', '{{.Names}} {{.Image}}');
-    assert.match(stdout, new RegExp(`${cid}\\s+${IMG.replace('.', '\\.')}`), `container not running in dind:\n${stdout}`);
+    const { stdout } = await dind(
+      'ps',
+      '--filter',
+      `name=${cid}`,
+      '--format',
+      '{{.Names}} {{.Image}}',
+    );
+    assert.match(
+      stdout,
+      new RegExp(`${cid}\\s+${IMG.replace('.', '\\.')}`),
+      `container not running in dind:\n${stdout}`,
+    );
   });
 }

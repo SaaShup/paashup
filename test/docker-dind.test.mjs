@@ -1,12 +1,13 @@
-// REAL Docker-in-Docker integration. Boots a `docker:dind` daemon, then drives the
-// full chain with a real engine:
-//   paasbox --(webhook: container created)--> agent --(docker run)--> dind dockerd
-//          <--(callback: PATCH ContainerID)-- agent
-// and asserts a REAL container is actually running inside dind.
+// REAL Docker-in-Docker integration. Boots a `docker:dind` daemon and a stub agent
+// that DRIVES THAT REAL DOCKERD. Two paths are exercised:
+//   1. event-driven:  paasbox --(webhook: container created)--> agent --(docker run)--> dind
+//                            <--(callback: PATCH ContainerID)-- agent
+//   2. proxy actions: paasbox --(POST .../exec, GET .../logs, POST .../force_pull)-->
+//                     agent's /api/engine/* --(docker exec|logs|pull)--> dind
+// and asserts REAL effects inside dind (a running container, its real stdout/logs, a pulled image).
 //
-// Gated: only runs with PB_DIND=1 and a working `docker` CLI (so the normal suite
-// stays fast and Docker-free). Run:
-//   npm run build && PB_DIND=1 PB_WEBHOOK_BACKOFF_MS=50 node --test test/docker-dind.test.mjs
+// Gated behind PB_DIND=1 + a working `docker` CLI. Run:
+//   npm run build && PB_DIND=1 PB_WEBHOOK_BACKOFF_MS=50 node --test --test-timeout=300000 test/docker-dind.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -24,13 +25,15 @@ const exec = promisify(execFile);
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const DB = join(ROOT, 'test', '.docker-dind.sqlite');
 const DIND = 'pbx-dind-test';
-const IMG = 'busybox:1.36'; // small, pulled inside dind
+const IMG = 'busybox:1.36'; // small; pulled inside dind
+const PULL_IMG = 'hello-world'; // pulled on-demand by force_pull
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const ENABLED = process.env.PB_DIND === '1';
+/** run a docker command INSIDE the dind daemon (i.e. drive the real engine) */
 const dind = (...args) => exec('docker', ['exec', DIND, 'docker', ...args], { timeout: 120000 });
 
-let db, server, base, paasboxBase, agent, agentBase, hostId, imageId, ready;
+let db, server, base, paasboxBase, agent, agentBase, hostId, imageId, ready, webContainerId;
 
 if (!ENABLED) {
   test('dind integration (set PB_DIND=1 to run)', { skip: 'PB_DIND not set' }, () => {});
@@ -48,7 +51,6 @@ if (!ENABLED) {
       'DOCKER_TLS_CERTDIR=',
       'docker:dind',
     ]);
-    // wait for the inner daemon
     for (let i = 0; i < 60; i++) {
       try {
         await dind('info');
@@ -59,34 +61,67 @@ if (!ENABLED) {
       }
     }
     if (!ready) throw new Error('dind dockerd did not become ready');
-    await dind('pull', IMG); // pre-pull the test image
+    await dind('pull', IMG);
 
-    // 2) minimal agent: on a container-created webhook, `docker run` it for real, then call back
+    // 2) stub agent that DRIVES the real dind dockerd
+    const cidLogs = /^\/api\/engine\/containers\/([^/]+)\/logs$/;
+    const cidExec = /^\/api\/engine\/containers\/([^/]+)\/exec$/;
     agent = http.createServer((req, res) => {
       let raw = '';
       req.on('data', (c) => (raw += c));
       req.on('end', () => {
         void (async () => {
           const body = raw ? JSON.parse(raw) : {};
-          if (
-            req.url === '/webhook' &&
-            body.model === 'plugins.dockercontainer' &&
-            body.event === 'created'
-          ) {
-            const cid = `pbx_${body.object_id}`;
-            try {
-              await dind('run', '-d', '--name', cid, IMG, 'sleep', '300'); // REAL container
-              await fetch(`${paasboxBase}/api/plugins/docker/containers/${body.object_id}/`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ContainerID: cid }),
-              });
-            } catch (e) {
-              console.error('agent run failed:', e);
+          try {
+            // event feed: provision the container for real, then report back
+            if (req.url === '/webhook') {
+              if (body.model === 'plugins.dockercontainer' && body.event === 'created') {
+                const cid = `pbx_${body.object_id}`;
+                await dind(
+                  'run',
+                  '-d',
+                  '--name',
+                  cid,
+                  IMG,
+                  'sh',
+                  '-c',
+                  `echo READY-${body.data?.name}; sleep 300`,
+                );
+                await fetch(`${paasboxBase}/api/plugins/docker/containers/${body.object_id}/`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ContainerID: cid }),
+                });
+              }
+              res.writeHead(200);
+              return res.end('ok');
             }
+            // proxy action: force_pull -> docker pull
+            if (req.url === '/api/engine/images') {
+              await dind('pull', body.data?.name ?? IMG);
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              return res.end(JSON.stringify({ pulled: true, image: body.data?.name }));
+            }
+            // proxy action: logs -> docker logs
+            const ml = cidLogs.exec(req.url);
+            if (ml && req.method === 'GET') {
+              const { stdout } = await dind('logs', ml[1]);
+              res.writeHead(200, { 'Content-Type': 'text/plain' });
+              return res.end(stdout);
+            }
+            // proxy action: exec -> docker exec
+            const me = cidExec.exec(req.url);
+            if (me && (req.method === 'PUT' || req.method === 'POST')) {
+              const { stdout } = await dind('exec', me[1], ...(body.cmd ?? []));
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              return res.end(JSON.stringify({ stdout }));
+            }
+            res.writeHead(404);
+            res.end('nope');
+          } catch (e) {
+            res.writeHead(502);
+            res.end(String(e?.stderr || e?.message || e));
           }
-          res.writeHead(200);
-          res.end('ok');
         })();
       });
     });
@@ -107,12 +142,6 @@ if (!ENABLED) {
     base = `http://127.0.0.1:${server.address().port}`;
     paasboxBase = base;
 
-    const pb = (m, p, b) =>
-      fetch(`${base}${p}`, {
-        method: m,
-        headers: b ? { 'Content-Type': 'application/json' } : undefined,
-        body: b ? JSON.stringify(b) : undefined,
-      }).then((r) => r.json());
     await pb('POST', '/api/extras/webhooks/', {
       name: 'docker-agent',
       payload_url: `${agentBase}/webhook`,
@@ -142,39 +171,63 @@ if (!ENABLED) {
     await exec('docker', ['rm', '-f', DIND]).catch(() => {});
   });
 
-  test('creating a container in paasbox runs a REAL container in dind', async () => {
-    const r = await fetch(`${base}/api/plugins/docker/containers/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ host: hostId, image: imageId, name: 'web' }),
-    }).then((x) => x.json());
-    const id = r.id;
-    const cid = `pbx_${id}`;
+  const pb = (m, p, b) =>
+    fetch(`${base}${p}`, {
+      method: m,
+      headers: b ? { 'Content-Type': 'application/json' } : undefined,
+      body: b ? JSON.stringify(b) : undefined,
+    }).then((r) => r.json());
 
-    // wait for the agent to create it in dind and call back
+  test('event: creating a container runs a REAL container in dind', async () => {
+    const r = await pb('POST', '/api/plugins/docker/containers/', {
+      host: hostId,
+      image: imageId,
+      name: 'web',
+    });
+    webContainerId = r.id;
+    const cid = `pbx_${r.id}`;
     let containerId = null;
     for (let i = 0; i < 120; i++) {
-      const got = await fetch(`${base}/api/plugins/docker/containers/${id}/`).then((x) => x.json());
+      const got = await pb('GET', `/api/plugins/docker/containers/${r.id}/`);
       if (got.ContainerID) {
         containerId = got.ContainerID;
         break;
       }
       await sleep(250);
     }
-    assert.equal(containerId, cid, 'agent never reported the ContainerID back to paasbox');
+    assert.equal(containerId, cid, 'agent never reported ContainerID');
+    const { stdout } = await dind('ps', '--filter', `name=${cid}`, '--format', '{{.Names}}');
+    assert.match(stdout, new RegExp(cid), `container not running in dind:\n${stdout}`);
+  });
 
-    // assert it is REALLY running inside dind
-    const { stdout } = await dind(
-      'ps',
-      '--filter',
-      `name=${cid}`,
-      '--format',
-      '{{.Names}} {{.Image}}',
+  test('proxy: exec runs a command in the REAL container via the agent -> dockerd', async () => {
+    const res = await pb('POST', `/api/plugins/docker/containers/${webContainerId}/exec/`, {
+      cmd: ['echo', 'hello-from-dockerd'],
+    });
+    assert.match(String(res.stdout), /hello-from-dockerd/, JSON.stringify(res));
+  });
+
+  test('proxy: logs returns the REAL container stdout via the agent -> dockerd', async () => {
+    const res = await fetch(`${base}/api/plugins/docker/containers/${webContainerId}/logs/`).then(
+      (r) => r.json(),
     );
-    assert.match(
-      stdout,
-      new RegExp(`${cid}\\s+${IMG.replace('.', '\\.')}`),
-      `container not running in dind:\n${stdout}`,
-    );
+    assert.match(String(res), /READY-web/, JSON.stringify(res));
+  });
+
+  test('proxy: force_pull pulls a NEW image into dind via the agent -> dockerd', async () => {
+    const img2 = (
+      await pb('POST', '/api/plugins/docker/images/', {
+        host: hostId,
+        registry:
+          (await pb('GET', `/api/plugins/docker/hosts/${hostId}/`)).registries?.[0]?.id ?? null,
+        name: PULL_IMG,
+      })
+    ).id;
+    // ensure it's absent first
+    await dind('rmi', '-f', PULL_IMG).catch(() => {});
+    const pull = await pb('POST', `/api/plugins/docker/images/${img2}/force_pull/`);
+    assert.equal(pull.success, true, JSON.stringify(pull));
+    const { stdout } = await dind('images', '--format', '{{.Repository}}');
+    assert.match(stdout, new RegExp(PULL_IMG), `image not pulled into dind:\n${stdout}`);
   });
 }

@@ -60,6 +60,10 @@ const SECTION_GROUPS: Record<string, SubGroup[]> = {
 
 const OTHER = 'Other';
 
+// Sections hidden from the sidebar entirely.
+const HIDDEN_SECTIONS = new Set(['vpn', 'wireless']);
+export const isHiddenSection = (section: string): boolean => HIDDEN_SECTIONS.has(section);
+
 // Plugins promoted to their own top-level menu section (instead of nesting under PLUGINS).
 const PROMOTED_PLUGINS = new Set(['docker']);
 

@@ -9,6 +9,7 @@ import { Repository } from '../../../repository/repository.js';
 import { getTable } from '../../../model/registry.js';
 import { ValidationError } from '../../../errors.js';
 import { broadcast } from '../../../realtime.js';
+import { dispatchWebhooks } from '../../../webhooks.js';
 import { CHILD_SPECS, META, T, type ChildSpec } from '../meta.js';
 import { serializeContainer } from '../serialize.js';
 
@@ -119,7 +120,9 @@ async function writeChildren(
   }
 }
 
-function emit(event: 'created' | 'updated', id: number, data: Obj): void {
+// Emit the change to BOTH the WebSocket feed and any configured webhooks — the Docker
+// agent is driven by webhooks, so container writes must dispatch them like generic CRUD.
+function emit(db: Db, event: 'created' | 'updated', id: number, data: Obj): void {
   broadcast({
     type: 'change',
     event,
@@ -128,6 +131,7 @@ function emit(event: 'created' | 'updated', id: number, data: Obj): void {
     id,
     data,
   });
+  void dispatchWebhooks(db, META.container, event, id, data);
 }
 
 export const containerWriteRoutes: PluginRoute[] = [
@@ -146,7 +150,7 @@ export const containerWriteRoutes: PluginRoute[] = [
       });
       const row = (await new Repository<Row>(db, getTable(T.container)!).retrieve(created))!;
       const out = await serializeContainer(db, row);
-      emit('created', created, out);
+      emit(db, 'created', created, out);
       return { status: 201, body: out };
     },
   },
@@ -170,7 +174,7 @@ export const containerWriteRoutes: PluginRoute[] = [
         });
         const row = (await repo.retrieve(id))!;
         const out = await serializeContainer(db, row);
-        emit('updated', id, out);
+        emit(db, 'updated', id, out);
         return { status: 200, body: out };
       },
     }),

@@ -7,6 +7,9 @@
   "engines": {
     "node": ">=24"
   },
+  "paas2box": {
+    "plugins": ["./dist/plugins/docker/index.js"]
+  },
   "scripts": {
     "generate": "node scripts/generate.mjs",
     "typecheck": "tsc --noEmit",
@@ -17,7 +20,7 @@
     "format": "prettier --write \"src/**/*.ts\" \"scripts/**/*.mjs\" \"test/**/*.mjs\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"scripts/**/*.mjs\" \"test/**/*.mjs\"",
     "pretest": "tsc",
-    "test": "node --test test/smoke.mjs test/api.test.mjs test/batching.test.mjs test/relations.test.mjs test/validation.test.mjs test/generic-relations.test.mjs test/computed.test.mjs test/auth.test.mjs test/contract.test.mjs test/plugins.test.mjs test/customfields.test.mjs test/openapi.test.mjs test/realtime.test.mjs test/static.test.mjs test/webhooks.test.mjs test/iprange-gateway.test.mjs test/iprange-migration.test.mjs test/device-uuid.test.mjs",
+    "test": "node --test test/smoke.mjs test/api.test.mjs test/batching.test.mjs test/relations.test.mjs test/validation.test.mjs test/generic-relations.test.mjs test/computed.test.mjs test/auth.test.mjs test/contract.test.mjs test/plugins.test.mjs test/customfields.test.mjs test/openapi.test.mjs test/realtime.test.mjs test/static.test.mjs test/webhooks.test.mjs test/iprange-gateway.test.mjs test/iprange-migration.test.mjs test/device-uuid.test.mjs test/docker.test.mjs",
     "test:mariadb": "node --test test/smoke-mariadb.mjs"
   },
   "dependencies": {

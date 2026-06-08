@@ -1,0 +1,267 @@
+// Built-in Docker plugin: end-to-end against the real engine. Mirrors
+// test/plugins.test.mjs — apply the core SQLite schema, load the plugin (registers
+// entities + applies its DDL), start the API server. Run: node --test test/docker.test.mjs
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import http from 'node:http';
+import { readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { SqliteDb } from '../dist/db/sqlite.js';
+import { loadPlugins } from '../dist/plugins/runtime.js';
+import { createApiServer } from '../dist/api/server.js';
+import dockerPlugin from '../dist/plugins/docker/index.js';
+
+const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
+const DB_FILE = join(ROOT, 'test', '.docker.sqlite');
+
+let db, server, base, agent, agentLog;
+
+const api = async (m, p, b) => {
+  const res = await fetch(`${base}${p}`, {
+    method: m,
+    headers: b ? { 'Content-Type': 'application/json' } : undefined,
+    body: b ? JSON.stringify(b) : undefined,
+  });
+  const t = await res.text();
+  return { status: res.status, body: t ? JSON.parse(t) : undefined };
+};
+
+before(async () => {
+  // Stub Docker agent for the proxy actions.
+  agentLog = [];
+  agent = http.createServer((req, res) => {
+    agentLog.push(`${req.method} ${req.url}`);
+    if (req.url.endsWith('/logs')) {
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end('hello from container');
+    } else if (req.url.endsWith('/exec')) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ stdout: 'ok' }));
+    } else if (req.url.endsWith('/images')) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ pulled: true }));
+    } else {
+      res.writeHead(404);
+      res.end('nope');
+    }
+  });
+  await new Promise((r) => agent.listen(0, '127.0.0.1', r));
+  globalThis.__AGENT__ = `http://127.0.0.1:${agent.address().port}`;
+
+  rmSync(DB_FILE, { force: true });
+  db = new SqliteDb(DB_FILE);
+  db.exec(readFileSync(join(ROOT, 'datamodel', 'sql', 'schema.sqlite.sql'), 'utf8'));
+  await loadPlugins(db, [dockerPlugin]);
+  server = createApiServer({ db });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  base = `http://127.0.0.1:${server.address().port}`;
+  process.env.BASE_URL = base;
+});
+
+after(async () => {
+  await new Promise((r) => server.close(r));
+  await new Promise((r) => agent.close(r));
+  await db.close();
+  rmSync(DB_FILE, { force: true });
+});
+
+// Shared ids populated across tests (ordered).
+const ids = {};
+
+test('plugin loads and registers its migration once', async () => {
+  const rows = await db.query(
+    "SELECT version FROM schema_migrations WHERE version LIKE 'plugin:docker:%'",
+  );
+  assert.deepEqual(
+    rows.map((r) => r.version),
+    ['plugin:docker:0001_initial'],
+  );
+});
+
+test('host create fires the default-registry hook; GET embeds nested arrays', async () => {
+  const created = await api('POST', '/api/plugins/docker/hosts/', {
+    endpoint: globalThis.__AGENT__,
+    name: 'agent1',
+  });
+  assert.equal(created.status, 201);
+  ids.host = created.body.id;
+  // enum rendered as {value,label}
+  assert.deepEqual(created.body.state, { value: 'created', label: 'Created' });
+
+  const got = await api('GET', `/api/plugins/docker/hosts/${ids.host}/`);
+  assert.equal(got.status, 200);
+  assert.ok(got.body.url.endsWith(`/api/plugins/docker/hosts/${ids.host}/`));
+  // hook created a "dockerhub" registry
+  assert.equal(got.body.registries.length, 1);
+  assert.equal(got.body.registries[0].name, 'dockerhub');
+  ids.registry = got.body.registries[0].id;
+  // reverse arrays present and empty
+  for (const k of ['images', 'volumes', 'networks', 'containers'])
+    assert.deepEqual(got.body[k], []);
+});
+
+test('create registry/image/volume/network under the host', async () => {
+  const img = await api('POST', '/api/plugins/docker/images/', {
+    host: ids.host,
+    registry: ids.registry,
+    name: 'nginx',
+    version: 'latest',
+  });
+  assert.equal(img.status, 201, JSON.stringify(img.body));
+  ids.image = img.body.id;
+
+  const vol = await api('POST', '/api/plugins/docker/volumes/', { host: ids.host, name: 'data' });
+  assert.equal(vol.status, 201, JSON.stringify(vol.body));
+  ids.volume = vol.body.id;
+
+  const net = await api('POST', '/api/plugins/docker/networks/', {
+    host: ids.host,
+    name: 'frontend',
+  });
+  assert.equal(net.status, 201, JSON.stringify(net.body));
+  ids.network = net.body.id;
+
+  // image GET embeds host/registry briefs + (empty) containers array
+  const imgGet = await api('GET', `/api/plugins/docker/images/${ids.image}/`);
+  assert.equal(imgGet.body.host.name, 'agent1');
+  assert.equal(imgGet.body.registry.name, 'dockerhub');
+  assert.deepEqual(imgGet.body.containers, []);
+});
+
+test('container POST accepts inline nested children and echoes them', async () => {
+  const body = {
+    host: ids.host,
+    image: ids.image,
+    name: 'web',
+    ports: [{ private_port: 80, public_port: 8080, type: 'tcp' }],
+    env: [{ var_name: 'DEBUG', value: '1' }],
+    labels: [{ key: 'role', value: 'web' }],
+    log_driver_options: [{ option_name: 'max-size', value: '10m' }],
+    mounts: [{ source: '/srv', volume: ids.volume, read_only: true }],
+    binds: [{ host_path: '/h', container_path: '/c', read_only: false }],
+    network_settings: [{ network: ids.network }],
+    devices: [{ host_path: '/dev/a', container_path: '/dev/b' }],
+    sysctls: [{ key: 'net.core.somaxconn', value: '1024' }],
+    cap_add: ['NET_ADMIN'],
+    cmd: ['nginx', '-g', 'daemon off;'],
+  };
+  const res = await api('POST', '/api/plugins/docker/containers/', body);
+  assert.equal(res.status, 201, JSON.stringify(res.body));
+  ids.container = res.body.id;
+  assert.equal(res.body.ports.length, 1);
+  assert.deepEqual(res.body.ports[0], { public_port: 8080, private_port: 80, type: 'tcp' });
+  assert.deepEqual(res.body.env[0], { var_name: 'DEBUG', value: '1' });
+  assert.equal(res.body.mounts[0].source, '/srv');
+  assert.equal(res.body.mounts[0].read_only, true);
+  assert.equal(res.body.mounts[0].volume.name, 'data'); // nested brief
+  assert.equal(res.body.network_settings[0].network.name, 'frontend');
+  assert.deepEqual(res.body.cap_add, ['NET_ADMIN']);
+  assert.deepEqual(res.body.cmd, ['nginx', '-g', 'daemon off;']);
+  // FK briefs use the source field sets
+  assert.equal(res.body.host.endpoint, globalThis.__AGENT__);
+  assert.equal(res.body.image.version, 'latest');
+
+  // GET detail matches the POST shape
+  const got = await api('GET', `/api/plugins/docker/containers/${ids.container}/`);
+  assert.equal(got.body.ports.length, 1);
+  assert.equal(got.body.sysctls[0].key, 'net.core.somaxconn');
+  assert.equal(got.body.devices[0].host_path, '/dev/a');
+});
+
+test('container PATCH replaces only the provided child arrays', async () => {
+  const res = await api('PATCH', `/api/plugins/docker/containers/${ids.container}/`, {
+    ports: [
+      { private_port: 443, public_port: 8443, type: 'tcp' },
+      { private_port: 53, public_port: 5353, type: 'udp' },
+    ],
+    ContainerID: 'abc123',
+  });
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.equal(res.body.ports.length, 2);
+  assert.equal(res.body.ContainerID, 'abc123');
+  // env was not in the PATCH body → left untouched
+  assert.equal(res.body.env.length, 1);
+});
+
+test('host GET now lists the container under its nested arrays', async () => {
+  const got = await api('GET', `/api/plugins/docker/hosts/${ids.host}/`);
+  assert.equal(got.body.containers.length, 1);
+  assert.equal(got.body.containers[0].name, 'web');
+  assert.equal(got.body.images.length, 1);
+});
+
+test('cross-host container is rejected with a NetBox field error', async () => {
+  const h2 = await api('POST', '/api/plugins/docker/hosts/', {
+    endpoint: 'http://other',
+    name: 'agent2',
+  });
+  const reg2 = (await api('GET', `/api/plugins/docker/hosts/${h2.body.id}/`)).body.registries[0].id;
+  const img2 = await api('POST', '/api/plugins/docker/images/', {
+    host: h2.body.id,
+    registry: reg2,
+    name: 'redis',
+  });
+  const res = await api('POST', '/api/plugins/docker/containers/', {
+    host: ids.host,
+    image: img2.body.id, // image belongs to agent2, container on agent1
+    name: 'bad',
+  });
+  assert.equal(res.status, 400);
+  assert.ok(Array.isArray(res.body.image));
+  assert.match(res.body.image[0], /does not belong to host/);
+});
+
+test('container validation reuses the engine (missing required field)', async () => {
+  const res = await api('POST', '/api/plugins/docker/containers/', { host: ids.host });
+  assert.equal(res.status, 400);
+  // image + name are required
+  assert.ok(res.body.image || res.body.name);
+});
+
+test('list pagination + filtering', async () => {
+  const page = await api('GET', '/api/plugins/docker/containers/?limit=1');
+  assert.equal(page.body.count >= 1, true);
+  assert.equal(page.body.results.length, 1);
+  const filtered = await api('GET', '/api/plugins/docker/containers/?name=web');
+  assert.equal(filtered.body.count, 1);
+  assert.equal(filtered.body.results[0].name, 'web');
+});
+
+test('agent proxy actions: force_pull / logs / exec', async () => {
+  const pull = await api('POST', `/api/plugins/docker/images/${ids.image}/force_pull/`);
+  assert.equal(pull.status, 200, JSON.stringify(pull.body));
+  assert.deepEqual(pull.body, { success: true, payload: { pulled: true } });
+
+  const logs = await api('GET', `/api/plugins/docker/containers/${ids.container}/logs/`);
+  assert.equal(logs.status, 200);
+  assert.equal(logs.body, 'hello from container');
+
+  const exec = await api('POST', `/api/plugins/docker/containers/${ids.container}/exec/`, {
+    cmd: ['ls', '-la'],
+  });
+  assert.equal(exec.status, 200);
+  assert.deepEqual(exec.body, { stdout: 'ok' });
+
+  assert.ok(agentLog.some((l) => l.includes('/api/engine/containers/abc123/logs')));
+});
+
+test('exec rejects a non-list cmd', async () => {
+  const res = await api('POST', `/api/plugins/docker/containers/${ids.container}/exec/`, {
+    cmd: 'not-a-list',
+  });
+  assert.equal(res.status, 400);
+  assert.ok(Array.isArray(res.body.cmd));
+});
+
+test('core API still works alongside the plugin', async () => {
+  const m = await api('POST', '/api/dcim/manufacturers/', { name: 'Acme', slug: 'acme' });
+  assert.equal(m.status, 201);
+});
+
+test('docker resources appear in the OpenAPI schema', async () => {
+  const schema = await api('GET', '/api/schema/');
+  assert.ok(schema.body.paths['/api/plugins/docker/hosts/']);
+  assert.ok(schema.body.paths['/api/plugins/docker/containers/']);
+});

@@ -1,0 +1,178 @@
+// Container write routes (POST/PUT/PATCH). Unlike the parent entities, containers
+// accept inline nested children (ports/env/labels/mounts/binds/network_settings/
+// devices/log_driver_options/sysctls), so these override the generic CRUD. Cross-host
+// integrity (image/volume/network must belong to the container's host) is validated
+// up front, then the container row + its children are written in one transaction.
+import type { Db } from '../../../db/types.js';
+import type { PluginRoute } from '../../../plugins/types.js';
+import { Repository } from '../../../repository/repository.js';
+import { getTable } from '../../../model/registry.js';
+import { ValidationError } from '../../../errors.js';
+import { broadcast } from '../../../realtime.js';
+import { CHILD_SPECS, META, T, type ChildSpec } from '../meta.js';
+import { serializeContainer } from '../serialize.js';
+
+type Row = Record<string, unknown>;
+type Obj = Record<string, unknown>;
+
+const ident = (name: string): string => '`' + name.replace(/`/g, '``') + '`';
+const childIdValue = (v: unknown): number =>
+  v !== null && typeof v === 'object' ? Number((v as { id: unknown }).id) : Number(v);
+
+const CHILD_FIELDS = new Set(CHILD_SPECS.map((s) => s.field));
+const SPEC_BY_FIELD = new Map(CHILD_SPECS.map((s) => [s.field, s]));
+
+/** Split a request body into scalar container fields and the nested child arrays. */
+function split(body: Obj): { scalars: Obj; children: Map<string, Obj[]> } {
+  const scalars: Obj = {};
+  const children = new Map<string, Obj[]>();
+  for (const [k, v] of Object.entries(body)) {
+    if (CHILD_FIELDS.has(k)) {
+      if (!Array.isArray(v))
+        throw new ValidationError(`"${k}" must be a list`, { [k]: ['Expected a list of items.'] });
+      children.set(k, v as Obj[]);
+    } else {
+      scalars[k] = v;
+    }
+  }
+  return { scalars, children };
+}
+
+async function hostIdOf(db: Db, table: string, id: unknown): Promise<number | undefined> {
+  if (id === null || id === undefined) return undefined;
+  const r = await db.get<{ host_id: number }>(`SELECT host_id FROM ${ident(table)} WHERE id = ?`, [
+    Number(id),
+  ]);
+  return r ? Number(r.host_id) : undefined;
+}
+
+/** Enforce that image / mounted volumes / attached networks belong to `hostId`. */
+async function validateCrossHost(
+  db: Db,
+  hostId: number,
+  imageId: unknown,
+  children: Map<string, Obj[]>,
+): Promise<void> {
+  if (imageId !== undefined && imageId !== null) {
+    const h = await hostIdOf(db, T.image, imageId);
+    if (h !== undefined && h !== hostId) {
+      throw new ValidationError('cross-host image', {
+        image: [`Image ${Number(imageId)} does not belong to host ${hostId}.`],
+      });
+    }
+  }
+  for (const m of children.get('mounts') ?? []) {
+    const vid = childIdValue(m.volume);
+    const h = await hostIdOf(db, T.volume, vid);
+    if (h !== undefined && h !== hostId) {
+      throw new ValidationError('cross-host volume', {
+        volume: [`Volume ${vid} does not belong to host ${hostId}.`],
+      });
+    }
+  }
+  for (const ns of children.get('network_settings') ?? []) {
+    const nid = childIdValue(ns.network);
+    const h = await hostIdOf(db, T.network, nid);
+    if (h !== undefined && h !== hostId) {
+      throw new ValidationError('cross-host network', {
+        network: [`Network ${nid} does not belong to host ${hostId}.`],
+      });
+    }
+  }
+}
+
+async function insertChild(tx: Db, spec: ChildSpec, containerId: number, item: Obj): Promise<void> {
+  const cols = ['container_id'];
+  const vals: unknown[] = [containerId];
+  for (const c of spec.columns) {
+    let v = item[c.name];
+    if (v === undefined || v === null) {
+      if (c.required) {
+        throw new ValidationError(`${spec.field}.${c.name} required`, {
+          [spec.field]: [`"${c.name}" is required for each item.`],
+        });
+      }
+      continue; // fall back to the column default
+    }
+    if (c.fk) v = childIdValue(v);
+    else if (c.kind === 'boolean') v = v ? 1 : 0;
+    cols.push(c.column);
+    vals.push(v);
+  }
+  await tx.execute(
+    `INSERT INTO ${ident(spec.table)} (${cols.map(ident).join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
+    vals as never,
+  );
+}
+
+async function writeChildren(
+  tx: Db,
+  containerId: number,
+  children: Map<string, Obj[]>,
+  replace: boolean,
+): Promise<void> {
+  for (const [field, items] of children) {
+    const spec = SPEC_BY_FIELD.get(field)!;
+    if (replace)
+      await tx.execute(`DELETE FROM ${ident(spec.table)} WHERE container_id = ?`, [containerId]);
+    for (const item of items) await insertChild(tx, spec, containerId, item);
+  }
+}
+
+function emit(event: 'created' | 'updated', id: number, data: Obj): void {
+  broadcast({
+    type: 'change',
+    event,
+    object_type: META.container.objectType,
+    table: T.container,
+    id,
+    data,
+  });
+}
+
+export const containerWriteRoutes: PluginRoute[] = [
+  {
+    method: 'POST',
+    path: META.container.endpoint,
+    handler: async ({ db, body }) => {
+      const { scalars, children } = split((body ?? {}) as Obj);
+      await validateCrossHost(db, Number(scalars.host), scalars.image, children);
+      const created = await db.transaction(async (tx) => {
+        const repo = new Repository<Row>(tx, getTable(T.container)!);
+        const row = await repo.create(scalars); // validates required/enum/maxlength
+        const id = Number((row as { id: number }).id);
+        await writeChildren(tx, id, children, false);
+        return id;
+      });
+      const row = (await new Repository<Row>(db, getTable(T.container)!).retrieve(created))!;
+      const out = await serializeContainer(db, row);
+      emit('created', created, out);
+      return { status: 201, body: out };
+    },
+  },
+  ...(['PUT', 'PATCH'] as const).map(
+    (method): PluginRoute => ({
+      method,
+      path: `${META.container.endpoint}{id}/`,
+      handler: async ({ db, params, body }) => {
+        const id = Number(params.id);
+        const repo = new Repository<Row>(db, getTable(T.container)!);
+        const existing = await repo.retrieve(id);
+        if (!existing) return { status: 404, body: { detail: 'Not found' } };
+        const { scalars, children } = split((body ?? {}) as Obj);
+        const hostId = Number(scalars.host ?? (existing as Row).host);
+        const imageId = scalars.image ?? (existing as Row).image;
+        await validateCrossHost(db, hostId, imageId, children);
+        await db.transaction(async (tx) => {
+          const r = new Repository<Row>(tx, getTable(T.container)!);
+          if (Object.keys(scalars).length) await r.update(id, scalars);
+          await writeChildren(tx, id, children, true); // replace provided arrays
+        });
+        const row = (await repo.retrieve(id))!;
+        const out = await serializeContainer(db, row);
+        emit('updated', id, out);
+        return { status: 200, body: out };
+      },
+    }),
+  ),
+];

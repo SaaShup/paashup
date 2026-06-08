@@ -2,11 +2,25 @@
 //   PB_DIALECT=sqlite  PB_SQLITE_FILE=./paas2box.db
 //   PB_DIALECT=mariadb DB_HOST=.. DB_PORT=.. DB_USER=.. DB_PASSWORD=.. DB_NAME=..
 //   PORT=8000  BASE_URL=http://localhost:8000
+import { isAbsolute, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { createDb, type DbConfig } from './db/index.js';
 import { createApiServer } from './api/server.js';
 import { loadPlugins, loadedPlugins } from './plugins/runtime.js';
 import { discoverPluginSpecifiers } from './plugins/discovery.js';
 import type { Plugin } from './plugins/types.js';
+
+/**
+ * Resolve a plugin specifier for `import()`. Relative/absolute paths (e.g. a
+ * `paas2box.plugins` entry like `./dist/plugins/docker/index.js`) are resolved
+ * against the project root (cwd), not this module's location under `dist/`; bare
+ * package specifiers (`paas2box-plugin-foo`) are imported as-is.
+ */
+function resolveSpecifier(spec: string): string {
+  return spec.startsWith('.') || isAbsolute(spec)
+    ? pathToFileURL(resolve(process.cwd(), spec)).href
+    : spec;
+}
 
 function configFromEnv(): DbConfig {
   const dialect = (process.env.PB_DIALECT ?? 'sqlite') as 'sqlite' | 'mariadb';
@@ -40,7 +54,7 @@ const pluginPaths = [
 if (pluginPaths.length) {
   const plugins: Plugin[] = [];
   for (const spec of pluginPaths) {
-    const mod = await import(spec);
+    const mod = await import(resolveSpecifier(spec));
     plugins.push((mod.default ?? mod) as Plugin);
   }
   await loadPlugins(db, plugins);

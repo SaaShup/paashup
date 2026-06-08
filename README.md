@@ -165,7 +165,9 @@ five jobs: **test** (SQLite), **test-mariadb** (service container), **lint**
 - **Plugins** ([src/plugins/](src/plugins/)): third parties extend paas2box by
   registering entity metadata (+ DDL) — the engine then exposes a full NetBox-shaped
   CRUD API under `/api/plugins/<name>/…` automatically — plus custom routes and write
-  hooks. Load via `PB_PLUGINS=<module,…>`.
+  hooks. Load via `PB_PLUGINS=<module,…>` or the `paas2box.plugins` key in
+  `package.json` (loaded on startup, no config needed). See **Docker** below for a
+  built-in example.
 - **Webhooks** ([src/webhooks.ts](src/webhooks.ts)): configurable HTTP webhooks fired
   on object **create/update/delete**, managed as a normal CRUD resource at
   `/api/extras/webhooks/` — object-type + event filtering, **conditions** (fire only
@@ -175,6 +177,31 @@ five jobs: **test** (SQLite), **test-mariadb** (service container), **lint**
   **delivery log** at `/api/extras/webhook-deliveries/`. Works for **core and plugin**
   entities alike. The change feed is also available live over a **WebSocket** at
   `/api/ws/`.
+
+## Docker management (built-in plugin)
+
+A built-in plugin ([src/plugins/docker/](src/plugins/docker/)) manages Docker — a port
+of [SaaShup/netbox-docker-plugin](https://github.com/SaaShup/netbox-docker-plugin),
+designed to pair with the
+[netbox-docker-agent](https://github.com/SaaShup/netbox-docker-agent). It is **loaded by
+default** (via the `paas2box.plugins` key in `package.json`), so the endpoints are live
+out of the box and appear in the web UI under the **plugins** menu section.
+
+| Endpoint | Notes |
+|----------|-------|
+| `/api/plugins/docker/hosts/` | embeds `images`/`volumes`/`networks`/`containers`/`registries`; a `dockerhub` registry is auto-created on host creation |
+| `/api/plugins/docker/registries/` | embeds `images` |
+| `/api/plugins/docker/images/` | embeds `containers`; `POST {id}/force_pull/` proxies to the agent |
+| `/api/plugins/docker/volumes/` | embeds `mounts` |
+| `/api/plugins/docker/networks/` | embeds `network_settings` |
+| `/api/plugins/docker/containers/` | inline nested `ports`/`env`/`labels`/`mounts`/`binds`/`network_settings`/`devices`/`log_driver_options`/`sysctls` on **read and write**; cross-host integrity is validated; `GET {id}/logs/`, `POST {id}/exec/` proxy to the agent |
+
+Differences from the NetBox plugin (documented gaps): NetBox token + webhook
+auto-provisioning is dropped (paas2box has its own auth + a WebSocket change-feed); the
+agent-driven container state machine is not enforced (`state`/`operation` are plain
+fields); `logs` is returned JSON-encoded (plugin responses are JSON-only). The nested
+container routes build absolute `url`s from `BASE_URL` (set it for parity with core
+endpoints). Tests: [test/docker.test.mjs](test/docker.test.mjs).
 
 ## Regenerate everything
 

@@ -6,6 +6,7 @@ import {
   sectionRank,
   effectiveSection,
   pluginNameOf,
+  isHiddenSection,
   type SubGroupView,
 } from '../groups.js';
 
@@ -29,6 +30,7 @@ export const useUiStore = defineStore('ui', {
       const q = state.search.trim().toLowerCase();
       const by = new Map<string, Resource[]>();
       for (const r of state.resources) {
+        if (isHiddenSection(r.section)) continue; // e.g. vpn, wireless
         if (q && !`${r.section} ${r.label} ${r.table}`.toLowerCase().includes(q)) continue;
         // promote configured plugins (e.g. docker) to their own top-level section
         const sec =

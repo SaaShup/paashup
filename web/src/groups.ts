@@ -1,4 +1,10 @@
 import type { Resource } from './api/resources.js';
+import type { PluginMenuItem } from './api/pluginMenus.js';
+
+/** A sidebar item is either a CRUD resource or a plugin-contributed page. */
+export type NavItem = Resource | PluginMenuItem;
+/** Plugin pages carry a `url`; resources don't — used to tell them apart in the sidebar. */
+export const isPage = (i: NavItem): i is PluginMenuItem => 'url' in i;
 
 // Functional sub-groups within each section (NetBox-style). A resource is placed
 // in the FIRST group whose keyword is a substring of its endpoint slug, so order
@@ -89,24 +95,37 @@ function subgroupOf(section: string, slug: string): string {
 
 export interface SubGroupView {
   label: string;
-  items: Resource[];
+  items: NavItem[];
 }
 
-/** Bucket a section's resources into ordered functional sub-groups. */
-export function subgroupsFor(section: string, resources: Resource[]): SubGroupView[] {
-  // Plugins: one sub-group per loaded plugin (by name), so several can coexist.
+/** Bucket a section's resources (and, for plugins, contributed pages) into sub-groups. */
+export function subgroupsFor(
+  section: string,
+  resources: Resource[],
+  pages: PluginMenuItem[] = [],
+): SubGroupView[] {
+  // Plugins: one sub-group per loaded plugin (by name), so several can coexist. A plugin's
+  // contributed pages (Visualization, Docs, …) appear in its own group, after its CRUD items.
   if (section === 'plugins') {
-    const byPlugin = new Map<string, Resource[]>();
+    const byPlugin = new Map<string, NavItem[]>();
     for (const r of resources) {
       const label = pluginLabel(r);
       (byPlugin.get(label) ?? byPlugin.set(label, []).get(label)!).push(r);
     }
-    return [...byPlugin.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([label, items]) => ({
-        label,
-        items: items.sort((a, b) => a.order - b.order || a.label.localeCompare(b.label)),
-      }));
+    for (const p of pages) {
+      const label = titleize(p.plugin);
+      (byPlugin.get(label) ?? byPlugin.set(label, []).get(label)!).push(p);
+    }
+    return [...byPlugin.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([label, items]) => ({
+      label,
+      items: items.sort((a, b) => {
+        const pa = isPage(a) ? 1 : 0,
+          pb = isPage(b) ? 1 : 0;
+        if (pa !== pb) return pa - pb; // CRUD resources first, then pages
+        if (isPage(a) || isPage(b)) return a.label.localeCompare(b.label);
+        return a.order - b.order || a.label.localeCompare(b.label);
+      }),
+    }));
   }
 
   const cfg = SECTION_GROUPS[section];

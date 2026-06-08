@@ -26,9 +26,17 @@ export const useUiStore = defineStore('ui', {
         if (q && !`${r.section} ${r.label} ${r.table}`.toLowerCase().includes(q)) continue;
         (by.get(r.section) ?? by.set(r.section, []).get(r.section)!).push(r);
       }
+      // Plugin-contributed pages live in the "plugins" section, alongside CRUD resources.
+      const pages = state.pluginMenus.filter(
+        (p) => !q || `${p.plugin} ${p.label}`.toLowerCase().includes(q),
+      );
+      if (pages.length && !by.has('plugins')) by.set('plugins', []);
       return [...by.entries()]
         .sort((a, b) => sectionRank(a[0]) - sectionRank(b[0]) || a[0].localeCompare(b[0]))
-        .map(([section, items]) => ({ section, groups: subgroupsFor(section, items) }));
+        .map(([section, items]) => ({
+          section,
+          groups: subgroupsFor(section, items, section === 'plugins' ? pages : []),
+        }));
     },
   },
   actions: {

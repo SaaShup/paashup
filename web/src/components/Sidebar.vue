@@ -1,10 +1,17 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useUiStore } from '../stores/ui.js';
-import { sectionLabel } from '../groups.js';
+import { sectionLabel, isPage, type NavItem } from '../groups.js';
 
 const ui = useUiStore();
 const searchActive = computed(() => ui.search.trim() !== '');
+/** Stable key for a sidebar item (pages by url, resources by table). */
+const itemKey = (it: NavItem) => (isPage(it) ? `page:${it.url}` : `res:${it.table}`);
+const pageActive = (it: NavItem) =>
+  isPage(it) && ui.view === 'plugin-page' && ui.pluginPage?.url === it.url;
+const resActive = (it: NavItem) => !isPage(it) && ui.selected?.table === it.table;
+const pageIcon = (it: NavItem) => (isPage(it) ? it.icon || '🧩' : '🧩');
+const openItem = (it: NavItem) => (isPage(it) ? ui.openPluginPage(it) : ui.openResource(it));
 
 // While searching, force everything open so matches are visible.
 const sectionOpen = (s: string) => searchActive.value || !!ui.expandedSections[s];
@@ -19,15 +26,6 @@ const groupOpen = (section: string, label: string) =>
     </button>
     <button class="nav-item top" :class="{ active: ui.view === 'docs' }" @click="ui.openDocs()">
       <span class="ico">📖</span> Docs
-    </button>
-    <button
-      v-for="m in ui.pluginMenus"
-      :key="m.plugin + '::' + m.label"
-      class="nav-item top"
-      :class="{ active: ui.view === 'plugin-page' && ui.pluginPage?.label === m.label }"
-      @click="ui.openPluginPage(m)"
-    >
-      <span class="ico">{{ m.icon || '🧩' }}</span> {{ m.label }}
     </button>
 
     <div v-for="sec in ui.grouped" :key="sec.section" class="group">
@@ -47,26 +45,26 @@ const groupOpen = (section: string, label: string) =>
               <span class="count sm">{{ g.items.length }}</span>
             </button>
             <button
-              v-for="r in g.items"
+              v-for="it in g.items"
               v-show="groupOpen(sec.section, g.label)"
-              :key="r.table"
+              :key="itemKey(it)"
               class="nav-item deep"
-              :class="{ active: ui.selected?.table === r.table }"
-              @click="ui.openResource(r)"
+              :class="{ active: pageActive(it) || resActive(it) }"
+              @click="openItem(it)"
             >
-              {{ r.label }}
+              <span v-if="isPage(it)" class="ico sm">{{ pageIcon(it) }}</span> {{ it.label }}
             </button>
           </template>
           <!-- section without sub-groups: items directly -->
           <template v-else>
             <button
-              v-for="r in g.items"
-              :key="r.table"
+              v-for="it in g.items"
+              :key="itemKey(it)"
               class="nav-item"
-              :class="{ active: ui.selected?.table === r.table }"
-              @click="ui.openResource(r)"
+              :class="{ active: pageActive(it) || resActive(it) }"
+              @click="openItem(it)"
             >
-              {{ r.label }}
+              <span v-if="isPage(it)" class="ico sm">{{ pageIcon(it) }}</span> {{ it.label }}
             </button>
           </template>
         </template>

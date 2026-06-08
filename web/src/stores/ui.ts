@@ -1,7 +1,13 @@
 import { defineStore } from 'pinia';
 import type { Resource } from '../api/resources.js';
 import type { PluginMenuItem } from '../api/pluginMenus.js';
-import { subgroupsFor, sectionRank, type SubGroupView } from '../groups.js';
+import {
+  subgroupsFor,
+  sectionRank,
+  effectiveSection,
+  pluginNameOf,
+  type SubGroupView,
+} from '../groups.js';
 
 /** UI navigation state: which view is shown, the resource catalog, group collapse. */
 export const useUiStore = defineStore('ui', {
@@ -24,18 +30,24 @@ export const useUiStore = defineStore('ui', {
       const by = new Map<string, Resource[]>();
       for (const r of state.resources) {
         if (q && !`${r.section} ${r.label} ${r.table}`.toLowerCase().includes(q)) continue;
-        (by.get(r.section) ?? by.set(r.section, []).get(r.section)!).push(r);
+        // promote configured plugins (e.g. docker) to their own top-level section
+        const sec =
+          r.section === 'plugins' ? effectiveSection(r.section, pluginNameOf(r.endpoint)) : r.section;
+        (by.get(sec) ?? by.set(sec, []).get(sec)!).push(r);
       }
-      // Plugin-contributed pages live in the "plugins" section, alongside CRUD resources.
-      const pages = state.pluginMenus.filter(
-        (p) => !q || `${p.plugin} ${p.label}`.toLowerCase().includes(q),
-      );
-      if (pages.length && !by.has('plugins')) by.set('plugins', []);
+      // plugin-contributed pages, bucketed by their (possibly promoted) section
+      const pagesBySection = new Map<string, typeof state.pluginMenus>();
+      for (const p of state.pluginMenus) {
+        if (q && !`${p.plugin} ${p.label}`.toLowerCase().includes(q)) continue;
+        const sec = effectiveSection('plugins', p.plugin);
+        (pagesBySection.get(sec) ?? pagesBySection.set(sec, []).get(sec)!).push(p);
+        if (!by.has(sec)) by.set(sec, []);
+      }
       return [...by.entries()]
         .sort((a, b) => sectionRank(a[0]) - sectionRank(b[0]) || a[0].localeCompare(b[0]))
         .map(([section, items]) => ({
           section,
-          groups: subgroupsFor(section, items, section === 'plugins' ? pages : []),
+          groups: subgroupsFor(section, items, pagesBySection.get(section) ?? []),
         }));
     },
   },

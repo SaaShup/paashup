@@ -75,6 +75,8 @@ if (!ENABLED) {
           try {
             // event feed: provision the container for real, then report back
             if (req.url === '/webhook') {
+              console.log('  [agent] <- webhook call fired by paasbox; payload:');
+              console.log('    ' + JSON.stringify(body));
               if (body.model === 'plugins.dockercontainer' && body.event === 'created') {
                 const cid = `pbx_${body.object_id}`;
                 await dind(
@@ -93,6 +95,7 @@ if (!ENABLED) {
                   body: JSON.stringify({ ContainerID: cid }),
                 });
               }
+              console.log('  [agent] -> returning 200 to paasbox');
               res.writeHead(200);
               return res.end('ok');
             }
@@ -142,12 +145,24 @@ if (!ENABLED) {
     base = `http://127.0.0.1:${server.address().port}`;
     paasboxBase = base;
 
-    await pb('POST', '/api/extras/webhooks/', {
+    const wh = await pb('POST', '/api/extras/webhooks/', {
       name: 'docker-agent',
       payload_url: `${agentBase}/webhook`,
       object_types: ['plugins.dockercontainer'],
       events: ['created'],
     });
+    console.log('  [dind-test] webhook configuration inserted:');
+    console.log(
+      '    ' +
+        JSON.stringify({
+          name: wh.name,
+          payload_url: wh.payload_url,
+          http_method: wh.http_method,
+          object_types: wh.object_types,
+          events: wh.events,
+          enabled: wh.enabled,
+        }),
+    );
     hostId = (
       await pb('POST', '/api/plugins/docker/hosts/', { endpoint: agentBase, name: 'dind-host' })
     ).id;
@@ -198,6 +213,21 @@ if (!ENABLED) {
     assert.equal(containerId, cid, 'agent never reported ContainerID');
     const { stdout } = await dind('ps', '--filter', `name=${cid}`, '--format', '{{.Names}}');
     assert.match(stdout, new RegExp(cid), `container not running in dind:\n${stdout}`);
+
+    // what paasbox recorded for the webhook delivery (the agent's return code)
+    const deliveries = await pb('GET', '/api/extras/webhook-deliveries/?ordering=-id&limit=1');
+    const last = deliveries.results?.[0];
+    console.log('  [dind-test] docker agent returned (from paasbox delivery log):');
+    console.log(
+      '    ' +
+        JSON.stringify({
+          model: last?.object_type,
+          event: last?.event,
+          status_code: last?.status_code,
+          success: last?.success,
+          attempts: last?.attempts,
+        }),
+    );
   });
 
   test('proxy: exec runs a command in the REAL container via the agent -> dockerd', async () => {

@@ -10,11 +10,15 @@
 # Modeling notes for path 1:
 #   • "Room" and "Row" are two dcim/location levels (Row's parent = Room).
 #   • "Operating System" is a dcim/platform set on the device's `platform`.
-#   • The hosted app is recorded on the device's `comments` (name + ports). In this
-#     engine an ipam/service can't bind to a physical device — services require an
-#     integer parent id, but devices have UUID ids — so services are used for the VM
-#     paths only. (dcim/devices use string/UUID primary keys; everything else here is
-#     integer, which is why device ids are quoted in the JSON below.)
+#   • The hosted app is a real ISManager object: an InformationSystem + Component +
+#     ComponentPort. ISManager's Component has no hard FK to a core Device, so the link
+#     is soft — the Component's service_ip matches the device and its description names
+#     the device (+ UUID). (ipam/services can't bind to a device here: services need an
+#     integer parent id but dcim/devices have UUID ids — which is also why device ids
+#     are quoted in the JSON below; every other entity here uses integer ids.)
+#
+# Requires BOTH plugins loaded on the server, e.g.:
+#   PB_PLUGINS="./dist/plugins/docker/index.js,/abs/path/paas2box-ISManager-plugin/dist/index.js"
 #
 #   scripts/demo-fullstack.sh                  # against http://localhost:8000
 #   BASE=http://host:port scripts/demo-fullstack.sh
@@ -53,9 +57,15 @@ echo "    mfr=$MFR type=$DTYPE role=$ROLE os(ubuntu)=$OS_UBUNTU"
 # PATH 1 — bare-metal app:  Device → OS(Ubuntu) → hosted app "billing-web" (tcp/8080)
 # Device ids are UUID strings, so $DEV_BM is quoted everywhere it appears in JSON.
 # ============================================================================
-echo "==> [Path 1] bare-metal app"
-DEV_BM=$(post "$API/dcim/devices/" "{\"name\":\"bm-app-01\",\"device_type\":$DTYPE,\"role\":$ROLE,\"site\":$SITE,\"location\":$ROW,\"rack\":$RACK,\"position\":1,\"face\":\"front\",\"platform\":$OS_UBUNTU,\"status\":\"active\",\"comments\":\"Hosted app: billing-web (tcp/8080) @ 10.20.1.10\"}")
-echo "    device=$DEV_BM (Ubuntu 22.04)  app=billing-web tcp/8080 (recorded on device comments)"
+echo "==> [Path 1] bare-metal device + OS"
+DEV_BM=$(post "$API/dcim/devices/" "{\"name\":\"bm-app-01\",\"device_type\":$DTYPE,\"role\":$ROLE,\"site\":$SITE,\"location\":$ROW,\"rack\":$RACK,\"position\":1,\"face\":\"front\",\"platform\":$OS_UBUNTU,\"status\":\"active\",\"comments\":\"Hosts ISManager component billing-web (tcp/8080) @ 10.20.1.10\"}")
+echo "    device=$DEV_BM (Ubuntu 22.04)"
+
+echo "==> [Path 1] hosted app as an ISManager InformationSystem / Component / Port"
+IS=$(post   "$API/plugins/ismanager/information-systems/" '{"name":"Billing App","slug":"billing-app","domain":"app.example.com","status":"active"}')
+COMP=$(post "$API/plugins/ismanager/components/" "{\"information_system\":$IS,\"name\":\"billing-web\",\"role\":\"app\",\"service_ip\":\"10.20.1.10\",\"status\":\"active\",\"description\":\"Runs on bare-metal device bm-app-01 ($DEV_BM)\"}")
+CPORT=$(post "$API/plugins/ismanager/component-ports/" "{\"component\":$COMP,\"kind\":\"service\",\"name\":\"http\",\"port\":8080,\"protocol\":\"tcp\"}")
+echo "    information_system=$IS component=$COMP port=$CPORT (billing-web tcp/8080, soft-linked to bm-app-01 by ip 10.20.1.10)"
 
 # ============================================================================
 # PATH 2 — app on a VM            (stub — to implement next)
@@ -73,7 +83,10 @@ EU-West (region $REGION)
       └─ Row 1 (location $ROW)
          └─ Rack R1 (rack $RACK)
             └─ bm-app-01 (device $DEV_BM)  ·OS Ubuntu 22.04
-               └─ billing-web  tcp/8080   (hosted app, on device comments)
+               └─ billing-web  (ismanager component $COMP)  tcp/8080
+                  ·InformationSystem "Billing App" ($IS)  ·soft-linked by ip 10.20.1.10
 TREE
 echo
-echo "Browse: $BASE/   |   API: $API/dcim/devices/$DEV_BM/"
+echo "Browse:    $BASE/"
+echo "Device:    $API/dcim/devices/$DEV_BM/"
+echo "App (IS):  $API/plugins/ismanager/components/$COMP/"

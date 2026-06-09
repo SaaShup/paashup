@@ -6,6 +6,21 @@ export type NavItem = Resource | PluginMenuItem;
 /** Plugin pages carry a `url`; resources don't — used to tell them apart in the sidebar. */
 export const isPage = (i: NavItem): i is PluginMenuItem => 'url' in i;
 
+/** Sidebar rank: resources use their topo `order`; pages use their manifest `order`,
+ *  or MAX when omitted so they fall after the section's resources (legacy behavior). */
+function navRank(i: NavItem): number {
+  return isPage(i) ? (i.order ?? Number.MAX_SAFE_INTEGER) : i.order;
+}
+/** Order by rank, then resources before pages on a tie, then label. A page with an
+ *  explicit low `order` (e.g. an "Editor") therefore sorts above the CRUD resources. */
+export function compareNav(a: NavItem, b: NavItem): number {
+  return (
+    navRank(a) - navRank(b) ||
+    (isPage(a) ? 1 : 0) - (isPage(b) ? 1 : 0) ||
+    a.label.localeCompare(b.label)
+  );
+}
+
 // Functional sub-groups within each section (NetBox-style). A resource is placed
 // in the FIRST group whose keyword is a substring of its endpoint slug, so order
 // matters (most specific first). Unmatched resources fall into "Other".
@@ -135,13 +150,7 @@ export function subgroupsFor(
     }
     return [...byPlugin.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([label, items]) => ({
       label,
-      items: items.sort((a, b) => {
-        const pa = isPage(a) ? 1 : 0,
-          pb = isPage(b) ? 1 : 0;
-        if (pa !== pb) return pa - pb; // CRUD resources first, then pages
-        if (isPage(a) || isPage(b)) return a.label.localeCompare(b.label);
-        return a.order - b.order || a.label.localeCompare(b.label);
-      }),
+      items: items.sort(compareNav),
     }));
   }
 
@@ -158,12 +167,6 @@ export function subgroupsFor(
     .filter((l) => byLabel.has(l))
     .map((label) => ({
       label,
-      items: byLabel.get(label)!.sort((a, b) => {
-        const pa = isPage(a) ? 1 : 0,
-          pb = isPage(b) ? 1 : 0;
-        if (pa !== pb) return pa - pb; // CRUD resources first, then pages
-        if (isPage(a) || isPage(b)) return a.label.localeCompare(b.label);
-        return a.order - b.order || a.label.localeCompare(b.label); // creation order
-      }),
+      items: byLabel.get(label)!.sort(compareNav),
     }));
 }

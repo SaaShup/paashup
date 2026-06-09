@@ -21,7 +21,11 @@ export const useObjectsStore = defineStore('objects', {
   }),
   actions: {
     async load(table: string, endpoint: string, params?: Record<string, string | number>) {
-      const slot = (this.byTable[table] ??= { endpoint, items: [], count: 0, loading: false });
+      // NB: read the slot back through `this.byTable` so we mutate the *reactive*
+      // proxy, not the raw literal. `x ??= {…}` evaluates to the raw object, and
+      // mutating that bypasses Vue's reactivity (the view would stay stuck loading).
+      this.byTable[table] ??= { endpoint, items: [], count: 0, loading: false };
+      const slot = this.byTable[table]!;
       slot.endpoint = endpoint;
       slot.loading = true;
       try {

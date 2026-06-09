@@ -76,7 +76,7 @@ test('plugin loads and registers its migration once', async () => {
   );
   assert.deepEqual(
     rows.map((r) => r.version),
-    ['plugin:docker:0001_initial'],
+    ['plugin:docker:0001_initial', 'plugin:docker:0002_host_scope'],
   );
 });
 

@@ -368,3 +368,32 @@ CREATE TABLE IF NOT EXISTS plugin_docker_sysctl (
 `;
 
 export const INITIAL_MIGRATION: PluginMigration = { version: '0001_initial', sqlite, mariadb };
+
+// Tie a Docker host onto the core inventory: a docker engine runs on exactly one
+// machine, which is either a physical Device or a VirtualMachine (mutually exclusive,
+// both nullable). ON DELETE SET NULL — removing the inventory row orphans the host,
+// it doesn't cascade-delete the docker records.
+// dcim_device has a UUID string PK (TEXT / VARCHAR(36)); virtualization_virtual_machine
+// has an integer PK — the two scope columns must match their referenced id types.
+const scopeSqlite = `
+ALTER TABLE plugin_docker_host ADD COLUMN device_id TEXT REFERENCES dcim_device(id) ON DELETE SET NULL;
+ALTER TABLE plugin_docker_host ADD COLUMN virtual_machine_id INTEGER REFERENCES virtualization_virtual_machine(id) ON DELETE SET NULL
+`;
+
+const scopeMariadb = `
+ALTER TABLE plugin_docker_host
+  ADD COLUMN device_id VARCHAR(36) NULL,
+  ADD COLUMN virtual_machine_id BIGINT NULL;
+ALTER TABLE plugin_docker_host
+  ADD CONSTRAINT fk_docker_host_device FOREIGN KEY (device_id)
+    REFERENCES dcim_device(id) ON DELETE SET NULL;
+ALTER TABLE plugin_docker_host
+  ADD CONSTRAINT fk_docker_host_vm FOREIGN KEY (virtual_machine_id)
+    REFERENCES virtualization_virtual_machine(id) ON DELETE SET NULL
+`;
+
+export const HOST_SCOPE_MIGRATION: PluginMigration = {
+  version: '0002_host_scope',
+  sqlite: scopeSqlite,
+  mariadb: scopeMariadb,
+};

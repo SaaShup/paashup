@@ -10,6 +10,7 @@ import { authenticate, type AuthOptions } from '../auth.js';
 import { matchRoute, matchAsset, fireHooks } from '../plugins/runtime.js';
 import { attachRealtime, broadcast } from '../realtime.js';
 import { dispatchWebhooks } from '../webhooks.js';
+import '../journal.js'; // registers the journal-entries entity
 import { Serializer } from './serializer.js';
 import { buildOpenApi } from './openapi.js';
 
@@ -321,6 +322,46 @@ export function createApiServer(opts: ServerOptions): http.Server {
           const obj = await ser.object(route.table, created);
           emitChange(db, meta, 'created', createdId, obj);
           return send(res, 201, obj);
+        }
+        // NetBox-style bulk update: PATCH/PUT a list of objects (each carrying its id).
+        if (method === 'PATCH' || method === 'PUT') {
+          const body = await readBody(req);
+          if (!Array.isArray(body)) {
+            throw new ApiError(400, 'Bulk update expects a list of objects (each with an id).');
+          }
+          const byName = new Map(meta.columns.map((c) => [c.name, c]));
+          const updated = await db.transaction(async (tx) => {
+            const r = new Repository<Record<string, unknown>>(tx, meta);
+            const rows: Record<string, unknown>[] = [];
+            for (const item of body as Record<string, unknown>[]) {
+              const itemId = item[meta.pk];
+              if (itemId === undefined || itemId === null) {
+                throw new ApiError(400, `Each item must include "${meta.pk}".`);
+              }
+              // Lenient sync: keep only writable scalar columns; coerce an FK given as a
+              // nested object to its id, and drop anything that doesn't apply (clients
+              // like the Docker agent PATCH the full observed object, nested fields and all).
+              const data: Record<string, unknown> = {};
+              for (const [k, v] of Object.entries(item)) {
+                if (k === meta.pk) continue;
+                const col = byName.get(k);
+                if (!col || !col.writable) continue;
+                if (col.references && v && typeof v === 'object') {
+                  const fk = (v as { id?: unknown }).id;
+                  if (typeof fk === 'number') data[k] = fk;
+                  continue;
+                }
+                data[k] = v;
+              }
+              const row = await r.update(itemId as number | string, data);
+              if (row) rows.push(row);
+            }
+            return rows;
+          });
+          const out = await ser.objects(route.table, updated);
+          for (const o of out)
+            emitChange(db, meta, 'updated', (o as { id: number | string }).id, o);
+          return send(res, 200, out);
         }
         throw new ApiError(405, `Method ${method} not allowed`);
       }

@@ -10,10 +10,13 @@ export interface PluginMenuItem {
   label: string;
   url: string;
   icon?: string;
+  /** Sidebar placement (lower = earlier). Sorted alongside CRUD resources' order;
+   *  omit to fall after the section's resources (legacy behavior). */
+  order?: number;
 }
 
 interface UiManifest {
-  menu?: { label: string; url: string; icon?: string }[];
+  menu?: { label: string; url: string; icon?: string; order?: number }[];
 }
 
 /** Probe every loaded plugin (from the resource catalog) for a `…/ui/` menu manifest. */
@@ -29,7 +32,8 @@ export async function discoverPluginMenus(resources: Resource[]): Promise<Plugin
       try {
         const m = await api.get<UiManifest>(`/api/plugins/${name}/ui/`);
         for (const it of m.menu ?? []) {
-          if (it?.label && it?.url) out.push({ plugin: name, label: it.label, url: it.url, icon: it.icon });
+          if (it?.label && it?.url)
+            out.push({ plugin: name, label: it.label, url: it.url, icon: it.icon, order: it.order });
         }
       } catch {
         /* plugin has no /ui/ manifest */

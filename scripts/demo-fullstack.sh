@@ -11,11 +11,11 @@
 #   • "Room" and "Row" are two dcim/location levels (Row's parent = Room).
 #   • "Operating System" is a dcim/platform set on the device's `platform`.
 #   • The hosted app is a real ISManager object: an InformationSystem + Component +
-#     ComponentPort. ISManager's Component has no hard FK to a core Device, so the link
-#     is soft — the Component's service_ip matches the device and its description names
-#     the device (+ UUID). (ipam/services can't bind to a device here: services need an
-#     integer parent id but dcim/devices have UUID ids — which is also why device ids
-#     are quoted in the JSON below; every other entity here uses integer ids.)
+#     ComponentPort. The Component is HARD-linked to the core device via its `device`
+#     FK (ISManager migration 0002_component_host), so the device brief embeds in the
+#     component. (ipam/services can't bind to a device here: services need an integer
+#     parent id but dcim/devices have UUID ids — which is also why device ids are quoted
+#     in the JSON below; every other entity here uses integer ids.)
 #
 # Requires BOTH plugins loaded on the server, e.g.:
 #   PB_PLUGINS="./dist/plugins/docker/index.js,/abs/path/paas2box-ISManager-plugin/dist/index.js"
@@ -63,9 +63,10 @@ echo "    device=$DEV_BM (Ubuntu 22.04)"
 
 echo "==> [Path 1] hosted app as an ISManager InformationSystem / Component / Port"
 IS=$(post   "$API/plugins/ismanager/information-systems/" '{"name":"Billing App","slug":"billing-app","domain":"app.example.com","status":"active"}')
-COMP=$(post "$API/plugins/ismanager/components/" "{\"information_system\":$IS,\"name\":\"billing-web\",\"role\":\"app\",\"service_ip\":\"10.20.1.10\",\"status\":\"active\",\"description\":\"Runs on bare-metal device bm-app-01 ($DEV_BM)\"}")
+# Component HARD-linked to the bare-metal device via the `device` FK (UUID, quoted).
+COMP=$(post "$API/plugins/ismanager/components/" "{\"information_system\":$IS,\"name\":\"billing-web\",\"role\":\"app\",\"service_ip\":\"10.20.1.10\",\"status\":\"active\",\"device\":\"$DEV_BM\"}")
 CPORT=$(post "$API/plugins/ismanager/component-ports/" "{\"component\":$COMP,\"kind\":\"service\",\"name\":\"http\",\"port\":8080,\"protocol\":\"tcp\"}")
-echo "    information_system=$IS component=$COMP port=$CPORT (billing-web tcp/8080, soft-linked to bm-app-01 by ip 10.20.1.10)"
+echo "    information_system=$IS component=$COMP port=$CPORT (billing-web tcp/8080, hard-linked to device bm-app-01)"
 
 # ============================================================================
 # PATH 2 — app on a VM            (stub — to implement next)
@@ -84,7 +85,7 @@ EU-West (region $REGION)
          └─ Rack R1 (rack $RACK)
             └─ bm-app-01 (device $DEV_BM)  ·OS Ubuntu 22.04
                └─ billing-web  (ismanager component $COMP)  tcp/8080
-                  ·InformationSystem "Billing App" ($IS)  ·soft-linked by ip 10.20.1.10
+                  ·InformationSystem "Billing App" ($IS)  ·device FK → bm-app-01
 TREE
 echo
 echo "Browse:    $BASE/"

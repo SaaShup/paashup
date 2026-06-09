@@ -192,6 +192,26 @@ const hostMeta: TableMeta = {
       required: false,
       ...HOST_OPERATION,
     },
+    // The machine this docker engine runs on — a core Device or VirtualMachine
+    // (mutually exclusive). FK briefs resolve via the shared model registry.
+    {
+      name: 'device',
+      column: 'device_id',
+      tsKind: 'string', // dcim_device has a UUID string PK
+      nullable: true,
+      writable: true,
+      required: false,
+      references: 'Device',
+    },
+    {
+      name: 'virtual_machine',
+      column: 'virtual_machine_id',
+      tsKind: 'number',
+      nullable: true,
+      writable: true,
+      required: false,
+      references: 'VirtualMachine',
+    },
     ...NETBOX_COLS,
   ],
 };
@@ -641,6 +661,8 @@ export const BRIEF_FIELDS: Record<string, string[]> = {
     'agent_version',
     'docker_api_version',
     'operation',
+    'device',
+    'virtual_machine',
   ],
   [T.image]: ['id', 'url', 'display', 'name', 'version', 'size', 'ImageID', 'Digest'],
   [T.volume]: ['id', 'url', 'display', 'name', 'max_size', 'driver'],

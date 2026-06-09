@@ -11,11 +11,11 @@
 #   • "Room" and "Row" are two dcim/location levels (Row's parent = Room).
 #   • "Operating System" is a dcim/platform set on the device's `platform`.
 #   • The hosted app is a real ISManager object: an InformationSystem + Component +
-#     ComponentPort. The Component is HARD-linked to the core device via its `device`
-#     FK (ISManager migration 0002_component_host), so the device brief embeds in the
-#     component. (ipam/services can't bind to a device here: services need an integer
-#     parent id but dcim/devices have UUID ids — which is also why device ids are quoted
-#     in the JSON below; every other entity here uses integer ids.)
+#     ComponentPort. The Component is DEPLOYED on the core device via its `device` FK
+#     and carries NO service_ip — the firewall/DNS IP is DERIVED from the device's
+#     primary_ip4 (ISManager: a component must sit on a Device, VM or Container; its IP
+#     comes from that host; an explicit service_ip, if set, overrides). (Device ids are
+#     quoted in the JSON below because dcim/devices have UUID ids; everything else is int.)
 #
 # Requires BOTH plugins loaded on the server, e.g.:
 #   PB_PLUGINS="./dist/plugins/docker/index.js,/abs/path/paas2box-ISManager-plugin/dist/index.js"
@@ -57,16 +57,20 @@ echo "    mfr=$MFR type=$DTYPE role=$ROLE os(ubuntu)=$OS_UBUNTU"
 # PATH 1 — bare-metal app:  Device → OS(Ubuntu) → hosted app "billing-web" (tcp/8080)
 # Device ids are UUID strings, so $DEV_BM is quoted everywhere it appears in JSON.
 # ============================================================================
-echo "==> [Path 1] bare-metal device + OS"
-DEV_BM=$(post "$API/dcim/devices/" "{\"name\":\"bm-app-01\",\"device_type\":$DTYPE,\"role\":$ROLE,\"site\":$SITE,\"location\":$ROW,\"rack\":$RACK,\"position\":1,\"face\":\"front\",\"platform\":$OS_UBUNTU,\"status\":\"active\",\"comments\":\"Hosts ISManager component billing-web (tcp/8080) @ 10.20.1.10\"}")
-echo "    device=$DEV_BM (Ubuntu 22.04)"
+echo "==> [Path 1] bare-metal device + OS + its primary IP"
+DEV_BM=$(post "$API/dcim/devices/" "{\"name\":\"bm-app-01\",\"device_type\":$DTYPE,\"role\":$ROLE,\"site\":$SITE,\"location\":$ROW,\"rack\":$RACK,\"position\":1,\"face\":\"front\",\"platform\":$OS_UBUNTU,\"status\":\"active\"}")
+# The device carries the IP (NetBox IPAM); the component inherits it. Set it as primary_ip4.
+DEV_IP=$(post "$API/ipam/ip-addresses/" '{"address":"10.20.1.10/24","status":"active","dns_name":"bm-app-01.app.example.com"}')
+curl -s -X PATCH "$API/dcim/devices/$DEV_BM/" -H 'Content-Type: application/json' -d "{\"primary_ip4\":$DEV_IP}" >/dev/null
+echo "    device=$DEV_BM (Ubuntu 22.04)  primary_ip4=10.20.1.10"
 
 echo "==> [Path 1] hosted app as an ISManager InformationSystem / Component / Port"
 IS=$(post   "$API/plugins/ismanager/information-systems/" '{"name":"Billing App","slug":"billing-app","domain":"app.example.com","status":"active"}')
-# Component HARD-linked to the bare-metal device via the `device` FK (UUID, quoted).
-COMP=$(post "$API/plugins/ismanager/components/" "{\"information_system\":$IS,\"name\":\"billing-web\",\"role\":\"app\",\"service_ip\":\"10.20.1.10\",\"status\":\"active\",\"device\":\"$DEV_BM\"}")
+# Component DEPLOYED on the device (device FK, UUID quoted) and carrying NO service_ip —
+# the firewall/DNS IP is DERIVED from the device's primary_ip4 (10.20.1.10).
+COMP=$(post "$API/plugins/ismanager/components/" "{\"information_system\":$IS,\"name\":\"billing-web\",\"role\":\"app\",\"status\":\"active\",\"device\":\"$DEV_BM\"}")
 CPORT=$(post "$API/plugins/ismanager/component-ports/" "{\"component\":$COMP,\"kind\":\"service\",\"name\":\"http\",\"port\":8080,\"protocol\":\"tcp\"}")
-echo "    information_system=$IS component=$COMP port=$CPORT (billing-web tcp/8080, hard-linked to device bm-app-01)"
+echo "    information_system=$IS component=$COMP port=$CPORT (billing-web tcp/8080, no service_ip — IP derived from device)"
 
 # ============================================================================
 # PATH 2 — app on a VM            (stub — to implement next)
@@ -83,9 +87,9 @@ EU-West (region $REGION)
    └─ Room A (location $ROOM)
       └─ Row 1 (location $ROW)
          └─ Rack R1 (rack $RACK)
-            └─ bm-app-01 (device $DEV_BM)  ·OS Ubuntu 22.04
+            └─ bm-app-01 (device $DEV_BM)  ·OS Ubuntu 22.04  ·primary_ip4 10.20.1.10
                └─ billing-web  (ismanager component $COMP)  tcp/8080
-                  ·InformationSystem "Billing App" ($IS)  ·device FK → bm-app-01
+                  ·InformationSystem "Billing App" ($IS)  ·deployed on bm-app-01  ·IP derived → 10.20.1.10
 TREE
 echo
 echo "Browse:    $BASE/"

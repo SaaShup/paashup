@@ -105,6 +105,15 @@ before(async () => {
     events: ['created'],
     body_template: '{"user":"{{ username }}","rid":"{{ request_id }}","slug":"{{ data.slug }}"}',
   });
+  // 5) filters (urlencode/lower/upper) + snapshots.postchange
+  await api('POST', '/api/extras/webhooks/', {
+    name: 'filter-tmpl',
+    payload_url: `${recvBase}/f?name={{ data.name | urlencode }}`,
+    object_types: ['dcim.manufacturer'],
+    events: ['created'],
+    additional_headers: 'X-Lower: {{ data.name | lower }}\nX-Upper: {{ data.name | upper }}',
+    body_template: '{"post":"{{ snapshots.postchange.slug }}","slug":"{{ data.slug }}"}',
+  });
 });
 
 after(async () => {
@@ -162,4 +171,19 @@ test('username and request_id come from the triggering request', async () => {
   const hit = await waitFor((r) => r.url === '/auth' && r.json?.slug === 'auth-co', 'auth-tmpl');
   assert.equal(hit.json.user, 'wally');
   assert.match(hit.json.rid, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+});
+
+test('filters (urlencode/lower/upper) and snapshots.postchange render', async () => {
+  await api('POST', '/api/dcim/manufacturers/', { name: 'Filter Co', slug: 'filter-co' });
+  const hit = await waitFor(
+    (r) => r.url.startsWith('/f?') && r.json?.slug === 'filter-co',
+    'filter',
+  );
+  // urlencode: "Filter Co" -> "Filter%20Co" in the URL
+  assert.equal(hit.url, '/f?name=Filter%20Co');
+  // lower / upper in headers
+  assert.equal(hit.headers['x-lower'], 'filter co');
+  assert.equal(hit.headers['x-upper'], 'FILTER CO');
+  // postchange snapshot (the object after the change)
+  assert.equal(hit.json.post, 'filter-co');
 });

@@ -35,6 +35,46 @@ object type, including those added by plugins.
 }
 ```
 
+### Authenticating to the target
+
+If the receiving service is protected, send a credential one of three ways:
+
+**1. Custom headers — `additional_headers`** (one `Header: Value` per line). The most
+flexible option: bearer tokens, API keys, Basic auth, etc.
+
+```jsonc
+// in JSON, separate lines with \n
+"additional_headers": "Authorization: Bearer eyJhbGci...\nX-Api-Key: key-987"
+```
+
+```text
+Authorization: Basic dXNlcjpwYXNzd29yZA==   (base64 of "user:password")
+```
+
+**2. Credentials in the URL — `http://user:password@host`.** paas2box turns the
+`user:password@` part into a `Basic` `Authorization` header automatically and fetches
+the cleaned URL (a bare `fetch` rejects URLs that embed credentials). Percent-encoded
+userinfo is decoded (`p%40ss` → `p@ss`).
+
+```jsonc
+"payload_url": "https://alice:s3cr3t@hooks.example.com/in"
+// sent as:  POST https://hooks.example.com/in   with  Authorization: Basic YWxpY2U6czNjcjN0
+```
+
+**3. A token in the query string.** Anything in `payload_url` is sent verbatim:
+
+```jsonc
+"payload_url": "https://hooks.example.com/in?token=abc123"
+```
+
+Notes:
+
+- An explicit `Authorization` in `additional_headers` **takes precedence** over
+  credentials embedded in the URL.
+- A password embedded in the URL is **redacted** (`user:***@host`) in the delivery log
+  and error logs, so it isn't exposed via the read-only deliveries API. Values in
+  `additional_headers` are stored as configured — treat the webhook as sensitive.
+
 ### Signing (verify it really came from paas2box)
 
 If a `secret` is set, paas2box adds an `X-Hook-Signature` header — the **HMAC-SHA512**

@@ -31,6 +31,15 @@ function compile(route: PluginRoute): CompiledRoute {
   return { method: route.method, regex: new RegExp(`^${pattern}$`), params, route };
 }
 
+/**
+ * Register a core (non-plugin) custom route. Matched by `matchRoute` ahead of the
+ * generic CRUD resolver, so core features (e.g. config-context rendering) can mount
+ * action endpoints. Called as an import side effect, like `registerEntity`.
+ */
+export function registerRoute(route: PluginRoute): void {
+  routes.push(compile(route));
+}
+
 /** Split simple DDL into individual statements (no procedures in plugin DDL). */
 function statements(sql: string): string[] {
   return sql

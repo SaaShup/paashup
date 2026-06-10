@@ -354,8 +354,41 @@ interface DeliveryResult {
   error: string;
 }
 
+/**
+ * Support credentials embedded in the payload URL (http://user:pass@host). Node's
+ * fetch() rejects URLs that include userinfo, so we move them into a Basic auth
+ * header and return the cleaned URL. `redacted` masks the password for logs.
+ */
+function splitCredentials(rawUrl: string): {
+  url: string;
+  authHeader?: string;
+  redacted: string;
+} {
+  try {
+    const u = new URL(rawUrl);
+    if (!u.username && !u.password) return { url: rawUrl, redacted: rawUrl };
+    const user = decodeURIComponent(u.username);
+    const pass = decodeURIComponent(u.password);
+    u.username = '';
+    u.password = '';
+    const url = u.toString();
+    return {
+      url,
+      authHeader: `Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}`,
+      redacted: `${u.protocol}//${user}:***@${u.host}${u.pathname}${u.search}`,
+    };
+  } catch {
+    return { url: rawUrl, redacted: rawUrl }; // not parseable — let fetch surface it
+  }
+}
+
 async function deliver(wh: Webhook, body: string): Promise<DeliveryResult> {
+  const { url: targetUrl, authHeader } = splitCredentials(wh.url);
   const headers: Record<string, string> = { 'Content-Type': wh.contentType, ...wh.headers };
+  // URL-embedded credentials become Basic auth, unless an explicit Authorization is set.
+  if (authHeader && !Object.keys(headers).some((k) => k.toLowerCase() === 'authorization')) {
+    headers['Authorization'] = authHeader;
+  }
   if (wh.secret) {
     headers['X-Hook-Signature'] = createHmac('sha512', wh.secret).update(body).digest('hex');
   }
@@ -377,7 +410,7 @@ async function deliver(wh: Webhook, body: string): Promise<DeliveryResult> {
   let error = '';
   for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
     try {
-      const res = await fetch(wh.url, { ...opts, signal: AbortSignal.timeout(8000) });
+      const res = await fetch(targetUrl, { ...opts, signal: AbortSignal.timeout(8000) });
       status = res.status;
       if (res.ok) return { success: true, status, attempts: attempt, error: '' };
       error = `HTTP ${res.status}`;
@@ -425,7 +458,8 @@ export async function dispatchWebhooks(
     targets.map(async (wh) => {
       const r = await deliver(wh, payload);
       if (!r.success) {
-        console.error(`[webhook] "${wh.name}" -> ${wh.url} failed after ${r.attempts}: ${r.error}`);
+        const where = splitCredentials(wh.url).redacted;
+        console.error(`[webhook] "${wh.name}" -> ${where} failed after ${r.attempts}: ${r.error}`);
       }
       await logDelivery(db, wh, meta, event, id, r);
     }),
@@ -450,7 +484,7 @@ async function logDelivery(
         event,
         meta.objectType,
         id,
-        wh.url,
+        splitCredentials(wh.url).redacted, // never store the password in the delivery log
         r.success ? 1 : 0,
         r.status,
         r.attempts,

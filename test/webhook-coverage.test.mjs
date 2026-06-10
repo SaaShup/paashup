@@ -155,7 +155,6 @@ test('a change on every writable core object type fires a webhook', async () => 
     misses = missesNow();
   }
 
-  // eslint-disable-next-line no-console
   console.log(
     `webhook coverage: ${created.length} object types created ` +
       `(all ${core.length} core writable + prereqs), ${skipped.length} skipped, ` +

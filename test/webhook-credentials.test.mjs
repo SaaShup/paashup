@@ -75,6 +75,14 @@ before(async () => {
     events: ['created'],
     additional_headers: 'Authorization: Bearer my-bearer-token\nX-Api-Key: key-987',
   });
+  // 3) HTTP basic-auth credentials embedded in the URL (http://user:pass@host)
+  const hostPort = recvBase.replace('http://', '');
+  await api('POST', '/api/extras/webhooks/', {
+    name: 'cred-url',
+    payload_url: `http://alice:s3cr3t@${hostPort}/u`,
+    object_types: ['dcim.manufacturer'],
+    events: ['created'],
+  });
 });
 
 after(async () => {
@@ -101,4 +109,22 @@ test('additional_headers credential is sent as a request header', async () => {
   );
   assert.equal(hit.headers['authorization'], 'Bearer my-bearer-token');
   assert.equal(hit.headers['x-api-key'], 'key-987');
+});
+
+test('URL-embedded user:password becomes a Basic Authorization header', async () => {
+  await api('POST', '/api/dcim/manufacturers/', { name: 'UCorp', slug: 'ucorp' });
+  const hit = await waitFor(
+    (r) => r.url === '/u' && r.json?.data?.slug === 'ucorp',
+    'url-credentials delivery',
+  );
+  // http://alice:s3cr3t@host  ->  Authorization: Basic base64("alice:s3cr3t")
+  const expected = `Basic ${Buffer.from('alice:s3cr3t').toString('base64')}`;
+  assert.equal(hit.headers['authorization'], expected);
+
+  // and the password is NOT exposed in the read-only delivery log (it's redacted)
+  const log = await api('GET', '/api/extras/webhook-deliveries/?ordering=-id&limit=20');
+  const rec = log.body.results.find((d) => d.webhook_name === 'cred-url');
+  assert.ok(rec, 'cred-url delivery logged');
+  assert.ok(!rec.payload_url.includes('s3cr3t'), `password leaked in log: ${rec.payload_url}`);
+  assert.match(rec.payload_url, /alice:\*\*\*@/);
 });

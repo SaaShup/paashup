@@ -43,6 +43,7 @@ before(async () => {
   db.exec(
     readFileSync(join(ROOT, 'migrations', '0004_webhook_conditions_delivery.sqlite.sql'), 'utf8'),
   );
+  db.exec(readFileSync(join(ROOT, 'migrations', '0010_webhook_template.sqlite.sql'), 'utf8'));
 
   recv = http.createServer((req, res) => {
     let raw = '';

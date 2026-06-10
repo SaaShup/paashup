@@ -139,6 +139,7 @@ if (!ENABLED) {
     db.exec(
       readFileSync(join(ROOT, 'migrations', '0004_webhook_conditions_delivery.sqlite.sql'), 'utf8'),
     );
+    db.exec(readFileSync(join(ROOT, 'migrations', '0010_webhook_template.sqlite.sql'), 'utf8'));
     await loadPlugins(db, [dockerPlugin]);
     server = createApiServer({ db });
     await new Promise((r) => server.listen(0, '127.0.0.1', r));

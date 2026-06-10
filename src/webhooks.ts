@@ -98,6 +98,14 @@ const webhookMeta: TableMeta = {
       required: false,
     },
     {
+      name: 'body_template',
+      column: 'body_template',
+      tsKind: 'string',
+      nullable: true,
+      writable: true,
+      required: false,
+    },
+    {
       name: 'secret',
       column: 'secret',
       tsKind: 'string',
@@ -198,6 +206,7 @@ interface WebhookRow {
   http_method: string | null;
   http_content_type: string | null;
   additional_headers: string | null;
+  body_template: string | null;
   secret: string | null;
   ssl_verification: number | boolean;
 }
@@ -211,8 +220,16 @@ interface Webhook {
   method: string;
   contentType: string;
   headers: Record<string, string>;
+  bodyTemplate: string; // Jinja-style template; empty = default JSON payload
   secret: string;
   sslVerify: boolean;
+}
+
+/** Context for the webhook rendering/dispatch, threaded from the request handler. */
+export interface WebhookEventContext {
+  username?: string | null;
+  requestId?: string | null;
+  snapshots?: { prechange: unknown; postchange: unknown } | null;
 }
 
 let cache: Webhook[] | null = null;
@@ -253,27 +270,34 @@ function parseJson(v: unknown): unknown {
 }
 
 async function loadCache(db: Db): Promise<Webhook[]> {
+  const base = `name, object_types, events, conditions, payload_url, http_method,
+                http_content_type, additional_headers, secret, ssl_verification`;
+  let rows: WebhookRow[];
   try {
-    const rows = await db.query<WebhookRow>(
-      `SELECT name, object_types, events, conditions, payload_url, http_method, http_content_type,
-              additional_headers, secret, ssl_verification
-         FROM ${WEBHOOK_TABLE} WHERE enabled = 1`,
+    // body_template arrives in migration 0010; degrade gracefully on older DBs.
+    rows = await db.query<WebhookRow>(
+      `SELECT ${base}, body_template FROM ${WEBHOOK_TABLE} WHERE enabled = 1`,
     );
-    return rows.map((r) => ({
-      name: r.name,
-      objectTypes: parseList(r.object_types),
-      events: parseList(r.events),
-      conditions: parseJson(r.conditions),
-      url: r.payload_url,
-      method: r.http_method || 'POST',
-      contentType: r.http_content_type || 'application/json',
-      headers: parseHeaders(r.additional_headers),
-      secret: r.secret || '',
-      sslVerify: r.ssl_verification !== 0 && r.ssl_verification !== false,
-    }));
   } catch {
-    return []; // table not present (e.g. migration not applied) → no webhooks
+    try {
+      rows = await db.query<WebhookRow>(`SELECT ${base} FROM ${WEBHOOK_TABLE} WHERE enabled = 1`);
+    } catch {
+      return []; // table not present (e.g. migration not applied) → no webhooks
+    }
   }
+  return rows.map((r) => ({
+    name: r.name,
+    objectTypes: parseList(r.object_types),
+    events: parseList(r.events),
+    conditions: parseJson(r.conditions),
+    url: r.payload_url,
+    method: r.http_method || 'POST',
+    contentType: r.http_content_type || 'application/json',
+    headers: parseHeaders(r.additional_headers),
+    bodyTemplate: r.body_template || '',
+    secret: r.secret || '',
+    sslVerify: r.ssl_verification !== 0 && r.ssl_verification !== false,
+  }));
 }
 
 /** Resolve a dotted path; for choice fields ({value,label}) `status` ⇒ status.value. */
@@ -352,6 +376,43 @@ interface DeliveryResult {
   status: number | null;
   attempts: number;
   error: string;
+  redacted: string; // the (rendered) target URL with any password masked, for logs
+}
+
+// ---- Jinja-style templating (a documented subset) -----------------------------
+// payload_url, additional_headers and body_template are rendered with the event
+// context: {{ event }} {{ model }} {{ timestamp }} {{ username }} {{ request_id }}
+// {{ data.* }} {{ snapshots.prechange.* }} {{ snapshots.postchange.* }} — dotted
+// paths with optional filters: | default('x') | urlencode | lower | upper.
+
+function applyFilter(v: unknown, filter: string): unknown {
+  const m = /^(\w+)\s*(?:\(\s*(['"]?)(.*?)\2\s*\))?$/.exec(filter);
+  if (!m) return v;
+  const arg = m[3];
+  switch (m[1]) {
+    case 'default':
+      return v === undefined || v === null || v === '' ? (arg ?? '') : v;
+    case 'urlencode':
+      return v == null ? v : encodeURIComponent(String(v));
+    case 'lower':
+      return v == null ? v : String(v).toLowerCase();
+    case 'upper':
+      return v == null ? v : String(v).toUpperCase();
+    default:
+      return v;
+  }
+}
+
+/** Render `{{ path | filter… }}` placeholders against the context (undefined → ''). */
+export function renderTemplate(tpl: string, ctx: Record<string, unknown>): string {
+  if (!tpl || !tpl.includes('{{')) return tpl;
+  return tpl.replace(/\{\{(.*?)\}\}/g, (_, expr: string) => {
+    const parts = expr.split('|').map((s) => s.trim());
+    let v = resolvePath(ctx, parts[0]!);
+    for (let i = 1; i < parts.length; i++) v = applyFilter(v, parts[i]!);
+    if (v === undefined || v === null) return '';
+    return typeof v === 'object' ? JSON.stringify(v) : String(v);
+  });
 }
 
 /**
@@ -382,9 +443,15 @@ function splitCredentials(rawUrl: string): {
   }
 }
 
-async function deliver(wh: Webhook, body: string): Promise<DeliveryResult> {
-  const { url: targetUrl, authHeader } = splitCredentials(wh.url);
-  const headers: Record<string, string> = { 'Content-Type': wh.contentType, ...wh.headers };
+async function deliver(
+  wh: Webhook,
+  body: string,
+  ctx: Record<string, unknown>,
+): Promise<DeliveryResult> {
+  // Render the URL and header values with the event context (NetBox-style templating).
+  const { url: targetUrl, authHeader, redacted } = splitCredentials(renderTemplate(wh.url, ctx));
+  const headers: Record<string, string> = { 'Content-Type': wh.contentType };
+  for (const [k, v] of Object.entries(wh.headers)) headers[k] = renderTemplate(v, ctx);
   // URL-embedded credentials become Basic auth, unless an explicit Authorization is set.
   if (authHeader && !Object.keys(headers).some((k) => k.toLowerCase() === 'authorization')) {
     headers['Authorization'] = authHeader;
@@ -412,7 +479,7 @@ async function deliver(wh: Webhook, body: string): Promise<DeliveryResult> {
     try {
       const res = await fetch(targetUrl, { ...opts, signal: AbortSignal.timeout(8000) });
       status = res.status;
-      if (res.ok) return { success: true, status, attempts: attempt, error: '' };
+      if (res.ok) return { success: true, status, attempts: attempt, error: '', redacted };
       error = `HTTP ${res.status}`;
     } catch (e) {
       status = null;
@@ -420,7 +487,7 @@ async function deliver(wh: Webhook, body: string): Promise<DeliveryResult> {
     }
     if (attempt < MAX_TRIES) await sleep(BACKOFF_MS * 2 ** (attempt - 1)); // exp. backoff
   }
-  return { success: false, status, attempts: MAX_TRIES, error };
+  return { success: false, status, attempts: MAX_TRIES, error, redacted };
 }
 
 /**
@@ -434,6 +501,7 @@ export async function dispatchWebhooks(
   event: 'created' | 'updated' | 'deleted',
   id: number | string,
   data?: unknown,
+  ctx?: WebhookEventContext,
 ): Promise<void> {
   if (meta.table === WEBHOOK_TABLE) cache = null; // config changed → reload next time
   if (meta.table === DELIVERY_TABLE) return; // never recurse on the log itself
@@ -446,9 +514,21 @@ export async function dispatchWebhooks(
   );
   if (!targets.length) return;
 
-  const payload = JSON.stringify({
+  const timestamp = new Date().toISOString();
+  // Template/render context (NetBox-compatible keys).
+  const tctx: Record<string, unknown> = {
     event,
-    timestamp: new Date().toISOString(),
+    model: meta.objectType,
+    timestamp,
+    username: ctx?.username ?? null,
+    request_id: ctx?.requestId ?? null,
+    data: data ?? null,
+    snapshots: ctx?.snapshots ?? { prechange: null, postchange: data ?? null },
+  };
+  // Default JSON payload (used when no body_template is configured).
+  const defaultPayload = JSON.stringify({
+    event,
+    timestamp,
     model: meta.objectType,
     object_id: id,
     data: data ?? null,
@@ -456,10 +536,12 @@ export async function dispatchWebhooks(
 
   await Promise.all(
     targets.map(async (wh) => {
-      const r = await deliver(wh, payload);
+      const body = wh.bodyTemplate ? renderTemplate(wh.bodyTemplate, tctx) : defaultPayload;
+      const r = await deliver(wh, body, tctx);
       if (!r.success) {
-        const where = splitCredentials(wh.url).redacted;
-        console.error(`[webhook] "${wh.name}" -> ${where} failed after ${r.attempts}: ${r.error}`);
+        console.error(
+          `[webhook] "${wh.name}" -> ${r.redacted} failed after ${r.attempts}: ${r.error}`,
+        );
       }
       await logDelivery(db, wh, meta, event, id, r);
     }),
@@ -484,7 +566,7 @@ async function logDelivery(
         event,
         meta.objectType,
         id,
-        splitCredentials(wh.url).redacted, // never store the password in the delivery log
+        r.redacted, // the rendered target URL, password masked — never log the secret
         r.success ? 1 : 0,
         r.status,
         r.attempts,

@@ -83,6 +83,7 @@ before(async () => {
   db.exec(
     readFileSync(join(ROOT, 'migrations', '0004_webhook_conditions_delivery.sqlite.sql'), 'utf8'),
   );
+  db.exec(readFileSync(join(ROOT, 'migrations', '0010_webhook_template.sqlite.sql'), 'utf8'));
   await loadPlugins(db, [demoPlugin]);
 
   // webhook receiver: records each request by URL path. /flaky fails the first hit.

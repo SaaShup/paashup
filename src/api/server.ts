@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { extname, resolve as resolvePath } from 'node:path';
 import type { Db } from '../db/types.js';
@@ -9,7 +10,7 @@ import { ApiError, ValidationError } from '../errors.js';
 import { authenticate, type AuthOptions } from '../auth.js';
 import { matchRoute, matchAsset, fireHooks } from '../plugins/runtime.js';
 import { attachRealtime, broadcast } from '../realtime.js';
-import { dispatchWebhooks } from '../webhooks.js';
+import { dispatchWebhooks, type WebhookEventContext } from '../webhooks.js';
 import '../journal.js'; // registers the journal-entries entity
 import '../configcontext.js'; // registers config-contexts entity + the /render/ route
 import { Serializer } from './serializer.js';
@@ -121,9 +122,10 @@ function emitChange(
   event: 'created' | 'updated' | 'deleted',
   id: number | string,
   data?: unknown,
+  ctx?: WebhookEventContext,
 ): void {
   broadcast({ type: 'change', event, object_type: meta.objectType, table: meta.table, id, data });
-  void dispatchWebhooks(db, meta, event, id, data); // fire-and-forget HTTP webhooks
+  void dispatchWebhooks(db, meta, event, id, data, ctx); // fire-and-forget HTTP webhooks
 }
 
 function resolve(pathname: string, collections: Map<string, string>): Route | null {
@@ -277,6 +279,26 @@ export function createApiServer(opts: ServerOptions): http.Server {
       const repo = new Repository<Record<string, unknown>>(db, meta);
       const ser = new Serializer(db, baseUrl);
 
+      // Webhook template/event context: who + which request triggered this change.
+      const requestId = randomUUID();
+      let username: string | null = null;
+      if (auth) {
+        try {
+          const u = await db.get<{ username: string }>(
+            'SELECT username FROM users_user WHERE id = ?',
+            [auth.userId],
+          );
+          username = u?.username ?? null;
+        } catch {
+          /* users table absent or unreadable → leave username null */
+        }
+      }
+      const evt = (snapshots: WebhookEventContext['snapshots']): WebhookEventContext => ({
+        username,
+        requestId,
+        snapshots,
+      });
+
       if (route.id === undefined) {
         // ---- collection ----
         if (method === 'GET') {
@@ -314,14 +336,23 @@ export function createApiServer(opts: ServerOptions): http.Server {
             });
             const out = await ser.objects(route.table, created as Record<string, unknown>[]);
             for (const o of out)
-              emitChange(db, meta, 'created', (o as { id: number | string }).id, o);
+              emitChange(db, meta, 'created', (o as { id: number | string }).id, o, {
+                ...evt({ prechange: null, postchange: o }),
+              });
             return send(res, 201, out);
           }
           const created = await repo.create(body as Record<string, unknown>);
           const createdId = (created as { id: number | string }).id;
           await fireHooks(db, route.table, 'created', createdId, created);
           const obj = await ser.object(route.table, created);
-          emitChange(db, meta, 'created', createdId, obj);
+          emitChange(
+            db,
+            meta,
+            'created',
+            createdId,
+            obj,
+            evt({ prechange: null, postchange: obj }),
+          );
           return send(res, 201, obj);
         }
         // NetBox-style bulk update: PATCH/PUT a list of objects (each carrying its id).
@@ -361,7 +392,9 @@ export function createApiServer(opts: ServerOptions): http.Server {
           });
           const out = await ser.objects(route.table, updated);
           for (const o of out)
-            emitChange(db, meta, 'updated', (o as { id: number | string }).id, o);
+            emitChange(db, meta, 'updated', (o as { id: number | string }).id, o, {
+              ...evt({ prechange: null, postchange: o }),
+            });
           return send(res, 200, out);
         }
         throw new ApiError(405, `Method ${method} not allowed`);
@@ -377,18 +410,23 @@ export function createApiServer(opts: ServerOptions): http.Server {
       }
       if (method === 'PUT' || method === 'PATCH') {
         const body = await readBody(req);
+        // snapshot the object before the change (for {{ snapshots.prechange.* }})
+        const before = await repo.retrieve(rid);
+        const prechange = before ? await ser.object(route.table, before) : null;
         const updated = await repo.update(rid, body as Record<string, unknown>);
         if (!updated) throw new ApiError(404, 'Not found');
         await fireHooks(db, route.table, 'updated', rid, updated);
         const obj = await ser.object(route.table, updated);
-        emitChange(db, meta, 'updated', rid, obj);
+        emitChange(db, meta, 'updated', rid, obj, evt({ prechange, postchange: obj }));
         return send(res, 200, obj);
       }
       if (method === 'DELETE') {
+        const before = await repo.retrieve(rid);
+        const prechange = before ? await ser.object(route.table, before) : null;
         const ok = await repo.destroy(rid);
         if (!ok) throw new ApiError(404, 'Not found');
         await fireHooks(db, route.table, 'deleted', rid);
-        emitChange(db, meta, 'deleted', rid);
+        emitChange(db, meta, 'deleted', rid, undefined, evt({ prechange, postchange: null }));
         return send(res, 204);
       }
       throw new ApiError(405, `Method ${method} not allowed`);

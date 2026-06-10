@@ -27,6 +27,7 @@ const MIGRATIONS = [
   '0004_webhook_conditions_delivery',
   '0008_journalentry',
   '0009_configcontext',
+  '0010_webhook_template',
 ];
 
 let db, server, base, recv, recvBase;

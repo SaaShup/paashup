@@ -18,7 +18,8 @@ object type, including those added by plugins.
 | `events` | any of `created`, `updated`, `deleted` |
 | `enabled` | turn it on/off |
 | `http_method` / `http_content_type` | defaults: `POST` / `application/json` |
-| `additional_headers` | extra headers, one `Key: Value` per line |
+| `additional_headers` | extra headers, one `Key: Value` per line (templated) |
+| `body_template` | optional template for the request body; empty = default JSON payload |
 | `secret` | if set, the body is signed (see below) |
 | `conditions` | only fire when the object matches (see below) |
 | `ssl_verification` | verify TLS on the target (default on) |
@@ -34,6 +35,42 @@ object type, including those added by plugins.
   "data": { … the full object … }
 }
 ```
+
+### Templating (Jinja-style)
+
+The `payload_url`, every `additional_headers` value, and the optional `body_template`
+are rendered at fire time with a context built from the triggering event — the same
+idea as NetBox. Use `{{ … }}` placeholders:
+
+| Variable | Value |
+|---|---|
+| `event` | `created`, `updated`, or `deleted` |
+| `model` | the object's type, e.g. `dcim.device` |
+| `timestamp` | when the event was processed (ISO 8601) |
+| `username` | the user whose request triggered it (or empty if unauthenticated) |
+| `request_id` | unique id of the HTTP request (correlate multiple objects changed together) |
+| `data.*` | the full serialized object — any API field, incl. nested relations: `{{ data.site.slug }}`, `{{ data.custom_fields.x }}` |
+| `snapshots.prechange.*` / `snapshots.postchange.*` | the object before/after the change (compare values) |
+
+On `deleted`, `data` is null and the object is under `snapshots.prechange`; on
+`created`, `snapshots.prechange` is null.
+
+A per-object endpoint:
+
+```jsonc
+"payload_url": "https://automation.example.com/api/devices/{{ data.name }}/sync?site={{ data.site.slug }}"
+```
+
+A custom body (kept as configured; `http_content_type` is sent as-is):
+
+```jsonc
+"body_template": "{\"host\":\"{{ data.name }}\",\"was\":\"{{ snapshots.prechange.status }}\",\"now\":\"{{ data.status }}\"}"
+```
+
+Supported filters: `{{ x | default('n/a') }}`, `urlencode`, `lower`, `upper`. A missing
+value renders as an empty string. (This is a pragmatic subset of Jinja2 — dotted-path
+lookups plus those filters — not the full language.) Leave a field static and put the
+variable parts elsewhere if your receiver prefers that.
 
 ### Authenticating to the target
 

@@ -77,11 +77,14 @@ test('rendered context deep-merges applicable contexts by (weight, name)', async
   ).body;
   const mfr = (await api('POST', '/api/dcim/manufacturers/', { name: 'CC-M', slug: 'cc-m' })).body;
   const dtype = (
-    await api('POST', '/api/dcim/device-types/', { manufacturer: mfr.id, model: 'CC-T', slug: 'cc-t' })
+    await api('POST', '/api/dcim/device-types/', {
+      manufacturer: mfr.id,
+      model: 'CC-T',
+      slug: 'cc-t',
+    })
   ).body;
-  const role = (
-    await api('POST', '/api/dcim/device-roles/', { name: 'CC-Role', slug: 'cc-role' })
-  ).body;
+  const role = (await api('POST', '/api/dcim/device-roles/', { name: 'CC-Role', slug: 'cc-role' }))
+    .body;
   const dev = (
     await api('POST', '/api/dcim/devices/', {
       name: 'cc-dev',
@@ -138,11 +141,17 @@ test('role criterion scopes a context to matching devices only', async () => {
   const site = (
     await api('POST', '/api/dcim/sites/', { name: 'CC-S2', slug: 'cc-s2', status: 'active' })
   ).body;
-  const mfr = (await api('POST', '/api/dcim/manufacturers/', { name: 'CC-M2', slug: 'cc-m2' })).body;
+  const mfr = (await api('POST', '/api/dcim/manufacturers/', { name: 'CC-M2', slug: 'cc-m2' }))
+    .body;
   const dtype = (
-    await api('POST', '/api/dcim/device-types/', { manufacturer: mfr.id, model: 'CC-T2', slug: 'cc-t2' })
+    await api('POST', '/api/dcim/device-types/', {
+      manufacturer: mfr.id,
+      model: 'CC-T2',
+      slug: 'cc-t2',
+    })
   ).body;
-  const role = (await api('POST', '/api/dcim/device-roles/', { name: 'CC-R2', slug: 'cc-r2' })).body;
+  const role = (await api('POST', '/api/dcim/device-roles/', { name: 'CC-R2', slug: 'cc-r2' }))
+    .body;
   const dev = (
     await api('POST', '/api/dcim/devices/', {
       name: 'cc-dev2',
@@ -160,7 +169,10 @@ test('role criterion scopes a context to matching devices only', async () => {
   });
   const r = await api('GET', `/api/extras/config-contexts/render/?device=${dev.id}`);
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.ok(!r.body.applied.some((a) => a.name === 'role-only'), 'role-scoped context wrongly applied');
+  assert.ok(
+    !r.body.applied.some((a) => a.name === 'role-only'),
+    'role-scoped context wrongly applied',
+  );
 });
 
 test('render requires a target and 404s on unknown device', async () => {
@@ -170,9 +182,8 @@ test('render requires a target and 404s on unknown device', async () => {
 });
 
 test('config context data + criteria can be updated', async () => {
-  const c = (
-    await api('POST', '/api/extras/config-contexts/', { name: 'upd', data: { a: 1 } })
-  ).body;
+  const c = (await api('POST', '/api/extras/config-contexts/', { name: 'upd', data: { a: 1 } }))
+    .body;
   const u = await api('PATCH', `/api/extras/config-contexts/${c.id}/`, {
     data: { a: 2, b: 3 },
     weight: 42,

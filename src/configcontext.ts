@@ -35,11 +35,15 @@ type Criteria = Record<CriteriaKey, number[]>;
 // ---- entity metadata ----------------------------------------------------------
 
 type Col = ColumnMeta;
-const col = (
-  name: string,
-  tsKind: Col['tsKind'],
-  opts: Partial<Col> = {},
-): Col => ({ name, column: name, tsKind, nullable: true, writable: true, required: false, ...opts });
+const col = (name: string, tsKind: Col['tsKind'], opts: Partial<Col> = {}): Col => ({
+  name,
+  column: name,
+  tsKind,
+  nullable: true,
+  writable: true,
+  required: false,
+  ...opts,
+});
 
 const configContextMeta: TableMeta = {
   model: 'ConfigContext',
@@ -132,7 +136,12 @@ async function expandTrees(db: Db, c: Criteria): Promise<void> {
   c.tenant_groups = await withAncestors(db, 'tenancy_tenant_group', c.tenant_groups);
 }
 
-async function addTags(db: Db, c: Criteria, objectType: string, id: string | number): Promise<void> {
+async function addTags(
+  db: Db,
+  c: Criteria,
+  objectType: string,
+  id: string | number,
+): Promise<void> {
   const rows = await db.query<{ tag_id: number }>(
     `SELECT tag_id FROM tagging_taggeditem WHERE object_type = ? AND object_id = ?`,
     [objectType, String(id)],
@@ -194,7 +203,12 @@ async function vmCriteria(db: Db, id: string | number): Promise<Criteria | null>
   if (vm.role_id != null) c.roles.push(Number(vm.role_id));
   if (vm.platform_id != null) c.platforms.push(Number(vm.platform_id));
   if (vm.tenant_id != null) await addTenant(db, c, vm.tenant_id as Param);
-  await addTags(db, c, objectTypeOf('virtualization_virtual_machine', 'virtualization.virtualmachine'), id);
+  await addTags(
+    db,
+    c,
+    objectTypeOf('virtualization_virtual_machine', 'virtualization.virtualmachine'),
+    id,
+  );
   await expandTrees(db, c);
   return c;
 }
@@ -285,10 +299,7 @@ registerRoute({
     if (!device && !vm) {
       return { status: 400, body: { detail: 'Provide ?device=<id> or ?virtual_machine=<id>.' } };
     }
-    const result = await renderConfigContext(
-      db,
-      device ? { device } : { virtualMachine: vm! },
-    );
+    const result = await renderConfigContext(db, device ? { device } : { virtualMachine: vm! });
     if (!result) return { status: 404, body: { detail: 'Object not found.' } };
     return { status: 200, body: result };
   },

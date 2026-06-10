@@ -11,6 +11,7 @@ import { matchRoute, matchAsset, fireHooks } from '../plugins/runtime.js';
 import { attachRealtime, broadcast } from '../realtime.js';
 import { dispatchWebhooks } from '../webhooks.js';
 import '../journal.js'; // registers the journal-entries entity
+import '../configcontext.js'; // registers config-contexts entity + the /render/ route
 import { Serializer } from './serializer.js';
 import { buildOpenApi } from './openapi.js';
 

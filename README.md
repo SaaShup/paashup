@@ -175,8 +175,18 @@ five jobs: **test** (SQLite), **test-mariadb** (service container), **lint**
   plain `{field: value}` map), optional **HMAC-SHA512** signature, custom headers,
   TLS-verify toggle, **retry with exponential backoff**, and an auditable read-only
   **delivery log** at `/api/extras/webhook-deliveries/`. Works for **core and plugin**
-  entities alike. The change feed is also available live over a **WebSocket** at
-  `/api/ws/`.
+  entities alike.
+  - **Jinja-style templating** (NetBox-compatible): `payload_url`, each
+    `additional_headers` value, and an optional `body_template` are rendered with the
+    event context — `{{ event }}`, `{{ model }}`, `{{ timestamp }}`, `{{ username }}`,
+    `{{ request_id }}`, `{{ data.* }}` (full serialized object, incl. nested relations),
+    and `{{ snapshots.prechange.* }}` / `{{ snapshots.postchange.* }}`; filters
+    `default`/`urlencode`/`lower`/`upper`. E.g. a per-object URL
+    `https://host/devices/{{ data.name }}/sync`.
+  - **Credentials**: a token in the URL query string, an `Authorization`/API-key header
+    via `additional_headers`, or `http://user:pass@host` (auto-converted to a Basic
+    auth header; the password is redacted in the delivery log).
+  - The change feed is also available live over a **WebSocket** at `/api/ws/`.
 
 ## Docker management (built-in plugin)
 

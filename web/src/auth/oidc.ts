@@ -8,6 +8,7 @@ interface OidcConfig {
   issuer: string | null;
   client_id: string | null;
   audience: string | null;
+  login_required?: boolean;
 }
 interface Discovery {
   authorization_endpoint: string;

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, computed } from 'vue';
 import { loadResources } from './api/resources.js';
 import { discoverPluginMenus } from './api/pluginMenus.js';
 import { useUiStore } from './stores/ui.js';
@@ -9,6 +9,7 @@ import {
   ensureValidToken,
   startAutoRefresh,
   currentUsername,
+  isAuthenticated,
   login,
   logout,
 } from './auth/oidc.js';
@@ -18,23 +19,32 @@ import DashboardView from './views/DashboardView.vue';
 import ResourceListView from './views/ResourceListView.vue';
 import DocsView from './views/DocsView.vue';
 import PluginPageView from './views/PluginPageView.vue';
+import LoginView from './views/LoginView.vue';
 
 const ui = useUiStore();
 const logoOk = ref(true);
 const logoUrl = '/paas2box-logo.png';
 const ssoEnabled = ref(false);
+const loginRequired = ref(false);
+const authed = ref(false);
 const username = ref<string | null>(null);
+
+// Show the dedicated login page only when SSO is required and the user isn't signed in.
+const showLogin = computed(() => ssoEnabled.value && loginRequired.value && !authed.value);
 
 onMounted(async () => {
   // OIDC/SSO: finish any redirect login, then keep the token fresh, before loading data.
   const cfg = await loadOidcConfig();
   ssoEnabled.value = cfg.enabled;
+  loginRequired.value = !!cfg.login_required;
   if (cfg.enabled) {
     await handleRedirectCallback();
     await ensureValidToken();
     startAutoRefresh();
+    authed.value = isAuthenticated();
     username.value = currentUsername();
   }
+  if (showLogin.value) return; // don't bother loading data behind a required login
   try {
     const resources = await loadResources();
     ui.setResources(resources);
@@ -46,7 +56,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="app">
+  <LoginView v-if="showLogin" />
+  <div v-else class="app">
     <header class="topbar">
       <div class="brand"><span class="logo">▌</span> paas2box</div>
       <input class="globalsearch" type="search" placeholder="Search resources…" v-model="ui.search" />

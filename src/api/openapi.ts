@@ -48,8 +48,28 @@ function enumValueSchema(col: ColumnMeta): Schema {
   return { type: numeric ? 'integer' : 'string', enum: [...(col.enum ?? [])] };
 }
 
+/**
+ * Multi-select of object-type strings — an array whose items enumerate every
+ * object type currently registered. Drives the webhook `object_types` picker.
+ */
+function objectTypeChoiceSchema(): Schema {
+  const types = allTables()
+    .map((m) => m.objectType)
+    .sort();
+  return { type: 'array', items: { type: 'string', enum: types } };
+}
+
+/** Multi-select over a fixed choice list (e.g. the webhook `events` field). */
+function arrayEnumSchema(col: ColumnMeta): Schema {
+  const values = col.arrayEnum ?? [];
+  const numeric = values.every((v) => typeof v === 'number');
+  return { type: 'array', items: { type: numeric ? 'integer' : 'string', enum: [...values] } };
+}
+
 /** Read-side property for a column (what the serializer emits). */
 function readProperty(col: ColumnMeta): Schema {
+  if (col.objectTypeChoices) return objectTypeChoiceSchema();
+  if (col.arrayEnum) return arrayEnumSchema(col);
   if (col.references) return nullable(ref(`${col.references}Brief`), col.nullable);
   if (col.enum) {
     return nullable(
@@ -66,6 +86,8 @@ function readProperty(col: ColumnMeta): Schema {
 
 /** Write-side property for a column. */
 function writeProperty(col: ColumnMeta): Schema {
+  if (col.objectTypeChoices) return objectTypeChoiceSchema();
+  if (col.arrayEnum) return arrayEnumSchema(col);
   if (col.references) return nullable({ type: 'integer' }, col.nullable);
   if (col.enum) return nullable(enumValueSchema(col), col.nullable);
   return nullable(scalarSchema(col), col.nullable);

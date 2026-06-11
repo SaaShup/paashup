@@ -16,6 +16,7 @@ const isEdit = !!props.object;
 
 function initValue(f: FieldDef): unknown {
   const v = props.object?.[f.name];
+  if (f.kind === 'multiselect') return Array.isArray(v) ? [...v] : [];
   if (v === undefined || v === null) return f.kind === 'boolean' ? false : '';
   if (f.kind === 'fk') return (v as { id?: number }).id ?? '';
   if (f.kind === 'select') return (v as { value?: unknown }).value ?? v;
@@ -64,6 +65,9 @@ function buildPayload(): Obj | null {
       case 'select':
         if (v !== '') out[f.name] = v;
         else if (f.nullable) out[f.name] = null;
+        break;
+      case 'multiselect':
+        out[f.name] = Array.isArray(v) ? v : [];
         break;
       case 'iplist': {
         const list = String(v)
@@ -126,6 +130,14 @@ async function submit() {
             <input v-if="f.kind === 'boolean'" type="checkbox" v-model="values[f.name]" />
             <select v-else-if="f.kind === 'select'" v-model="values[f.name]">
               <option value="">—</option>
+              <option v-for="c in f.choices" :key="String(c)" :value="c">{{ c }}</option>
+            </select>
+            <select
+              v-else-if="f.kind === 'multiselect'"
+              v-model="values[f.name]"
+              multiple
+              :size="Math.min(10, (f.choices?.length ?? 0) || 1)"
+            >
               <option v-for="c in f.choices" :key="String(c)" :value="c">{{ c }}</option>
             </select>
             <select v-else-if="f.kind === 'fk'" v-model="values[f.name]">

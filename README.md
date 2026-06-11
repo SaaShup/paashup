@@ -168,8 +168,10 @@ five jobs: **test** (SQLite), **test-mariadb** (service container), **lint**
   `PB_OIDC_ISSUER` (e.g. `https://kc/realms/paasbox`), optional `PB_OIDC_AUDIENCE`,
   `PB_OIDC_WRITE_ROLE`, `PB_OIDC_USERNAME_CLAIM` (default `preferred_username`), and
   `PB_OIDC_CLIENT_ID` (advertised to the SPA via `GET /api/auth/oidc-config/`). Static
-  tokens keep working alongside it (good for automation). The browser login flow
-  (Authorization Code + PKCE) is a follow-up.
+  tokens keep working alongside it (good for automation). The **web UI** has a built-in
+  login (Authorization Code + PKCE, [web/src/auth/oidc.ts](web/src/auth/oidc.ts)):
+  Sign in → Keycloak → back, with token refresh and Sign out; the API client then sends
+  the bearer token automatically.
 - **OpenAPI conformance** enforced by `test/contract.test.mjs` (validates live
   responses against the NetBox read schemas with `ajv`).
 - **Plugins** ([src/plugins/](src/plugins/)): third parties extend paas2box by

@@ -3,6 +3,15 @@ import { onMounted, ref } from 'vue';
 import { loadResources } from './api/resources.js';
 import { discoverPluginMenus } from './api/pluginMenus.js';
 import { useUiStore } from './stores/ui.js';
+import {
+  loadOidcConfig,
+  handleRedirectCallback,
+  ensureValidToken,
+  startAutoRefresh,
+  currentUsername,
+  login,
+  logout,
+} from './auth/oidc.js';
 import StatusBadge from './components/StatusBadge.vue';
 import Sidebar from './components/Sidebar.vue';
 import DashboardView from './views/DashboardView.vue';
@@ -13,8 +22,19 @@ import PluginPageView from './views/PluginPageView.vue';
 const ui = useUiStore();
 const logoOk = ref(true);
 const logoUrl = '/paas2box-logo.png';
+const ssoEnabled = ref(false);
+const username = ref<string | null>(null);
 
 onMounted(async () => {
+  // OIDC/SSO: finish any redirect login, then keep the token fresh, before loading data.
+  const cfg = await loadOidcConfig();
+  ssoEnabled.value = cfg.enabled;
+  if (cfg.enabled) {
+    await handleRedirectCallback();
+    await ensureValidToken();
+    startAutoRefresh();
+    username.value = currentUsername();
+  }
   try {
     const resources = await loadResources();
     ui.setResources(resources);
@@ -31,6 +51,13 @@ onMounted(async () => {
       <div class="brand"><span class="logo">▌</span> paas2box</div>
       <input class="globalsearch" type="search" placeholder="Search resources…" v-model="ui.search" />
       <span class="spacer" />
+      <div v-if="ssoEnabled" class="sso">
+        <template v-if="username">
+          <span class="who" :title="`Signed in as ${username}`">{{ username }}</span>
+          <button class="sso-btn" @click="logout()">Sign out</button>
+        </template>
+        <button v-else class="sso-btn" @click="login()">Sign in</button>
+      </div>
       <img v-show="logoOk" class="topbar-logo" :src="logoUrl" alt="paas2box" @error="logoOk = false" />
       <StatusBadge />
     </header>
@@ -89,6 +116,31 @@ onMounted(async () => {
 }
 .spacer {
   flex: 1;
+}
+.sso {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.who {
+  color: #fff;
+  font-size: 0.85rem;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sso-btn {
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.sso-btn:hover {
+  background: rgba(255, 255, 255, 0.24);
 }
 .topbar-logo {
   height: 40px;

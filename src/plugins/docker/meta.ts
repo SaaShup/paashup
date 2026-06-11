@@ -108,8 +108,8 @@ const RESTART_POLICY = {
   },
 } as const;
 const NETWORK_DRIVER = {
-  enum: ['bridge', 'host'],
-  enumLabels: { bridge: 'Bridge', host: 'Host' },
+  enum: ['bridge', 'host', 'none'],
+  enumLabels: { bridge: 'Bridge', host: 'Host', none: 'None' },
 } as const;
 const NETWORK_STATE = {
   enum: ['creating', 'created'],

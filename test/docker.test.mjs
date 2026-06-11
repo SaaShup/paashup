@@ -271,6 +271,96 @@ test('FK filter: registries filterable by host_id (NetBox `<fk>_id` alias)', asy
   assert.match(bad.body.detail, /Unknown filter field "bogus_id"/);
 });
 
+test('FK write: `host` accepts a numeric string (single + bulk POST)', async () => {
+  // single create with host as a string id
+  const single = await api('POST', '/api/plugins/docker/registries/', {
+    host: String(ids.host),
+    name: 'str-single',
+    serveraddress: 'https://reg.single/v2/',
+  });
+  assert.equal(single.status, 201, JSON.stringify(single.body));
+  assert.equal(single.body.host.id, ids.host);
+
+  // bulk create — the reported payload shape (array, host as "14")
+  const bulk = await api('POST', '/api/plugins/docker/registries/', [
+    { host: String(ids.host), name: 'str-a', serveraddress: 'https://reg.a/v2/' },
+    { host: String(ids.host), name: 'str-b', serveraddress: 'https://reg.b/v2/' },
+  ]);
+  assert.equal(bulk.status, 201, JSON.stringify(bulk.body));
+  assert.equal(bulk.body.length, 2);
+  assert.ok(bulk.body.every((r) => r.host.id === ids.host));
+
+  // a non-numeric string is still rejected with the NetBox field error
+  const bad = await api('POST', '/api/plugins/docker/registries/', {
+    host: 'not-a-number',
+    name: 'nope',
+    serveraddress: 'https://reg.x/v2/',
+  });
+  assert.equal(bad.status, 400);
+  assert.deepEqual(bad.body.host, ['A valid number is required.']);
+});
+
+test('Container pid_mode accepts "" (blank choice → null)', async () => {
+  const c = await api('POST', '/api/plugins/docker/containers/', {
+    host: ids.host,
+    image: ids.image,
+    name: 'blank-pid',
+    pid_mode: '',
+  });
+  assert.equal(c.status, 201, JSON.stringify(c.body));
+  assert.equal(c.body.pid_mode, null); // unset choice serializes as null
+  // the one real choice still works, and a bogus value is still rejected
+  const bad = await api('POST', '/api/plugins/docker/containers/', {
+    host: ids.host,
+    image: ids.image,
+    name: 'bad-pid',
+    pid_mode: 'container',
+  });
+  assert.equal(bad.status, 400);
+  assert.ok(bad.body.pid_mode);
+});
+
+test('Network driver accepts "none"', async () => {
+  const net = await api('POST', '/api/plugins/docker/networks/', {
+    host: ids.host,
+    name: 'none-net',
+    driver: 'none',
+  });
+  assert.equal(net.status, 201, JSON.stringify(net.body));
+  assert.deepEqual(net.body.driver, { value: 'none', label: 'None' });
+  // bridge/host still work, and a bogus driver is still rejected
+  const bad = await api('POST', '/api/plugins/docker/networks/', {
+    host: ids.host,
+    name: 'bad-net',
+    driver: 'overlay',
+  });
+  assert.equal(bad.status, 400);
+  assert.ok(bad.body.driver);
+});
+
+test('FK write: FK accepts a nested brief object ({ id })', async () => {
+  // the reported image payload — registry given as { id }, host as a string
+  const img = await api('POST', '/api/plugins/docker/images/', {
+    host: String(ids.host),
+    name: 'registry.example/c4/postgres',
+    registry: { id: ids.registry },
+    version: '0.0.2',
+    size: 457,
+  });
+  assert.equal(img.status, 201, JSON.stringify(img.body));
+  assert.equal(img.body.host.id, ids.host);
+  assert.equal(img.body.registry.id, ids.registry);
+
+  // an object without a usable id still fails (registry is required + non-null)
+  const bad = await api('POST', '/api/plugins/docker/images/', {
+    host: ids.host,
+    name: 'no-reg',
+    registry: {},
+  });
+  assert.equal(bad.status, 400);
+  assert.ok(bad.body.registry);
+});
+
 test('agent proxy actions: force_pull / logs / exec', async () => {
   const pull = await api('POST', `/api/plugins/docker/images/${ids.image}/force_pull/`);
   assert.equal(pull.status, 200, JSON.stringify(pull.body));

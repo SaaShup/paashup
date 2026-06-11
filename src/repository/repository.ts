@@ -167,6 +167,7 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
   async create(data: TCreate): Promise<TRow> {
     if (this.meta.readOnly) throw new ApiError(405, `${this.meta.model} is read-only`);
     const d = data as Record<string, unknown>;
+    this.coerceScalars(d);
     validateWrite(this.meta, d, false);
     const rels = this.relationInputs(d);
     return this.db.transaction(async (tx) => {
@@ -182,6 +183,7 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
   async update(id: number | string, data: TUpdate): Promise<TRow | undefined> {
     if (this.meta.readOnly) throw new ApiError(405, `${this.meta.model} is read-only`);
     const d = data as Record<string, unknown>;
+    this.coerceScalars(d);
     validateWrite(this.meta, d, true);
     const rels = this.relationInputs(d);
     return this.db.transaction(async (tx) => {
@@ -337,6 +339,35 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
       values.push(value === null ? null : this.valueIn(col, value as Param));
     }
     return { columns, values };
+  }
+
+  /**
+   * Normalize scalar inputs in place before validation, accepting the shapes
+   * clients commonly echo back from reads:
+   *  - an FK given as a nested brief — `{"id": 20}` becomes `20`;
+   *  - a `number` column given as a numeric string — `"14"` becomes `14`
+   *    (matching DRF's IntegerField, which tolerates string-encoded numbers).
+   */
+  private coerceScalars(data: Record<string, unknown>): void {
+    for (const col of this.meta.columns) {
+      if (!col.writable) continue;
+      let v = data[col.name];
+      // A blank choice on a nullable enum means "unset" → null (NetBox-style),
+      // rather than failing the choice check (e.g. container `pid_mode: ""`).
+      if (col.enum && col.nullable && v === '') {
+        data[col.name] = null;
+        continue;
+      }
+      // FK echoed back as its read brief ({ id, url, … }) — take the id.
+      if (col.references && v && typeof v === 'object' && !Array.isArray(v)) {
+        v = (v as { id?: unknown }).id ?? null;
+        data[col.name] = v;
+      }
+      if (col.tsKind === 'number' && typeof v === 'string' && v.trim() !== '') {
+        const n = Number(v);
+        if (Number.isFinite(n)) data[col.name] = n;
+      }
+    }
   }
 
   /** Coerce a JS value into a DB param (JSON -> string). */

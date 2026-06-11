@@ -98,6 +98,7 @@ const server = createApiServer({
   db,
   webRoot: existsSync(webRoot) ? webRoot : undefined,
   auth: { required: process.env.PB_AUTH_REQUIRED === '1' },
+  realtime: process.env.PB_REALTIME !== '0', // WebSocket change-feed on, like main.ts
 });
 await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
 

@@ -242,6 +242,8 @@ export function createApiServer(opts: ServerOptions): http.Server {
           issuer: process.env.PB_OIDC_ISSUER ?? null,
           client_id: process.env.PB_OIDC_CLIENT_ID ?? null,
           audience: process.env.PB_OIDC_AUDIENCE ?? null,
+          // when true, the SPA shows a dedicated login page (anonymous access is rejected)
+          login_required: !!process.env.PB_OIDC_ISSUER && !!opts.auth?.required,
         });
       }
       // Static SPA for non-API GET routes (single-container deploy).

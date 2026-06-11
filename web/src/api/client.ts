@@ -1,5 +1,7 @@
 // Thin REST client for the paas2box API. Same-origin (Vite proxies /api in dev,
-// the API serves the built SPA in prod). Optional token from localStorage.
+// the API serves the built SPA in prod). Auth: an OIDC bearer token (SSO) if signed
+// in, else a static API token from localStorage.
+import { getAccessToken } from '../auth/oidc.js';
 
 export interface Page<T = Record<string, unknown>> {
   count: number;
@@ -11,6 +13,8 @@ export interface Page<T = Record<string, unknown>> {
 export type Obj = Record<string, unknown>;
 
 function authHeader(): Record<string, string> {
+  const bearer = getAccessToken();
+  if (bearer) return { Authorization: `Bearer ${bearer}` };
   const token = localStorage.getItem('pb_token');
   return token ? { Authorization: `Token ${token}` } : {};
 }

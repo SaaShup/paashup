@@ -1,20 +1,50 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, computed } from 'vue';
 import { loadResources } from './api/resources.js';
 import { discoverPluginMenus } from './api/pluginMenus.js';
 import { useUiStore } from './stores/ui.js';
+import {
+  loadOidcConfig,
+  handleRedirectCallback,
+  ensureValidToken,
+  startAutoRefresh,
+  currentUsername,
+  isAuthenticated,
+  login,
+  logout,
+} from './auth/oidc.js';
 import StatusBadge from './components/StatusBadge.vue';
 import Sidebar from './components/Sidebar.vue';
 import DashboardView from './views/DashboardView.vue';
 import ResourceListView from './views/ResourceListView.vue';
 import DocsView from './views/DocsView.vue';
 import PluginPageView from './views/PluginPageView.vue';
+import LoginView from './views/LoginView.vue';
 
 const ui = useUiStore();
 const logoOk = ref(true);
 const logoUrl = '/paas2box-logo.png';
+const ssoEnabled = ref(false);
+const loginRequired = ref(false);
+const authed = ref(false);
+const username = ref<string | null>(null);
+
+// Show the dedicated login page only when SSO is required and the user isn't signed in.
+const showLogin = computed(() => ssoEnabled.value && loginRequired.value && !authed.value);
 
 onMounted(async () => {
+  // OIDC/SSO: finish any redirect login, then keep the token fresh, before loading data.
+  const cfg = await loadOidcConfig();
+  ssoEnabled.value = cfg.enabled;
+  loginRequired.value = !!cfg.login_required;
+  if (cfg.enabled) {
+    await handleRedirectCallback();
+    await ensureValidToken();
+    startAutoRefresh();
+    authed.value = isAuthenticated();
+    username.value = currentUsername();
+  }
+  if (showLogin.value) return; // don't bother loading data behind a required login
   try {
     const resources = await loadResources();
     ui.setResources(resources);
@@ -26,11 +56,19 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="app">
+  <LoginView v-if="showLogin" />
+  <div v-else class="app">
     <header class="topbar">
       <div class="brand"><span class="logo">▌</span> paas2box</div>
       <input class="globalsearch" type="search" placeholder="Search resources…" v-model="ui.search" />
       <span class="spacer" />
+      <div v-if="ssoEnabled" class="sso">
+        <template v-if="username">
+          <span class="who" :title="`Signed in as ${username}`">{{ username }}</span>
+          <button class="sso-btn" @click="logout()">Sign out</button>
+        </template>
+        <button v-else class="sso-btn" @click="login()">Sign in</button>
+      </div>
       <img v-show="logoOk" class="topbar-logo" :src="logoUrl" alt="paas2box" @error="logoOk = false" />
       <StatusBadge />
     </header>
@@ -89,6 +127,31 @@ onMounted(async () => {
 }
 .spacer {
   flex: 1;
+}
+.sso {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.who {
+  color: #fff;
+  font-size: 0.85rem;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sso-btn {
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.sso-btn:hover {
+  background: rgba(255, 255, 255, 0.24);
 }
 .topbar-logo {
   height: 40px;

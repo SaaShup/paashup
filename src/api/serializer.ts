@@ -66,6 +66,7 @@ const DISPLAY_FIELDS = [
   'username',
   'slug',
   'label',
+  'zone_name',
 ];
 
 export type Serialized = Record<string, unknown>;

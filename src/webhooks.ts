@@ -511,10 +511,7 @@ async function deliver(
       if (res.ok) return { success: true, status, attempts: attempt, error: '', redacted };
       // Surface why the endpoint rejected: status line + a snippet of the body.
       error = `HTTP ${res.status} ${res.statusText}`.trim();
-      const snippet = (await res.text().catch(() => ''))
-        .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, 200);
+      const snippet = (await res.text().catch(() => '')).replace(/\s+/g, ' ').trim().slice(0, 200);
       if (snippet) error += ` — ${snippet}`;
     } catch (e) {
       status = null;

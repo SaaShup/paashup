@@ -60,6 +60,8 @@ function clampInt(v: number | undefined, def: number, min: number, max: number):
  */
 export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate>> {
   private readonly byName: Map<string, ColumnMeta>;
+  /** Filter-field lookup: column names plus NetBox-style `<fk>_id` aliases. */
+  private readonly byFilterName: Map<string, ColumnMeta>;
   /** `vrf_id AS vrf, status AS status, ...` plus the pk. */
   private readonly selectList: string;
 
@@ -68,6 +70,14 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
     readonly meta: TableMeta,
   ) {
     this.byName = new Map(meta.columns.map((c) => [c.name, c]));
+    // FK fields are filterable by `<field>_id` (the related PK), as in NetBox —
+    // e.g. `?host_id=13` for the `host` field on DockerRegistry.
+    this.byFilterName = new Map(this.byName);
+    for (const c of meta.columns) {
+      if (c.references && !this.byFilterName.has(`${c.name}_id`)) {
+        this.byFilterName.set(`${c.name}_id`, c);
+      }
+    }
     const exprs = [`${ident(meta.pk)} AS ${ident(meta.pk)}`];
     for (const c of meta.columns) {
       exprs.push(c.column === c.name ? ident(c.column) : `${ident(c.column)} AS ${ident(c.name)}`);
@@ -247,7 +257,7 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
       const col =
         name === this.meta.pk
           ? ({ column: this.meta.pk, tsKind: 'number' } as ColumnMeta)
-          : this.byName.get(name);
+          : this.byFilterName.get(name);
       if (!col) throw new ApiError(400, `Unknown filter field "${name}" for ${this.meta.model}`);
       const c = ident(col.column);
       switch (lookup) {

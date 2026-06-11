@@ -198,7 +198,29 @@ registerEntity(deliveryMeta);
 // retry/backoff is configurable via env (kept small + deterministic for tests)
 const MAX_TRIES = Math.max(1, Number(process.env.PB_WEBHOOK_RETRIES ?? 2) + 1);
 const BACKOFF_MS = Math.max(0, Number(process.env.PB_WEBHOOK_BACKOFF_MS ?? 500));
+const REQUEST_TIMEOUT_MS = Math.max(1, Number(process.env.PB_WEBHOOK_TIMEOUT_MS ?? 8000));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Human-readable reason for a failed delivery. Node's fetch throws a generic
+ * `TypeError: fetch failed` and buries the real cause (DNS/connection/TLS) in
+ * `error.cause`; a timeout surfaces as an AbortError. Unwrap both so the delivery
+ * log says e.g. "fetch failed: ECONNREFUSED (…)" rather than just "fetch failed".
+ */
+function describeError(e: unknown): string {
+  if (e && typeof e === 'object' && (e as { name?: string }).name === 'TimeoutError') {
+    return `request timed out after ${REQUEST_TIMEOUT_MS}ms`;
+  }
+  if (e instanceof Error) {
+    const cause = (e as { cause?: unknown }).cause;
+    if (cause instanceof Error) {
+      const code = (cause as { code?: string }).code;
+      return code ? `${e.message}: ${code} (${cause.message})` : `${e.message}: ${cause.message}`;
+    }
+    return e.message;
+  }
+  return String(e);
+}
 
 // ---- dispatch ----
 interface WebhookRow {
@@ -481,13 +503,22 @@ async function deliver(
   let error = '';
   for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
     try {
-      const res = await fetch(targetUrl, { ...opts, signal: AbortSignal.timeout(8000) });
+      const res = await fetch(targetUrl, {
+        ...opts,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
       status = res.status;
       if (res.ok) return { success: true, status, attempts: attempt, error: '', redacted };
-      error = `HTTP ${res.status}`;
+      // Surface why the endpoint rejected: status line + a snippet of the body.
+      error = `HTTP ${res.status} ${res.statusText}`.trim();
+      const snippet = (await res.text().catch(() => ''))
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 200);
+      if (snippet) error += ` — ${snippet}`;
     } catch (e) {
       status = null;
-      error = e instanceof Error ? e.message : String(e);
+      error = describeError(e);
     }
     if (attempt < MAX_TRIES) await sleep(BACKOFF_MS * 2 ** (attempt - 1)); // exp. backoff
   }

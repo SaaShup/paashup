@@ -229,6 +229,48 @@ test('list pagination + filtering', async () => {
   assert.equal(filtered.body.results[0].name, 'web');
 });
 
+test('FK filter: registries filterable by host_id (NetBox `<fk>_id` alias)', async () => {
+  // Two hosts, each auto-gets a "dockerhub" registry via the create hook.
+  const hostA = (
+    await api('POST', '/api/plugins/docker/hosts/', { endpoint: 'http://a', name: 'fa' })
+  ).body.id;
+  const hostB = (
+    await api('POST', '/api/plugins/docker/hosts/', { endpoint: 'http://b', name: 'fb' })
+  ).body.id;
+  // give host A a second registry, so the two hosts have different counts (2 vs 1)
+  const extra = await api('POST', '/api/plugins/docker/registries/', {
+    host: hostA,
+    name: 'extra',
+    serveraddress: 'reg.a',
+  });
+  assert.equal(extra.status, 201, JSON.stringify(extra.body));
+
+  // host_id returns exactly that host's registries — and nothing from the other host
+  const a = await api('GET', `/api/plugins/docker/registries/?host_id=${hostA}`);
+  assert.equal(a.status, 200, JSON.stringify(a.body));
+  assert.equal(a.body.count, 2);
+  assert.ok(a.body.results.every((r) => r.host.id === hostA));
+
+  const b = await api('GET', `/api/plugins/docker/registries/?host_id=${hostB}`);
+  assert.equal(b.body.count, 1);
+  assert.ok(b.body.results.every((r) => r.host.id === hostB));
+
+  // the relation-name form resolves to the same rows
+  const byName = await api('GET', `/api/plugins/docker/registries/?host=${hostA}`);
+  assert.equal(byName.body.count, a.body.count);
+
+  // lookups ride the alias: __in unions both hosts, __n excludes one
+  const inBoth = await api('GET', `/api/plugins/docker/registries/?host_id__in=${hostA},${hostB}`);
+  assert.equal(inBoth.body.count, 3);
+  const notA = await api('GET', `/api/plugins/docker/registries/?host_id__n=${hostA}`);
+  assert.ok(notA.body.results.every((r) => r.host.id !== hostA));
+
+  // an unknown field is still rejected with a 400
+  const bad = await api('GET', '/api/plugins/docker/registries/?bogus_id=1');
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.detail, /Unknown filter field "bogus_id"/);
+});
+
 test('agent proxy actions: force_pull / logs / exec', async () => {
   const pull = await api('POST', `/api/plugins/docker/images/${ids.image}/force_pull/`);
   assert.equal(pull.status, 200, JSON.stringify(pull.body));

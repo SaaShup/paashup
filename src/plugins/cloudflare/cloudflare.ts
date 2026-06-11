@@ -86,6 +86,21 @@ export async function createDnsRecord(
   return String(result.id ?? '');
 }
 
+/** Overwrite a DNS record on Cloudflare (PUT) with the full desired state. */
+export async function updateDnsRecord(
+  zone: ZoneAccount,
+  recordId: string,
+  rec: { name: string; type: string; content: string; ttl: number; proxied: boolean },
+): Promise<void> {
+  await cf('PUT', `/zones/${zone.zone_id}/dns_records/${recordId}`, zone.token, {
+    name: rec.name,
+    type: rec.type,
+    content: rec.content,
+    ttl: rec.ttl,
+    proxied: rec.proxied,
+  });
+}
+
 /** Delete a DNS record on Cloudflare by its record id. */
 export async function deleteDnsRecord(zone: ZoneAccount, recordId: string): Promise<void> {
   await cf('DELETE', `/zones/${zone.zone_id}/dns_records/${recordId}`, zone.token);

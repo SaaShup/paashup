@@ -4,6 +4,7 @@
 //   - creating a ZoneAccount imports its existing A/CNAME records (MX filtered out)
 //   - creating a DnsRecord suffixes the zone name, calls Cloudflare, stores record_id
 //   - the opposite-`proxied` conflict is rejected
+//   - updating a DnsRecord overwrites it on Cloudflare (PUT, merged state)
 //   - deleting a DnsRecord deletes it on Cloudflare too
 // Run: node --test test/cloudflare.test.mjs
 import { test, before, after } from 'node:test';
@@ -21,6 +22,7 @@ const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const DB = join(ROOT, 'test', '.cloudflare.sqlite');
 let db, server, base, cf, cfBase;
 const cfCreated = []; // bodies POSTed to Cloudflare
+const cfUpdated = []; // { id, body } PUT to Cloudflare
 const cfDeleted = []; // record ids DELETEd on Cloudflare
 
 const api = (m, p, b) =>
@@ -74,6 +76,10 @@ function startCloudflare() {
       if (req.method === 'POST' && path.endsWith('/dns_records')) {
         cfCreated.push(JSON.parse(raw || '{}'));
         return res.end(JSON.stringify({ result: { id: 'rec-new' } }));
+      }
+      if (req.method === 'PUT' && /\/dns_records\/[^/]+$/.test(path)) {
+        cfUpdated.push({ id: path.split('/').pop(), body: JSON.parse(raw || '{}') });
+        return res.end(JSON.stringify({ result: { id: path.split('/').pop() } }));
       }
       if (req.method === 'DELETE' && /\/dns_records\/[^/]+$/.test(path)) {
         cfDeleted.push(path.split('/').pop());
@@ -166,6 +172,33 @@ test('a name/type proxied conflict is rejected', async () => {
   assert.equal(a.status, 201, JSON.stringify(a.body));
   const b = await api('POST', '/api/plugins/cloudflare/dns/records/', mk(false));
   assert.equal(b.status, 400);
+});
+
+test('updating a DnsRecord syncs the change to Cloudflare', async () => {
+  const created = await api('POST', '/api/plugins/cloudflare/dns/records/', {
+    zone: zoneId,
+    name: 'upd',
+    type: 'A',
+    content: '1.1.1.1',
+    ttl: 3600,
+  });
+  const id = created.body.id;
+  const before = cfUpdated.length;
+  const r = await api('PATCH', `/api/plugins/cloudflare/dns/records/${id}/`, {
+    content: '2.2.2.2',
+  });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.content, '2.2.2.2'); // local row updated
+  assert.equal(cfUpdated.length, before + 1);
+  const put = cfUpdated.at(-1);
+  assert.equal(put.id, 'rec-new'); // the stored Cloudflare record id (PUT target)
+  assert.deepEqual(put.body, {
+    name: 'upd.example.com', // unchanged fields are merged, not dropped
+    type: 'A',
+    content: '2.2.2.2',
+    ttl: 3600,
+    proxied: false,
+  });
 });
 
 test('deleting a DnsRecord deletes it on Cloudflare too', async () => {

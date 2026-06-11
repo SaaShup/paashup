@@ -6,7 +6,15 @@ export function getSchemaDoc(): Promise<Record<string, any>> {
   return (cached ??= api.schema() as unknown as Promise<Record<string, any>>);
 }
 
-export type FieldKind = 'text' | 'number' | 'boolean' | 'select' | 'fk' | 'json' | 'iplist';
+export type FieldKind =
+  | 'text'
+  | 'number'
+  | 'boolean'
+  | 'select'
+  | 'multiselect'
+  | 'fk'
+  | 'json'
+  | 'iplist';
 
 export interface FieldDef {
   name: string;
@@ -47,6 +55,9 @@ export async function formFields(model: string): Promise<FieldDef[]> {
     } else if (p.enum) {
       kind = 'select';
       choices = p.enum;
+    } else if (p.type === 'array' && p.items?.enum) {
+      kind = 'multiselect'; // array whose items are a fixed choice list (e.g. object_types)
+      choices = p.items.enum;
     } else if (p.type === 'boolean') kind = 'boolean';
     else if (p.type === 'integer' || p.type === 'number') kind = 'number';
     else if (name === 'dhcp_relays') kind = 'iplist'; // friendly one-IP-per-line editor

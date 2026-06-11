@@ -7,6 +7,8 @@ export const WEBHOOK_TABLE = 'extras_webhook';
 
 // ---- the Webhook configuration entity (CRUD'd via the API/UI like any other) ----
 const HTTP_METHODS = ['POST', 'PUT', 'PATCH', 'GET', 'DELETE'] as const;
+// The CRUD events a webhook can subscribe to (see dispatchWebhooks / matches).
+const WEBHOOK_EVENTS = ['created', 'updated', 'deleted'] as const;
 
 const webhookMeta: TableMeta = {
   model: 'Webhook',
@@ -44,6 +46,7 @@ const webhookMeta: TableMeta = {
       nullable: false,
       writable: true,
       required: false,
+      objectTypeChoices: true, // multi-select of registered object types
     },
     {
       name: 'events',
@@ -52,6 +55,7 @@ const webhookMeta: TableMeta = {
       nullable: false,
       writable: true,
       required: false,
+      arrayEnum: WEBHOOK_EVENTS, // multi-select of the CRUD events to fire on
     },
     {
       name: 'conditions',

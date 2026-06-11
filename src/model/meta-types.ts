@@ -30,6 +30,17 @@ export interface ColumnMeta {
   readonly enum?: readonly (string | number)[];
   /** value -> human label for enum columns (NetBox `{value, label}` choices). */
   readonly enumLabels?: Readonly<Record<string, string>>;
+  /**
+   * For a json column holding an array of object-type strings (e.g. the webhook
+   * `object_types` field), render it in the schema as a multi-select whose choices
+   * are every object type currently in the registry.
+   */
+  readonly objectTypeChoices?: boolean;
+  /**
+   * For a json column holding an array drawn from a fixed choice list (e.g. the
+   * webhook `events` field), render it as a multi-select over these values.
+   */
+  readonly arrayEnum?: readonly (string | number)[];
   /** Server-generated read-only value, e.g. "uuid" (set on create). */
   readonly auto?: string;
 }

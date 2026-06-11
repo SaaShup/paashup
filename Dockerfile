@@ -25,6 +25,15 @@ ENV NODE_ENV=production \
     PB_DIALECT=sqlite \
     PB_SQLITE_FILE=/data/paas2box.db \
     PB_WEB_ROOT=/app/web
+# Auth / SSO knobs — safe defaults (SSO OFF, anonymous allowed). Override at `docker run`
+# to enable Keycloak/OIDC: set at least PB_OIDC_ISSUER (+ PB_OIDC_CLIENT_ID for the web
+# login). PB_AUTH_REQUIRED=1 rejects unauthenticated requests (shows the SPA login page).
+ENV PB_AUTH_REQUIRED=0 \
+    PB_OIDC_ISSUER="" \
+    PB_OIDC_AUDIENCE="" \
+    PB_OIDC_CLIENT_ID="" \
+    PB_OIDC_WRITE_ROLE="" \
+    PB_OIDC_USERNAME_CLAIM=preferred_username
 WORKDIR /app
 
 COPY --from=build /app/node_modules ./node_modules

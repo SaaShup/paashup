@@ -13,13 +13,19 @@ import crypto from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { SqliteDb } from '../dist/db/sqlite.js';
 import { createApiServer } from '../dist/api/server.js';
+import { loadPlugins, loadedPlugins } from '../dist/plugins/runtime.js';
+import { discoverPluginSpecifiers } from '../dist/plugins/discovery.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT ?? 8000);
 const USER = process.env.FAKE_USER ?? 'demo';
-const ROLES = (process.env.FAKE_ROLES ?? 'paasbox-write').split(',').map((s) => s.trim()).filter(Boolean);
+const ROLES = (process.env.FAKE_ROLES ?? 'paasbox-write')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 const EMAIL = process.env.FAKE_EMAIL ?? `${USER}@example.test`;
 const AUD = 'paasbox-spa';
 
@@ -41,13 +47,15 @@ const idp = http.createServer((req, res) => {
   const u = new URL(req.url, idpUrl);
   if (u.pathname === '/.well-known/openid-configuration') {
     res.setHeader('content-type', 'application/json');
-    return res.end(JSON.stringify({
-      issuer: idpUrl,
-      authorization_endpoint: `${idpUrl}/auth`,
-      token_endpoint: `${idpUrl}/token`,
-      jwks_uri: `${idpUrl}/jwks`,
-      end_session_endpoint: `${idpUrl}/logout`,
-    }));
+    return res.end(
+      JSON.stringify({
+        issuer: idpUrl,
+        authorization_endpoint: `${idpUrl}/auth`,
+        token_endpoint: `${idpUrl}/token`,
+        jwks_uri: `${idpUrl}/jwks`,
+        end_session_endpoint: `${idpUrl}/logout`,
+      }),
+    );
   }
   if (u.pathname === '/jwks') {
     res.setHeader('content-type', 'application/json');
@@ -63,14 +71,27 @@ const idp = http.createServer((req, res) => {
   if (u.pathname === '/token') {
     const now = Math.floor(Date.now() / 1000);
     const tok = sign({
-      iss: idpUrl, aud: AUD, azp: AUD, exp: now + 300, iat: now,
-      preferred_username: USER, email: EMAIL, given_name: USER, family_name: 'SSO',
+      iss: idpUrl,
+      aud: AUD,
+      azp: AUD,
+      exp: now + 300,
+      iat: now,
+      preferred_username: USER,
+      email: EMAIL,
+      given_name: USER,
+      family_name: 'SSO',
       realm_access: { roles: ROLES },
     });
     res.setHeader('content-type', 'application/json');
-    return res.end(JSON.stringify({
-      access_token: tok, id_token: tok, refresh_token: 'fake-refresh', token_type: 'Bearer', expires_in: 300,
-    }));
+    return res.end(
+      JSON.stringify({
+        access_token: tok,
+        id_token: tok,
+        refresh_token: 'fake-refresh',
+        token_type: 'Bearer',
+        expires_in: 300,
+      }),
+    );
   }
   if (u.pathname === '/logout') {
     res.writeHead(302, { location: u.searchParams.get('post_logout_redirect_uri') || '/' });
@@ -93,6 +114,34 @@ const db = new SqliteDb(dbFile);
 if (!existsSync(dbFile) || dbFile === ':memory:') {
   db.exec(readFileSync(join(ROOT, 'datamodel', 'sql', 'schema.sqlite.sql'), 'utf8'));
 }
+
+// Load plugins (e.g. the built-in Docker plugin) before the server, exactly like
+// main.ts — otherwise their entities/menu/routes are missing from the UI.
+const specs = [
+  ...discoverPluginSpecifiers(ROOT),
+  ...(process.env.PB_PLUGINS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
+].filter((v, i, a) => a.indexOf(v) === i);
+if (specs.length) {
+  const plugins = [];
+  for (const spec of specs) {
+    const href =
+      spec.startsWith('.') || spec.startsWith('/') ? pathToFileURL(join(ROOT, spec)).href : spec;
+    const mod = await import(href);
+    plugins.push(mod.default ?? mod);
+  }
+  await loadPlugins(db, plugins);
+  console.log(
+    `  loaded plugins      : ${
+      loadedPlugins()
+        .map((p) => p.name)
+        .join(', ') || '(none)'
+    }`,
+  );
+}
+
 const webRoot = join(ROOT, 'web', 'dist');
 const server = createApiServer({
   db,

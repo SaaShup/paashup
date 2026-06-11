@@ -160,6 +160,16 @@ five jobs: **test** (SQLite), **test-mariadb** (service container), **lint**
   `children`/`_depth`, reverse-FK `*_count`).
 - Query lookups (`__ic`, `__in`, `__gte`, `q`, `ordering`), pre-write validation
   (NetBox field-error shape), and optional token auth (`Authorization: Token …`).
+- **SSO via OIDC / Keycloak** ([src/oidc.ts](src/oidc.ts)): in addition to static API
+  tokens, paas2box accepts `Authorization: Bearer <JWT>` access tokens. The token is
+  verified against the issuer's JWKS (RS256, signature + `iss`/`aud`/`exp`, no extra
+  dependency), then mapped to a local user (**auto-provisioned**), with write access
+  granted by a configurable realm/client role. Enable with env:
+  `PB_OIDC_ISSUER` (e.g. `https://kc/realms/paasbox`), optional `PB_OIDC_AUDIENCE`,
+  `PB_OIDC_WRITE_ROLE`, `PB_OIDC_USERNAME_CLAIM` (default `preferred_username`), and
+  `PB_OIDC_CLIENT_ID` (advertised to the SPA via `GET /api/auth/oidc-config/`). Static
+  tokens keep working alongside it (good for automation). The browser login flow
+  (Authorization Code + PKCE) is a follow-up.
 - **OpenAPI conformance** enforced by `test/contract.test.mjs` (validates live
   responses against the NetBox read schemas with `ajv`).
 - **Plugins** ([src/plugins/](src/plugins/)): third parties extend paas2box by

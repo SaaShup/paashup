@@ -235,6 +235,15 @@ export function createApiServer(opts: ServerOptions): http.Server {
         res.end(SWAGGER_UI_HTML);
         return;
       }
+      // Public OIDC discovery for the SPA login flow (no secrets).
+      if (method === 'GET' && path === '/api/auth/oidc-config/') {
+        return send(res, 200, {
+          enabled: !!process.env.PB_OIDC_ISSUER,
+          issuer: process.env.PB_OIDC_ISSUER ?? null,
+          client_id: process.env.PB_OIDC_CLIENT_ID ?? null,
+          audience: process.env.PB_OIDC_AUDIENCE ?? null,
+        });
+      }
       // Static SPA for non-API GET routes (single-container deploy).
       const rawPath = (req.url ?? '/').split('?')[0]!;
       if (opts.webRoot && method === 'GET' && !rawPath.startsWith('/api/')) {

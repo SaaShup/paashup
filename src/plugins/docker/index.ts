@@ -11,6 +11,7 @@ import { readRoutes } from './routes/crud.js';
 import { containerWriteRoutes } from './routes/containers.js';
 import { actionRoutes } from './routes/actions.js';
 import { hooks } from './hooks.js';
+import { DOCKER_WEBHOOKS } from './webhooks.js';
 import {
   serializeContainer,
   serializeHost,
@@ -39,6 +40,8 @@ const dockerPlugin: Plugin = {
     ...actionRoutes,
   ],
   hooks,
+  // Default agent-integration webhooks, created at startup if missing.
+  seedWebhooks: DOCKER_WEBHOOKS,
 };
 
 export default dockerPlugin;

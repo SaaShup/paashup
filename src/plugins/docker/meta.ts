@@ -350,6 +350,7 @@ const imageMeta: TableMeta = {
       writable: true,
       required: false,
       maxLength: 128,
+      formHidden: true, // set by the Docker agent, not entered by users
     },
     {
       name: 'Digest',
@@ -550,6 +551,7 @@ const containerMeta: TableMeta = {
       writable: true,
       required: false,
       ...CONTAINER_OPERATION,
+      plainValue: true, // the Docker agent consumes operation as a bare string
     },
     {
       name: 'hostname',

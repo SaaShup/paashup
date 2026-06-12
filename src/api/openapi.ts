@@ -11,6 +11,7 @@ const NETBOX_VERSION = '4.6.2';
 
 const BRIEF_FIELDS = [
   'name',
+  'endpoint', // DockerHost — kept in sync with the serializer's brief fields
   'slug',
   'description',
   'model',
@@ -72,6 +73,7 @@ function readProperty(col: ColumnMeta): Schema {
   if (col.arrayEnum) return arrayEnumSchema(col);
   if (col.references) return nullable(ref(`${col.references}Brief`), col.nullable);
   if (col.enum) {
+    if (col.plainValue) return nullable(enumValueSchema(col), col.nullable);
     return nullable(
       {
         type: 'object',
@@ -154,7 +156,10 @@ function writeSchema(meta: TableMeta, patched: boolean): Schema {
   const required: string[] = [];
   for (const c of meta.columns) {
     if (!c.writable) continue;
-    props[c.name] = writeProperty(c);
+    // Writable but not user-editable — the UI form omits it (e.g. agent-set ImageID).
+    props[c.name] = c.formHidden
+      ? { ...writeProperty(c), 'x-form-hidden': true }
+      : writeProperty(c);
     if (!patched && c.required && !c.nullable) required.push(c.name);
   }
   for (const rel of meta.relations) {

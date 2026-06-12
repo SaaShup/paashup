@@ -41,6 +41,7 @@ function genericGroups(meta: TableMeta): { accessor: string; typeCol: string; id
 /** Columns to include when an entity is rendered as a nested brief. */
 const BRIEF_FIELDS = [
   'name',
+  'endpoint', // DockerHost — exposed in briefs so templates can use e.g. host.endpoint
   'slug',
   'description',
   'model',
@@ -206,7 +207,9 @@ export class Serializer {
         // not null (FKs and choices stay null).
         out[col.name] = col.nullable || col.references || col.enum ? null : scalarDefault(col);
       } else if (col.enum) {
-        out[col.name] = { value: v, label: col.enumLabels?.[String(v)] ?? String(v) };
+        out[col.name] = col.plainValue
+          ? v
+          : { value: v, label: col.enumLabels?.[String(v)] ?? String(v) };
       } else if (col.references) {
         const target = MODEL_TO_TABLE[col.references];
         out[col.name] = target

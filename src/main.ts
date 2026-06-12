@@ -8,6 +8,7 @@ import { createDb, type DbConfig } from './db/index.js';
 import { createApiServer } from './api/server.js';
 import { loadPlugins, loadedPlugins } from './plugins/runtime.js';
 import { discoverPluginSpecifiers } from './plugins/discovery.js';
+import { ensureWebhooks } from './webhooks.js';
 import type { Plugin } from './plugins/types.js';
 
 /**
@@ -63,6 +64,10 @@ if (pluginPaths.length) {
       .map((p) => `${p.name}@${p.version}`)
       .join(', ')}`,
   );
+  // Create each plugin's default webhooks if they don't already exist.
+  for (const p of plugins) {
+    if (p.seedWebhooks?.length) await ensureWebhooks(db, p.seedWebhooks);
+  }
 }
 
 const server = createApiServer({

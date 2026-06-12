@@ -31,6 +31,18 @@ export interface ColumnMeta {
   /** value -> human label for enum columns (NetBox `{value, label}` choices). */
   readonly enumLabels?: Readonly<Record<string, string>>;
   /**
+   * Serialize this enum column as its raw value (a plain string) instead of a NetBox
+   * `{value, label}` object — e.g. a container's `operation`, which the Docker agent
+   * consumes as a bare command string. Writes still accept the plain value.
+   */
+  readonly plainValue?: boolean;
+  /**
+   * Writable via the API (e.g. the Docker agent PATCHes it back) but not meant to be
+   * entered by a user — the generated UI form omits it. Surfaced in the OpenAPI write
+   * schema as `x-form-hidden`. Example: an image's agent-observed `ImageID`.
+   */
+  readonly formHidden?: boolean;
+  /**
    * For a json column holding an array of object-type strings (e.g. the webhook
    * `object_types` field), render it in the schema as a multi-select whose choices
    * are every object type currently in the registry.

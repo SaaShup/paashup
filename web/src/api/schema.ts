@@ -44,6 +44,7 @@ export async function formFields(model: string): Promise<FieldDef[]> {
   const required = new Set<string>(req.required ?? []);
   const out: FieldDef[] = [];
   for (const [name, raw] of Object.entries<any>(req.properties ?? {})) {
+    if (raw['x-form-hidden']) continue; // writable via API but not a user input (e.g. agent-set ImageID)
     const p = raw.allOf ? { ...raw.allOf[0], nullable: raw.nullable } : raw;
     const briefRef = refName(read?.properties?.[name]);
     let kind: FieldKind = 'text';

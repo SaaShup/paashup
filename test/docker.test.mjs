@@ -159,6 +159,10 @@ test('container POST accepts inline nested children and echoes them', async () =
   assert.equal(res.body.network_settings[0].network.name, 'frontend');
   assert.deepEqual(res.body.cap_add, ['NET_ADMIN']);
   assert.deepEqual(res.body.cmd, ['nginx', '-g', 'daemon off;']);
+  // operation is a bare string (agent command), not a {value,label} choice
+  assert.equal(res.body.operation, 'create');
+  // other choices keep the NetBox {value,label} shape
+  assert.deepEqual(res.body.state, { value: 'none', label: 'None' });
   // FK briefs use the source field sets
   assert.equal(res.body.host.endpoint, globalThis.__AGENT__);
   assert.equal(res.body.image.version, 'latest');

@@ -201,6 +201,9 @@ export const containerWriteRoutes: PluginRoute[] = [
     path: META.container.endpoint,
     handler: async ({ db, body }) => {
       const { scalars, children } = split((body ?? {}) as Obj);
+      // A new container defaults to operation "none" (the agent reports observed
+      // state; it isn't asked to act unless an operation is set explicitly).
+      if (scalars.operation === undefined) scalars.operation = 'none';
       const hostId = Number(scalars.host);
       await resolveAgentRefs(db, hostId, scalars, children);
       await validateCrossHost(db, hostId, scalars.image, children);

@@ -163,7 +163,7 @@ test('container POST accepts inline nested children and echoes them', async () =
   assert.deepEqual(res.body.cap_add, ['NET_ADMIN']);
   assert.deepEqual(res.body.cmd, ['nginx', '-g', 'daemon off;']);
   // agent-consumed choices are bare strings, not {value,label}
-  assert.equal(res.body.operation, 'create');
+  assert.equal(res.body.operation, 'none'); // new containers default to "none"
   assert.equal(res.body.state, 'none');
   assert.equal(res.body.restart_policy, 'no');
   // FK briefs use the source field sets

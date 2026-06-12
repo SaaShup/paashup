@@ -155,6 +155,7 @@ const hostMeta: TableMeta = {
       writable: true,
       required: false,
       ...HOST_STATE,
+      plainValue: true, // the Docker agent consumes state as a bare string
     },
     {
       name: 'netbox_base_url',
@@ -191,6 +192,7 @@ const hostMeta: TableMeta = {
       writable: true,
       required: false,
       ...HOST_OPERATION,
+      plainValue: true, // the Docker agent consumes operation as a bare string
     },
     // The machine this docker engine runs on — a core Device or VirtualMachine
     // (mutually exclusive). FK briefs resolve via the shared model registry.
@@ -411,6 +413,7 @@ const volumeMeta: TableMeta = {
       writable: true,
       required: false,
       ...VOLUME_DRIVER,
+      plainValue: true, // the Docker agent consumes driver as a bare string
     },
     ...NETBOX_COLS,
   ],
@@ -472,6 +475,7 @@ const networkMeta: TableMeta = {
       writable: true,
       required: false,
       ...NETWORK_STATE,
+      plainValue: true, // the Docker agent consumes state as a bare string
     },
     ...NETBOX_COLS,
   ],
@@ -524,6 +528,7 @@ const containerMeta: TableMeta = {
       writable: true,
       required: false,
       ...CONTAINER_STATE,
+      plainValue: true, // the Docker agent consumes state as a bare string
     },
     {
       name: 'status',
@@ -570,6 +575,7 @@ const containerMeta: TableMeta = {
       writable: true,
       required: false,
       ...RESTART_POLICY,
+      plainValue: true, // the Docker agent consumes restart_policy as a bare string
     },
     {
       name: 'cap_add',

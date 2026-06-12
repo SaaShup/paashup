@@ -15,6 +15,7 @@ export interface ChangeEvent {
 }
 
 const clients = new Set<WebSocket>();
+let wss: WebSocketServer | null = null;
 
 /** Push a change to every connected client. No-op if none. */
 export function broadcast(msg: ChangeEvent): void {
@@ -31,7 +32,7 @@ export function clientCount(): number {
 
 /** Attach a WebSocket change-feed to an HTTP server at `path` (default /api/ws/). */
 export function attachRealtime(server: Server, path = '/api/ws/'): WebSocketServer {
-  const wss = new WebSocketServer({ server, path });
+  wss = new WebSocketServer({ server, path });
   wss.on('connection', (ws) => {
     clients.add(ws);
     ws.send(JSON.stringify({ type: 'hello', ts: Date.now() }));
@@ -39,4 +40,16 @@ export function attachRealtime(server: Server, path = '/api/ws/'): WebSocketServ
     ws.on('error', () => clients.delete(ws));
   });
   return wss;
+}
+
+/**
+ * Tear down the change-feed on shutdown: terminate every client socket and close
+ * the WebSocket server. Open WS connections otherwise keep `http.Server.close()`
+ * from ever completing, so the process would hang on SIGINT/SIGTERM.
+ */
+export function closeRealtime(): void {
+  for (const ws of clients) ws.terminate();
+  clients.clear();
+  wss?.close();
+  wss = null;
 }

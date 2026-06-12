@@ -9,6 +9,7 @@ import { createApiServer } from './api/server.js';
 import { loadPlugins, loadedPlugins } from './plugins/runtime.js';
 import { discoverPluginSpecifiers } from './plugins/discovery.js';
 import { ensureWebhooks } from './webhooks.js';
+import { closeRealtime } from './realtime.js';
 import type { Plugin } from './plugins/types.js';
 
 /**
@@ -82,10 +83,20 @@ server.listen(port, () => {
   console.log(`paas2box API listening on ${baseUrl}`);
 });
 
-for (const sig of ['SIGINT', 'SIGTERM'] as const) {
-  process.on(sig, () => {
-    server.close(() => {
-      void db.close().then(() => process.exit(0));
-    });
+// Graceful shutdown on Ctrl+C (SIGINT) and SIGTERM (e.g. `docker stop`, systemd).
+let shuttingDown = false;
+function shutdown(signal: NodeJS.Signals): void {
+  if (shuttingDown) return; // ignore repeated signals
+  shuttingDown = true;
+  console.log(`\nreceived ${signal}, shutting down…`);
+  closeRealtime(); // terminate WebSocket clients so the HTTP server can close
+  server.close(() => {
+    void db.close().finally(() => process.exit(0));
   });
+  server.closeAllConnections?.(); // drop lingering keep-alive HTTP connections
+  // Safety net: force-exit if a graceful close stalls (e.g. a wedged socket).
+  setTimeout(() => process.exit(0), 5000).unref();
+}
+for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(sig, () => shutdown(sig));
 }

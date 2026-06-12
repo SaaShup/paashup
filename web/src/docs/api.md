@@ -67,6 +67,9 @@ curl -H 'Authorization: Token <your-key>' localhost:8000/api/dcim/devices/
 
 Tokens can be **read-only** or read-write. Without auth required, the API is open.
 
+You can create and manage these tokens yourself from the **API keys** page in the UI (or
+the `/api/users/tokens/` endpoint) — see the [API keys](#api-keys) guide.
+
 ## The OpenAPI schema
 
 - `GET /api/schema/` — the full OpenAPI document, generated live from the running

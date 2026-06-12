@@ -57,7 +57,7 @@ before(async () => {
       } catch {
         /* non-JSON body */
       }
-      recvd.push({ url: req.url, headers: req.headers, json });
+      recvd.push({ url: req.url, method: req.method, headers: req.headers, json });
       res.writeHead(200);
       res.end('ok');
     });
@@ -114,6 +114,14 @@ before(async () => {
     additional_headers: 'X-Lower: {{ data.name | lower }}\nX-Upper: {{ data.name | upper }}',
     body_template: '{"post":"{{ snapshots.postchange.slug }}","slug":"{{ data.slug }}"}',
   });
+  // 6) DELETE method — must still carry the payload body (agent needs the object)
+  await api('POST', '/api/extras/webhooks/', {
+    name: 'del-method',
+    payload_url: `${recvBase}/del`,
+    object_types: ['dcim.manufacturer'],
+    events: ['deleted'],
+    http_method: 'DELETE',
+  });
 });
 
 after(async () => {
@@ -127,6 +135,15 @@ test('payload_url is rendered with the event context', async () => {
   await api('POST', '/api/dcim/manufacturers/', { name: 'Tmpl', slug: 'tmpl-co' });
   const hit = await waitFor((r) => r.url.startsWith('/sync/tmpl-co'), 'url-template');
   assert.equal(hit.url, '/sync/tmpl-co?model=dcim.manufacturer');
+});
+
+test('DELETE-method webhook still sends the payload body', async () => {
+  const created = await api('POST', '/api/dcim/manufacturers/', { name: 'DelCo', slug: 'del-co' });
+  await api('DELETE', `/api/dcim/manufacturers/${created.body.id}/`);
+  const hit = await waitFor((r) => r.url === '/del' && r.method === 'DELETE', 'delete webhook');
+  // body present and carries the deleted object (default JSON payload)
+  assert.equal(hit.json.event, 'deleted');
+  assert.equal(hit.json.data.slug, 'del-co');
 });
 
 test('body_template renders data, event, and snapshots.prechange (with default filter)', async () => {

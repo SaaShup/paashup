@@ -87,8 +87,9 @@ test('host create fires the default-registry hook; GET embeds nested arrays', as
   });
   assert.equal(created.status, 201);
   ids.host = created.body.id;
-  // enum rendered as {value,label}
-  assert.deepEqual(created.body.state, { value: 'created', label: 'Created' });
+  // host state/operation are bare strings (agent-consumed), not {value,label}
+  assert.equal(created.body.state, 'created');
+  assert.equal(created.body.operation, 'none');
 
   const got = await api('GET', `/api/plugins/docker/hosts/${ids.host}/`);
   assert.equal(got.status, 200);
@@ -114,6 +115,7 @@ test('create registry/image/volume/network under the host', async () => {
 
   const vol = await api('POST', '/api/plugins/docker/volumes/', { host: ids.host, name: 'data' });
   assert.equal(vol.status, 201, JSON.stringify(vol.body));
+  assert.equal(vol.body.driver, 'local'); // bare string, not a {value,label} choice
   ids.volume = vol.body.id;
 
   const net = await api('POST', '/api/plugins/docker/networks/', {
@@ -121,6 +123,7 @@ test('create registry/image/volume/network under the host', async () => {
     name: 'frontend',
   });
   assert.equal(net.status, 201, JSON.stringify(net.body));
+  assert.equal(net.body.state, 'creating'); // bare string, not a {value,label} choice
   ids.network = net.body.id;
 
   // image GET embeds host/registry briefs + (empty) containers array
@@ -159,10 +162,10 @@ test('container POST accepts inline nested children and echoes them', async () =
   assert.equal(res.body.network_settings[0].network.name, 'frontend');
   assert.deepEqual(res.body.cap_add, ['NET_ADMIN']);
   assert.deepEqual(res.body.cmd, ['nginx', '-g', 'daemon off;']);
-  // operation is a bare string (agent command), not a {value,label} choice
+  // agent-consumed choices are bare strings, not {value,label}
   assert.equal(res.body.operation, 'create');
-  // other choices keep the NetBox {value,label} shape
-  assert.deepEqual(res.body.state, { value: 'none', label: 'None' });
+  assert.equal(res.body.state, 'none');
+  assert.equal(res.body.restart_policy, 'no');
   // FK briefs use the source field sets
   assert.equal(res.body.host.endpoint, globalThis.__AGENT__);
   assert.equal(res.body.image.version, 'latest');
@@ -450,4 +453,48 @@ test('docker resources appear in the OpenAPI schema', async () => {
   const schema = await api('GET', '/api/schema/');
   assert.ok(schema.body.paths['/api/plugins/docker/hosts/']);
   assert.ok(schema.body.paths['/api/plugins/docker/containers/']);
+});
+
+test('host operation=refresh marks state refreshing and purges resources', async () => {
+  // self-contained host with a full set of resources
+  const h = (await api('POST', '/api/plugins/docker/hosts/', { endpoint: 'http://r', name: 'rh' }))
+    .body;
+  const reg = (await api('GET', `/api/plugins/docker/hosts/${h.id}/`)).body.registries[0].id;
+  const img = (
+    await api('POST', '/api/plugins/docker/images/', { host: h.id, registry: reg, name: 'nginx' })
+  ).body;
+  const vol = (await api('POST', '/api/plugins/docker/volumes/', { host: h.id, name: 'data' }))
+    .body;
+  const net = (await api('POST', '/api/plugins/docker/networks/', { host: h.id, name: 'fe' })).body;
+  await api('POST', '/api/plugins/docker/containers/', {
+    host: h.id,
+    image: img.id,
+    name: 'c1',
+    ports: [{ private_port: 80, public_port: 8080, type: 'tcp' }],
+    mounts: [{ source: '/s', volume: vol.id }], // RESTRICT ref to the volume
+    network_settings: [{ network: net.id }], // RESTRICT ref to the network
+  });
+  const counts = async () =>
+    (
+      await Promise.all(
+        ['images', 'volumes', 'networks', 'containers'].map((r) =>
+          api('GET', `/api/plugins/docker/${r}/?host_id=${h.id}`).then((x) => x.body.count),
+        ),
+      )
+    ).join(',');
+  assert.equal(await counts(), '1,1,1,1');
+
+  const upd = await api('PATCH', `/api/plugins/docker/hosts/${h.id}/`, { operation: 'refresh' });
+  assert.equal(upd.status, 200, JSON.stringify(upd.body));
+  assert.equal(upd.body.state, 'refreshing'); // set before storing
+  assert.equal(upd.body.operation, 'refresh');
+  assert.equal(await counts(), '0,0,0,0'); // all discovered resources purged
+  // registries survive a refresh
+  assert.equal((await api('GET', `/api/plugins/docker/registries/?host_id=${h.id}`)).body.count, 1);
+
+  // a normal update doesn't purge
+  await api('POST', '/api/plugins/docker/images/', { host: h.id, registry: reg, name: 'redis' });
+  const ren = await api('PATCH', `/api/plugins/docker/hosts/${h.id}/`, { name: 'rh2' });
+  assert.equal(ren.body.name, 'rh2');
+  assert.equal((await api('GET', `/api/plugins/docker/images/?host_id=${h.id}`)).body.count, 1);
 });

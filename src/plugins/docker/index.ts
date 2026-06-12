@@ -9,6 +9,7 @@ import { ENTITY_METAS, META, T } from './meta.js';
 import { INITIAL_MIGRATION, HOST_SCOPE_MIGRATION } from './migrations.js';
 import { readRoutes } from './routes/crud.js';
 import { containerWriteRoutes } from './routes/containers.js';
+import { hostWriteRoutes } from './routes/hosts.js';
 import { actionRoutes } from './routes/actions.js';
 import { hooks } from './hooks.js';
 import { DOCKER_WEBHOOKS } from './webhooks.js';
@@ -34,6 +35,9 @@ const dockerPlugin: Plugin = {
     ...readRoutes(T.network, META.network.endpoint, serializeNetwork),
     ...readRoutes(T.registry, META.registry.endpoint, serializeRegistry),
     ...readRoutes(T.container, META.container.endpoint, serializeContainer),
+    // Host PUT/PATCH override: a refresh marks the host "refreshing" and purges its
+    // discovered resources before storing (create + delete stay on generic CRUD).
+    ...hostWriteRoutes,
     // Container writes accept inline nested children (override generic POST/PUT/PATCH).
     ...containerWriteRoutes,
     // Docker-agent proxy actions (force_pull / logs / exec).

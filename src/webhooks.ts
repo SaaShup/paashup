@@ -542,7 +542,9 @@ async function deliver(
   if (wh.secret) {
     headers['X-Hook-Signature'] = createHmac('sha512', wh.secret).update(body).digest('hex');
   }
-  const hasBody = wh.method !== 'GET' && wh.method !== 'DELETE';
+  // Send the rendered payload for every method except GET (which can't carry a
+  // body) — DELETE included, so the agent receives the object it must remove.
+  const hasBody = wh.method !== 'GET';
   const opts: RequestInit = { method: wh.method, headers, ...(hasBody ? { body } : {}) };
   if (!wh.sslVerify) {
     try {

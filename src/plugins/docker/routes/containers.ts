@@ -23,6 +23,63 @@ const childIdValue = (v: unknown): number =>
 const CHILD_FIELDS = new Set(CHILD_SPECS.map((s) => s.field));
 const SPEC_BY_FIELD = new Map(CHILD_SPECS.map((s) => [s.field, s]));
 
+const hasId = (v: unknown): boolean =>
+  !!v && typeof v === 'object' && (v as { id?: unknown }).id != null;
+
+/**
+ * Resolve a FK descriptor sent with a Docker-agent natural key — an image by its
+ * Docker `ImageID`, a network/volume by `name` — to the matching paasbox row id,
+ * scoped to the container's host. Values already carrying an `id` (or a bare
+ * id/number) are returned untouched for the generic FK handling to coerce.
+ */
+async function resolveRef(
+  db: Db,
+  hostId: number,
+  table: string,
+  field: string,
+  keyColumn: string,
+  keyName: string,
+  v: unknown,
+): Promise<unknown> {
+  if (v == null || hasId(v) || typeof v !== 'object') return v;
+  const key = (v as Obj)[keyName];
+  if (typeof key !== 'string' || key === '') return v; // unidentifiable → let validation report it
+  const row = await db.get<{ id: number }>(
+    `SELECT id FROM ${ident(table)} WHERE ${ident(keyColumn)} = ? AND host_id = ?`,
+    [key, hostId],
+  );
+  if (!row) {
+    throw new ValidationError(`${field} not found`, {
+      [field]: [`No ${field} with ${keyName} "${key}" on host ${hostId}.`],
+    });
+  }
+  return Number(row.id);
+}
+
+/** Map agent-shaped FK descriptors (image/network/volume by natural key) to ids. */
+async function resolveAgentRefs(
+  db: Db,
+  hostId: number,
+  scalars: Obj,
+  children: Map<string, Obj[]>,
+): Promise<void> {
+  scalars.image = await resolveRef(
+    db,
+    hostId,
+    T.image,
+    'image',
+    'image_id',
+    'ImageID',
+    scalars.image,
+  );
+  for (const ns of children.get('network_settings') ?? []) {
+    ns.network = await resolveRef(db, hostId, T.network, 'network', 'name', 'name', ns.network);
+  }
+  for (const m of children.get('mounts') ?? []) {
+    m.volume = await resolveRef(db, hostId, T.volume, 'volume', 'name', 'name', m.volume);
+  }
+}
+
 /** Split a request body into scalar container fields and the nested child arrays. */
 function split(body: Obj): { scalars: Obj; children: Map<string, Obj[]> } {
   const scalars: Obj = {};
@@ -97,6 +154,10 @@ async function insertChild(tx: Db, spec: ChildSpec, containerId: number, item: O
     }
     if (c.fk) v = childIdValue(v);
     else if (c.kind === 'boolean') v = v ? 1 : 0;
+    else if (c.kind === 'number' && typeof v === 'string' && v.trim() !== '') {
+      const n = Number(v);
+      if (Number.isFinite(n)) v = n; // accept numeric strings, e.g. ports "1882"
+    }
     cols.push(c.column);
     vals.push(v);
   }
@@ -140,7 +201,9 @@ export const containerWriteRoutes: PluginRoute[] = [
     path: META.container.endpoint,
     handler: async ({ db, body }) => {
       const { scalars, children } = split((body ?? {}) as Obj);
-      await validateCrossHost(db, Number(scalars.host), scalars.image, children);
+      const hostId = Number(scalars.host);
+      await resolveAgentRefs(db, hostId, scalars, children);
+      await validateCrossHost(db, hostId, scalars.image, children);
       const created = await db.transaction(async (tx) => {
         const repo = new Repository<Row>(tx, getTable(T.container)!);
         const row = await repo.create(scalars); // validates required/enum/maxlength
@@ -165,6 +228,7 @@ export const containerWriteRoutes: PluginRoute[] = [
         if (!existing) return { status: 404, body: { detail: 'Not found' } };
         const { scalars, children } = split((body ?? {}) as Obj);
         const hostId = Number(scalars.host ?? (existing as Row).host);
+        await resolveAgentRefs(db, hostId, scalars, children);
         const imageId = scalars.image ?? (existing as Row).image;
         await validateCrossHost(db, hostId, imageId, children);
         await db.transaction(async (tx) => {

@@ -39,7 +39,7 @@ test('ensureWebhooks creates all docker webhooks on first run', async () => {
   const addHost = await byName('[Docker] Add host');
   assert.equal(addHost.http_method, 'GET');
   assert.equal(addHost.enabled, 1);
-  assert.equal(addHost.ssl_verification, 0);
+  assert.equal(addHost.ssl_verification, 1);
   assert.deepEqual(JSON.parse(addHost.object_types), ['plugins.dockerhost']);
   assert.deepEqual(JSON.parse(addHost.events), ['created']);
   assert.match(addHost.payload_url, /^\{\{ data\.endpoint \}\}\/api\/engine\/endpoint\?id=/);

@@ -13,8 +13,8 @@ const OT = {
   volume: META.volume.objectType,
 } as const;
 
-/** Agent endpoints are plain HTTP and self-signed-friendly → ssl_verification off. */
-const base = { enabled: true, sslVerification: false } as const;
+/** Shared defaults: enabled, and verify TLS on the agent endpoint. */
+const base = { enabled: true, sslVerification: true } as const;
 
 export const DOCKER_WEBHOOKS: readonly WebhookSeed[] = [
   // ---- create ----

@@ -551,6 +551,7 @@ const containerMeta: TableMeta = {
       writable: true,
       required: false,
       ...CONTAINER_OPERATION,
+      plainValue: true, // the Docker agent consumes operation as a bare string
     },
     {
       name: 'hostname',

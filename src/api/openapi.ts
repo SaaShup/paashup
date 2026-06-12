@@ -73,6 +73,7 @@ function readProperty(col: ColumnMeta): Schema {
   if (col.arrayEnum) return arrayEnumSchema(col);
   if (col.references) return nullable(ref(`${col.references}Brief`), col.nullable);
   if (col.enum) {
+    if (col.plainValue) return nullable(enumValueSchema(col), col.nullable);
     return nullable(
       {
         type: 'object',

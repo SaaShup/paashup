@@ -207,7 +207,9 @@ export class Serializer {
         // not null (FKs and choices stay null).
         out[col.name] = col.nullable || col.references || col.enum ? null : scalarDefault(col);
       } else if (col.enum) {
-        out[col.name] = { value: v, label: col.enumLabels?.[String(v)] ?? String(v) };
+        out[col.name] = col.plainValue
+          ? v
+          : { value: v, label: col.enumLabels?.[String(v)] ?? String(v) };
       } else if (col.references) {
         const target = MODEL_TO_TABLE[col.references];
         out[col.name] = target

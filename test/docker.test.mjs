@@ -320,6 +320,40 @@ test('Container pid_mode accepts "" (blank choice → null)', async () => {
   assert.ok(bad.body.pid_mode);
 });
 
+test('container POST resolves agent natural keys (image ImageID, network name)', async () => {
+  const SHA = 'sha256:deadbeefcafe0000';
+  const img = await api('POST', '/api/plugins/docker/images/', {
+    host: ids.host,
+    registry: ids.registry,
+    name: 'by-sha',
+    ImageID: SHA,
+  });
+  assert.equal(img.status, 201, JSON.stringify(img.body));
+
+  // image given by ImageID, network by name, ports as numeric strings
+  const res = await api('POST', '/api/plugins/docker/containers/', {
+    host: String(ids.host),
+    name: 'agent-shaped',
+    image: { host: String(ids.host), ImageID: SHA },
+    pid_mode: '',
+    network_settings: [{ network: { host: String(ids.host), name: 'frontend' } }],
+    ports: [{ public_port: '1882', private_port: '1880', type: 'tcp' }],
+  });
+  assert.equal(res.status, 201, JSON.stringify(res.body));
+  assert.equal(res.body.image.id, img.body.id); // resolved by ImageID
+  assert.equal(res.body.network_settings[0].network.name, 'frontend'); // resolved by name
+  assert.deepEqual(res.body.ports[0], { public_port: 1882, private_port: 1880, type: 'tcp' });
+
+  // an unknown ImageID is a clear 400, not a null-FK error
+  const bad = await api('POST', '/api/plugins/docker/containers/', {
+    host: ids.host,
+    name: 'bad-sha',
+    image: { ImageID: 'sha256:doesnotexist' },
+  });
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.image[0], /No image with ImageID/);
+});
+
 test('Network driver accepts "none"', async () => {
   const net = await api('POST', '/api/plugins/docker/networks/', {
     host: ids.host,
@@ -328,7 +362,23 @@ test('Network driver accepts "none"', async () => {
   });
   assert.equal(net.status, 201, JSON.stringify(net.body));
   assert.deepEqual(net.body.driver, { value: 'none', label: 'None' });
-  // bridge/host still work, and a bogus driver is still rejected
+
+  // the Docker agent sends Docker-cased values — "None"/"Bridge" map to the
+  // canonical lowercase choice rather than failing the choice check
+  for (const [sent, value] of [
+    ['None', 'none'],
+    ['Bridge', 'bridge'],
+  ]) {
+    const r = await api('POST', '/api/plugins/docker/networks/', {
+      host: ids.host,
+      name: `cased-${sent}`,
+      driver: sent,
+    });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    assert.equal(r.body.driver.value, value);
+  }
+
+  // a genuinely unsupported driver is still rejected
   const bad = await api('POST', '/api/plugins/docker/networks/', {
     host: ids.host,
     name: 'bad-net',

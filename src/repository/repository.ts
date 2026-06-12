@@ -346,7 +346,9 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
    * clients commonly echo back from reads:
    *  - an FK given as a nested brief — `{"id": 20}` becomes `20`;
    *  - a `number` column given as a numeric string — `"14"` becomes `14`
-   *    (matching DRF's IntegerField, which tolerates string-encoded numbers).
+   *    (matching DRF's IntegerField, which tolerates string-encoded numbers);
+   *  - an enum value differing only in case — `"None"` becomes `"none"` — so the
+   *    Docker agent's capitalized choices map onto our canonical lowercase ones.
    */
   private coerceScalars(data: Record<string, unknown>): void {
     for (const col of this.meta.columns) {
@@ -357,6 +359,16 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
       if (col.enum && col.nullable && v === '') {
         data[col.name] = null;
         continue;
+      }
+      // Enum value matching a choice only by case → canonical choice (agents send
+      // Docker-cased values like `"None"`/`"Bridge"`). Exact matches are untouched.
+      if (col.enum && typeof v === 'string' && !col.enum.includes(v)) {
+        const lower = v.toLowerCase();
+        const match = col.enum.find((c) => typeof c === 'string' && c.toLowerCase() === lower);
+        if (match !== undefined) {
+          data[col.name] = match;
+          continue;
+        }
       }
       // FK echoed back as its read brief ({ id, url, … }) — take the id.
       if (col.references && v && typeof v === 'object' && !Array.isArray(v)) {

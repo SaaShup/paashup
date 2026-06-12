@@ -71,6 +71,15 @@ export async function authenticate(
     );
     if (!row) return null;
     if (row.expires && new Date(row.expires).getTime() < Date.now()) return null;
+    // Record usage (best-effort; never block the request on it).
+    try {
+      await db.execute('UPDATE auth_token SET last_used = ? WHERE id = ?', [
+        new Date().toISOString(),
+        Number(row.id),
+      ]);
+    } catch {
+      /* last_used is advisory — ignore failures */
+    }
     return {
       tokenId: Number(row.id),
       userId: Number(row.userId),

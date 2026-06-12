@@ -27,6 +27,13 @@ const groupOpen = (section: string, label: string) =>
     <button class="nav-item top" :class="{ active: ui.view === 'docs' }" @click="ui.openDocs()">
       <span class="ico">📖</span> Docs
     </button>
+    <button
+      class="nav-item top"
+      :class="{ active: ui.view === 'api-keys' }"
+      @click="ui.openApiKeys()"
+    >
+      <span class="ico">🔑</span> API keys
+    </button>
 
     <div v-for="sec in ui.grouped" :key="sec.section" class="group">
       <button class="group-head" @click="ui.toggleSection(sec.section)">

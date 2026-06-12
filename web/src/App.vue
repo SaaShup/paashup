@@ -18,6 +18,7 @@ import Sidebar from './components/Sidebar.vue';
 import DashboardView from './views/DashboardView.vue';
 import ResourceListView from './views/ResourceListView.vue';
 import DocsView from './views/DocsView.vue';
+import ApiKeysView from './views/ApiKeysView.vue';
 import PluginPageView from './views/PluginPageView.vue';
 import LoginView from './views/LoginView.vue';
 
@@ -78,6 +79,7 @@ onMounted(async () => {
         <div class="page-watermark" aria-hidden="true" />
         <DashboardView v-if="ui.view === 'dashboard'" />
         <DocsView v-else-if="ui.view === 'docs'" />
+        <ApiKeysView v-else-if="ui.view === 'api-keys'" />
         <PluginPageView v-else-if="ui.view === 'plugin-page'" />
         <ResourceListView v-else />
       </main>

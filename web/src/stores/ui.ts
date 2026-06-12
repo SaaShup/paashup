@@ -17,7 +17,7 @@ export const useUiStore = defineStore('ui', {
     /** Plugin-contributed sidebar entries (each opens a plugin page in a frame). */
     pluginMenus: [] as PluginMenuItem[],
     pluginPage: null as PluginMenuItem | null,
-    view: 'dashboard' as 'dashboard' | 'list' | 'docs' | 'plugin-page',
+    view: 'dashboard' as 'dashboard' | 'list' | 'docs' | 'plugin-page' | 'api-keys',
     selected: null as Resource | null,
     // accordion: everything collapsed by default; user expands by clicking.
     expandedSections: {} as Record<string, boolean>,
@@ -71,6 +71,10 @@ export const useUiStore = defineStore('ui', {
     },
     openDocs() {
       this.view = 'docs';
+      this.selected = null;
+    },
+    openApiKeys() {
+      this.view = 'api-keys';
       this.selected = null;
     },
     openResource(r: Resource) {

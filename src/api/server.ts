@@ -11,6 +11,7 @@ import { authenticate, type AuthOptions } from '../auth.js';
 import { matchRoute, matchAsset, fireHooks } from '../plugins/runtime.js';
 import { attachRealtime, broadcast } from '../realtime.js';
 import { dispatchWebhooks, type WebhookEventContext } from '../webhooks.js';
+import { listUserTokens, createUserToken, revokeUserToken } from '../tokens.js';
 import '../journal.js'; // registers the journal-entries entity
 import '../configcontext.js'; // registers config-contexts entity + the /render/ route
 import { Serializer } from './serializer.js';
@@ -266,6 +267,37 @@ export function createApiServer(opts: ServerOptions): http.Server {
       }
 
       const url = new URL(req.url ?? '/', baseUrl);
+
+      // Self-service API-key management (per-user). Handled inline because it needs
+      // the authenticated user, which custom routes don't receive. Requires auth;
+      // create/delete are blocked for read-only callers by the guard above.
+      if (url.pathname === '/api/users/tokens/' || url.pathname.startsWith('/api/users/tokens/')) {
+        if (!auth) throw new ApiError(403, 'Authentication credentials were not provided.');
+        if (method === 'GET' && url.pathname === '/api/users/tokens/') {
+          const results = await listUserTokens(db, auth.userId);
+          return send(res, 200, { count: results.length, next: null, previous: null, results });
+        }
+        if (method === 'POST' && url.pathname === '/api/users/tokens/') {
+          const body = (await readBody(req)) as {
+            description?: string;
+            expires?: string | null;
+            write_enabled?: boolean;
+          };
+          const created = await createUserToken(db, auth.userId, {
+            description: body.description,
+            expires: body.expires ?? null,
+            writeEnabled: body.write_enabled,
+          });
+          return send(res, 201, created);
+        }
+        const m = url.pathname.match(/^\/api\/users\/tokens\/(\d+)\/$/);
+        if (method === 'DELETE' && m) {
+          const ok = await revokeUserToken(db, auth.userId, Number(m[1]));
+          if (!ok) throw new ApiError(404, 'Not found');
+          return send(res, 204);
+        }
+        throw new ApiError(405, `Method ${method} not allowed`);
+      }
 
       // Custom plugin routes take precedence over generic CRUD.
       const custom = matchRoute(method, url.pathname);

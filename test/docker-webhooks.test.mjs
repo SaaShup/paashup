@@ -188,6 +188,36 @@ test('FEATURE — creating a host seeds a default "dockerhub" registry', async (
   );
 });
 
+test('webhook payload — image data.host brief includes endpoint (for payload_url templating)', async () => {
+  got.img.length = 0;
+  await api('POST', '/api/plugins/docker/images/', {
+    host: hostId,
+    registry: registryId,
+    name: 'img-endpoint',
+  });
+  const d = await waitFor(
+    'img',
+    (x) => x.model === 'plugins.dockerimage' && x.data?.name === 'img-endpoint',
+    'image fired',
+  );
+  // {{ data.host.endpoint }} relies on the host brief carrying `endpoint`
+  assert.equal(d.data.host.endpoint, 'http://agent:8080');
+});
+
+test('webhook payload — deleted host carries data.endpoint (for payload_url templating)', async () => {
+  const ep = 'http://agent-del:8080';
+  const id = (await api('POST', '/api/plugins/docker/hosts/', { endpoint: ep, name: 'del-host' }))
+    .body.id;
+  await api('DELETE', `/api/plugins/docker/hosts/${id}/`);
+  const d = await waitFor(
+    'all',
+    (x) => x.model === 'plugins.dockerhost' && x.event === 'deleted' && x.object_id === id,
+    'host deleted',
+  );
+  // {{ data.endpoint }} on a delete relies on the payload carrying the last state
+  assert.equal(d.data.endpoint, ep);
+});
+
 test('guard — image-scoped webhook ignores non-image changes (no false positive)', async () => {
   got.img.length = 0;
   await api('POST', '/api/plugins/docker/volumes/', { host: hostId, name: 'vol-x' });

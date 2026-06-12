@@ -156,6 +156,63 @@ const webhookMeta: TableMeta = {
 
 registerEntity(webhookMeta);
 
+// ---- startup seeding ----------------------------------------------------------
+/** A webhook a plugin wants to exist by default (created at startup if missing). */
+export interface WebhookSeed {
+  readonly name: string;
+  /** Object types to fire on, e.g. ['plugins.dockercontainer'] (or ['*']). */
+  readonly objectTypes: readonly string[];
+  readonly events: readonly ('created' | 'updated' | 'deleted')[];
+  readonly payloadUrl: string;
+  readonly httpMethod?: string;
+  readonly enabled?: boolean;
+  readonly sslVerification?: boolean;
+}
+
+/**
+ * Idempotently ensure each seed webhook exists, matched by its (unique) name —
+ * any that are missing get created. Run at startup so a plugin's default
+ * integration webhooks are present; deleting one and restarting recreates it.
+ * Existing webhooks are never modified (operators stay in control of edits).
+ */
+export async function ensureWebhooks(db: Db, seeds: readonly WebhookSeed[]): Promise<void> {
+  if (!seeds.length) return;
+  let existing: Set<string>;
+  try {
+    const rows = await db.query<{ name: string }>(`SELECT name FROM ${WEBHOOK_TABLE}`);
+    existing = new Set(rows.map((r) => r.name));
+  } catch {
+    return; // table absent (migrations not applied yet) → nothing to seed
+  }
+  let created = 0;
+  for (const s of seeds) {
+    if (existing.has(s.name)) continue;
+    try {
+      await db.execute(
+        `INSERT INTO ${WEBHOOK_TABLE}
+           (name, enabled, object_types, events, payload_url, http_method, ssl_verification)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          s.name,
+          s.enabled === false ? 0 : 1,
+          JSON.stringify(s.objectTypes),
+          JSON.stringify(s.events),
+          s.payloadUrl,
+          s.httpMethod ?? 'POST',
+          s.sslVerification === false ? 0 : 1,
+        ],
+      );
+      created++;
+    } catch {
+      /* unique-name race with another starting instance → already created, skip */
+    }
+  }
+  if (created) {
+    invalidateWebhooks();
+    console.log(`seeded ${created} webhook(s)`);
+  }
+}
+
 // ---- the (read-only) delivery log entity ----
 export const DELIVERY_TABLE = 'extras_webhook_delivery';
 
@@ -540,7 +597,11 @@ export async function dispatchWebhooks(
   cache ??= await loadCache(db);
   if (!cache.length) return;
 
-  const obj = (data ?? {}) as Record<string, unknown>;
+  // A delete carries no post-state, but NetBox's payload `data` is the object's
+  // last known state — fall back to the prechange snapshot so `{{ data.* }}`,
+  // the default payload, and conditions all see the deleted object.
+  const effectiveData = data ?? (event === 'deleted' ? (ctx?.snapshots?.prechange ?? null) : null);
+  const obj = (effectiveData ?? {}) as Record<string, unknown>;
   const targets = cache.filter(
     (wh) => matches(wh, meta, event) && evalConditions(wh.conditions, obj),
   );
@@ -554,7 +615,7 @@ export async function dispatchWebhooks(
     timestamp,
     username: ctx?.username ?? null,
     request_id: ctx?.requestId ?? null,
-    data: data ?? null,
+    data: effectiveData,
     snapshots: ctx?.snapshots ?? { prechange: null, postchange: data ?? null },
   };
   // Default JSON payload (used when no body_template is configured).
@@ -563,7 +624,7 @@ export async function dispatchWebhooks(
     timestamp,
     model: meta.objectType,
     object_id: id,
-    data: data ?? null,
+    data: effectiveData,
   });
 
   await Promise.all(

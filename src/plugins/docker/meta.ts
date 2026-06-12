@@ -350,6 +350,7 @@ const imageMeta: TableMeta = {
       writable: true,
       required: false,
       maxLength: 128,
+      formHidden: true, // set by the Docker agent, not entered by users
     },
     {
       name: 'Digest',

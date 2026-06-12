@@ -1,6 +1,7 @@
 import type { Db } from '../db/types.js';
 import type { TableMeta } from '../model/meta-types.js';
 import type { CustomField } from '../customfields/types.js';
+import type { WebhookSeed } from '../webhooks.js';
 
 /**
  * A plugin extends paas2box without touching core. Because the API engine is
@@ -20,6 +21,11 @@ export interface Plugin {
   readonly hooks?: readonly Hook[];
   /** Custom fields to attach to core/plugin entities (stored in `custom_fields`). */
   readonly customFields?: readonly CustomField[];
+  /**
+   * Default webhooks the plugin needs (e.g. the Docker agent integration). Created
+   * at startup if missing — see `ensureWebhooks` — and never modified thereafter.
+   */
+  readonly seedWebhooks?: readonly WebhookSeed[];
   /**
    * Static asset directories the engine serves verbatim (HTML/JS/CSS/…), letting a
    * plugin ship its own web UI. Combined with a `…/ui/` route (see PluginUiMenu) the

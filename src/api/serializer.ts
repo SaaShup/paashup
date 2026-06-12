@@ -41,6 +41,7 @@ function genericGroups(meta: TableMeta): { accessor: string; typeCol: string; id
 /** Columns to include when an entity is rendered as a nested brief. */
 const BRIEF_FIELDS = [
   'name',
+  'endpoint', // DockerHost — exposed in briefs so templates can use e.g. host.endpoint
   'slug',
   'description',
   'model',

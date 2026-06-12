@@ -182,7 +182,9 @@ test('created/updated/deleted fire with NetBox-style payload + HMAC', async () =
   const [, , d] = await waitFor('/man', 3);
   assert.equal(d.json.event, 'deleted');
   assert.equal(d.json.object_id, id);
-  assert.equal(d.json.data, null);
+  // delete payload carries the object's last state (NetBox-style), so templates
+  // and conditions can reference {{ data.* }} on a delete
+  assert.equal(d.json.data.name, 'Acme');
 });
 
 test('webhooks fire for plugin entities too', async () => {

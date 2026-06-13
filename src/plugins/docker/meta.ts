@@ -272,6 +272,7 @@ const registryMeta: TableMeta = {
       tsKind: 'string',
       nullable: true,
       writable: true,
+      secret: true, // registry password — write-only, never returned on read
       required: false,
       maxLength: 512,
     },
@@ -694,7 +695,7 @@ export const BRIEF_FIELDS: Record<string, string[]> = {
     'extra_hosts',
     'cmd',
   ],
-  [T.registry]: ['id', 'name', 'url', 'display', 'serveraddress', 'username', 'password', 'email'],
+  [T.registry]: ['id', 'name', 'url', 'display', 'serveraddress', 'username', 'email'],
 };
 
 /** A scalar column of a (non-registered) container child table. */

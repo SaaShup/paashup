@@ -201,6 +201,7 @@ export class Serializer {
       display_url: this.displayUrl(meta, id),
     };
     for (const col of meta.columns) {
+      if (col.secret) continue; // write-only secret — never serialized on read
       const v = row[col.name];
       if (v === null || v === undefined) {
         // NetBox returns non-nullable blanks as type defaults ('' / {} / false / 0),

@@ -115,6 +115,7 @@ const webhookMeta: TableMeta = {
       tsKind: 'string',
       nullable: false,
       writable: true,
+      secret: true, // HMAC signing secret — write-only, never returned on read
       required: false,
       maxLength: 255,
     },

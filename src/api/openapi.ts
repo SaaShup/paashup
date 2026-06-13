@@ -107,6 +107,7 @@ function briefSchema(meta: TableMeta): Schema {
     display: { type: 'string', readOnly: true },
   };
   for (const c of meta.columns) {
+    if (c.secret) continue; // write-only secret — not exposed on read
     if (BRIEF_FIELDS.includes(c.name)) props[c.name] = nullable(scalarSchema(c), c.nullable);
   }
   return { type: 'object', properties: props, required: ['id', 'url', 'display'] };
@@ -119,7 +120,10 @@ function readSchema(meta: TableMeta): Schema {
     display: { type: 'string', readOnly: true },
     display_url: { type: 'string', format: 'uri', readOnly: true },
   };
-  for (const c of meta.columns) props[c.name] = readProperty(c);
+  for (const c of meta.columns) {
+    if (c.secret) continue; // write-only secret — not exposed on read
+    props[c.name] = readProperty(c);
+  }
   // generic relation accessors (nested object, resolved by the serializer)
   for (const accessor of genericGroups(meta)) {
     props[accessor] = {

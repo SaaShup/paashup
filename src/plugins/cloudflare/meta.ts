@@ -81,6 +81,7 @@ const zoneAccountMeta: TableMeta = {
       tsKind: 'string',
       nullable: false,
       writable: true,
+      secret: true, // Cloudflare API token — write-only, never returned on read
       required: true,
       maxLength: 255,
     },

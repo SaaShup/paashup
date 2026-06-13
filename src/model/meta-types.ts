@@ -43,6 +43,12 @@ export interface ColumnMeta {
    */
   readonly formHidden?: boolean;
   /**
+   * Write-only secret (e.g. an API token / password / signing secret). Accepted on
+   * write, but **never serialized on read** — the serializer omits it so stored
+   * third-party credentials can't be read back via the API.
+   */
+  readonly secret?: boolean;
+  /**
    * For a json column holding an array of object-type strings (e.g. the webhook
    * `object_types` field), render it in the schema as a multi-select whose choices
    * are every object type currently in the registry.

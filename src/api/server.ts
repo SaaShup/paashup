@@ -8,7 +8,7 @@ import { allTables, getTable } from '../model/registry.js';
 import { Repository, type ListOptions } from '../repository/repository.js';
 import { ApiError, ValidationError } from '../errors.js';
 import { authenticate, type AuthOptions } from '../auth.js';
-import { matchRoute, matchAsset, fireHooks } from '../plugins/runtime.js';
+import { matchRoute, matchAsset, fireHooks, loadedPlugins } from '../plugins/runtime.js';
 import { attachRealtime, broadcast } from '../realtime.js';
 import { dispatchWebhooks, type WebhookEventContext } from '../webhooks.js';
 import { listUserTokens, createUserToken, revokeUserToken } from '../tokens.js';
@@ -69,14 +69,24 @@ async function serveStatic(
     res.end();
     return;
   }
+  // Hashed assets (js/css/…) are immutable; index.html must never be cached or the SPA
+  // goes stale after a rebuild (e.g. a new plugin UI doesn't appear).
+  const ext = extname(filePath);
+  const cache =
+    ext === '.html' || ext === ''
+      ? { 'Cache-Control': 'no-cache, no-store, must-revalidate' }
+      : { 'Cache-Control': 'public, max-age=31536000, immutable' };
   try {
     const data = await readFile(filePath);
-    res.writeHead(200, { 'Content-Type': MIME[extname(filePath)] ?? 'application/octet-stream' });
+    res.writeHead(200, { 'Content-Type': MIME[ext] ?? 'application/octet-stream', ...cache });
     res.end(data);
   } catch {
     try {
       const html = await readFile(resolvePath(rootAbs, 'index.html'));
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+      });
       res.end(html);
     } catch {
       res.writeHead(404);
@@ -235,6 +245,11 @@ export function createApiServer(opts: ServerOptions): http.Server {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(SWAGGER_UI_HTML);
         return;
+      }
+      // Loaded plugins (name + version) — lets the SPA discover plugins that ship a UI
+      // but no entities (e.g. netbox-migrate), so it can probe their /ui/ manifest.
+      if (method === 'GET' && path === '/api/plugins/') {
+        return send(res, 200, { results: loadedPlugins() });
       }
       // Public OIDC discovery for the SPA login flow (no secrets).
       if (method === 'GET' && path === '/api/auth/oidc-config/') {

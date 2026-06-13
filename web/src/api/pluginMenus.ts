@@ -26,6 +26,13 @@ export async function discoverPluginMenus(resources: Resource[]): Promise<Plugin
     const p = r.endpoint.split('/').filter(Boolean); // ["api","plugins",<name>,<res>]
     if (p[0] === 'api' && p[1] === 'plugins' && p[2]) names.add(p[2]);
   }
+  // Also include plugins that ship a UI but no entities (e.g. netbox-migrate).
+  try {
+    const loaded = await api.get<{ results?: { name: string }[] }>('/api/plugins/');
+    for (const pl of loaded.results ?? []) if (pl.name) names.add(pl.name);
+  } catch {
+    /* endpoint absent (older backend) — fall back to resource-derived names */
+  }
   const out: PluginMenuItem[] = [];
   await Promise.all(
     [...names].map(async (name) => {
@@ -33,7 +40,13 @@ export async function discoverPluginMenus(resources: Resource[]): Promise<Plugin
         const m = await api.get<UiManifest>(`/api/plugins/${name}/ui/`);
         for (const it of m.menu ?? []) {
           if (it?.label && it?.url)
-            out.push({ plugin: name, label: it.label, url: it.url, icon: it.icon, order: it.order });
+            out.push({
+              plugin: name,
+              label: it.label,
+              url: it.url,
+              icon: it.icon,
+              order: it.order,
+            });
         }
       } catch {
         /* plugin has no /ui/ manifest */

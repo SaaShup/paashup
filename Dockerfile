@@ -25,26 +25,36 @@ ENV NODE_ENV=production \
     PB_DIALECT=sqlite \
     PB_SQLITE_FILE=/data/paas2box.db \
     PB_WEB_ROOT=/app/web
-# Auth / SSO knobs. Secure by default: PB_AUTH_REQUIRED=1 rejects unauthenticated requests
-# (provision an API token or enable OIDC before use). For local dev only, run with
-# PB_AUTH_REQUIRED=0 to allow anonymous access.
+# ── Auth / SSO (set these at `docker run`/compose/Helm) ───────────────────────────
+# Secure by default: PB_AUTH_REQUIRED=1 rejects unauthenticated requests. Provision a
+# token (PB_SEED_TOKEN, below) or configure OIDC before use. Local dev only:
+# PB_AUTH_REQUIRED=0 allows anonymous access.
 #
-# SSO: enable one or more OIDC providers. Either the legacy single provider (PB_OIDC_ISSUER
-# + PB_OIDC_CLIENT_ID, below), or several at once via PB_OIDC_PROVIDERS=keycloak,google and
-# per-provider PB_OIDC_<ID>_* vars, e.g.:
-#   PB_OIDC_KEYCLOAK_ISSUER=https://kc/realms/paasbox  PB_OIDC_KEYCLOAK_CLIENT_ID=paasbox
-#   PB_OIDC_KEYCLOAK_WRITE_ROLE=paasbox-write
-#   PB_OIDC_GOOGLE_ISSUER=https://accounts.google.com  PB_OIDC_GOOGLE_CLIENT_ID=...
-#   PB_OIDC_GOOGLE_CLIENT_SECRET=...  PB_OIDC_GOOGLE_ALLOWED_DOMAINS=acme.com
-#   PB_OIDC_GOOGLE_WRITE_EMAILS=admin@acme.com
-# The browser never sees a client secret — the code→token exchange runs server-side.
+# OIDC sign-in: configure ONE provider with the PB_OIDC_* vars below, OR several at once
+# with PB_OIDC_PROVIDERS=keycloak,google + per-provider PB_OIDC_<ID>_* vars (same suffixes,
+# e.g. PB_OIDC_GOOGLE_CLIENT_SECRET). The browser never sees the client secret — the
+# authorization-code → token exchange runs server-side.
+#
+# Which vars each provider needs:
+#   Keycloak  → PB_OIDC_ISSUER=https://kc/realms/<realm>, PB_OIDC_CLIENT_ID,
+#               PB_OIDC_WRITE_ROLE   (public client; no secret)
+#   Google    → PB_OIDC_ISSUER=https://accounts.google.com, PB_OIDC_CLIENT_ID,
+#               PB_OIDC_CLIENT_SECRET     ← REQUIRED: Google is a confidential client;
+#                                            without it login fails "client_secret is missing"
+#               PB_OIDC_ALLOWED_DOMAINS=acme.com   ← REQUIRED: who may sign in (else all
+#                                                     logins are rejected, fail-closed)
+#               PB_OIDC_WRITE_EMAILS=admin@acme.com ← who gets write (others = read-only)
+#   Also add the app URL (e.g. https://host/) to the provider's Authorized redirect URIs.
 ENV PB_AUTH_REQUIRED=1 \
     PB_OIDC_PROVIDERS="" \
     PB_OIDC_ISSUER="" \
-    PB_OIDC_AUDIENCE="" \
     PB_OIDC_CLIENT_ID="" \
+    PB_OIDC_CLIENT_SECRET="" \
+    PB_OIDC_AUDIENCE="" \
+    PB_OIDC_USERNAME_CLAIM=preferred_username \
     PB_OIDC_WRITE_ROLE="" \
-    PB_OIDC_USERNAME_CLAIM=preferred_username
+    PB_OIDC_ALLOWED_DOMAINS="" \
+    PB_OIDC_WRITE_EMAILS=""
 # Deploy-time bootstrap token (idempotent): set PB_SEED_TOKEN to provision an API key on
 # first boot so a secure-by-default instance is usable before any OIDC login. Owned by
 # PB_SEED_USERNAME (find-or-created). Unset = no seeding. Use a strong, random value.

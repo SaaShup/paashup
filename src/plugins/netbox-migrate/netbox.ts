@@ -1,6 +1,7 @@
 // Minimal NetBox REST client for the migration tool. Reads collections with an API
 // token (NetBox `Authorization: Token <key>`), following pagination. A token with
 // access to all objects is recommended so nothing is silently skipped.
+import { assertAllowedUrl } from '../../ssrf.js';
 
 export interface NetboxConn {
   url: string; // NetBox base, e.g. https://netbox.example.com
@@ -9,6 +10,20 @@ export interface NetboxConn {
 
 function authHeaders(token: string): Record<string, string> {
   return { Authorization: `Token ${token}`, Accept: 'application/json' };
+}
+
+/**
+ * Fetch a NetBox URL through the SSRF guard, without following redirects — so a
+ * malicious/compromised NetBox can't 3xx-pivot the authenticated client to an internal
+ * host. Every URL (including each `next` pagination link) goes through here.
+ */
+async function nbFetch(url: string, token: string, timeoutMs: number): Promise<Response> {
+  await assertAllowedUrl(url);
+  return fetch(url, {
+    headers: authHeaders(token),
+    redirect: 'manual',
+    signal: AbortSignal.timeout(timeoutMs),
+  });
 }
 
 /**
@@ -23,10 +38,7 @@ export async function nbGetAll(
   const out: Record<string, unknown>[] = [];
   let next: string | null = `${conn.url.replace(/\/+$/, '')}${endpoint}?limit=200`;
   while (next) {
-    const res: Response = await fetch(next, {
-      headers: authHeaders(conn.token),
-      signal: AbortSignal.timeout(60_000),
-    });
+    const res: Response = await nbFetch(next, conn.token, 60_000);
     if (res.status === 404) return out;
     if (!res.ok) throw new Error(`GET ${endpoint} -> ${res.status}`);
     const page = (await res.json()) as {
@@ -50,10 +62,7 @@ export async function* nbPages(
 ): AsyncGenerator<Record<string, unknown>[]> {
   let next: string | null = `${conn.url.replace(/\/+$/, '')}${endpoint}?limit=200`;
   while (next) {
-    const res: Response = await fetch(next, {
-      headers: authHeaders(conn.token),
-      signal: AbortSignal.timeout(60_000),
-    });
+    const res: Response = await nbFetch(next, conn.token, 60_000);
     if (res.status === 404) return;
     if (!res.ok) throw new Error(`GET ${endpoint} -> ${res.status}`);
     const page = (await res.json()) as {
@@ -67,10 +76,11 @@ export async function* nbPages(
 
 /** Number of objects in a NetBox collection (the `count` from a 1-item page); 0 if absent. */
 export async function nbCount(conn: NetboxConn, endpoint: string): Promise<number> {
-  const res = await fetch(`${conn.url.replace(/\/+$/, '')}${endpoint}?limit=1`, {
-    headers: authHeaders(conn.token),
-    signal: AbortSignal.timeout(30_000),
-  });
+  const res = await nbFetch(
+    `${conn.url.replace(/\/+$/, '')}${endpoint}?limit=1`,
+    conn.token,
+    30_000,
+  );
   if (res.status === 404) return 0;
   if (!res.ok) throw new Error(`GET ${endpoint} -> ${res.status}`);
   const page = (await res.json()) as { count?: number };
@@ -79,10 +89,7 @@ export async function nbCount(conn: NetboxConn, endpoint: string): Promise<numbe
 
 /** Quick connectivity/permission check; returns the NetBox status payload or throws. */
 export async function nbStatus(conn: NetboxConn): Promise<Record<string, unknown>> {
-  const res = await fetch(`${conn.url.replace(/\/+$/, '')}/api/status/`, {
-    headers: authHeaders(conn.token),
-    signal: AbortSignal.timeout(15_000),
-  });
+  const res = await nbFetch(`${conn.url.replace(/\/+$/, '')}/api/status/`, conn.token, 15_000);
   if (!res.ok) throw new Error(`NetBox /api/status/ -> ${res.status}`);
   return (await res.json()) as Record<string, unknown>;
 }

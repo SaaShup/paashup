@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import type { Db } from './db/types.js';
 import type { TableMeta } from './model/meta-types.js';
 import { registerEntity } from './model/registry.js';
+import { assertAllowedUrl } from './ssrf.js';
 
 export const WEBHOOK_TABLE = 'extras_webhook';
 
@@ -470,10 +471,24 @@ interface DeliveryResult {
 // paths with optional filters: | default('x') | urlencode | lower | upper.
 
 function applyFilter(v: unknown, filter: string): unknown {
-  const m = /^(\w+)\s*(?:\(\s*(['"]?)(.*?)\2\s*\))?$/.exec(filter);
-  if (!m) return v;
-  const arg = m[3];
-  switch (m[1]) {
+  // Parse `name` / `name(arg)` / `name('arg')` linearly — no regex backtracking (the
+  // previous regex was ReDoS-prone on long unbalanced inputs). Bound the length too.
+  const f = filter.trim();
+  if (f.length > 256) return v;
+  let name = f;
+  let arg: string | undefined;
+  const open = f.indexOf('(');
+  if (open !== -1) {
+    if (!f.endsWith(')')) return v; // malformed → no-op
+    name = f.slice(0, open).trim();
+    let inner = f.slice(open + 1, -1).trim();
+    const q = inner[0];
+    if ((q === "'" || q === '"') && inner.length >= 2 && inner.endsWith(q)) {
+      inner = inner.slice(1, -1);
+    }
+    arg = inner;
+  }
+  switch (name) {
     case 'default':
       return v === undefined || v === null || v === '' ? (arg ?? '') : v;
     case 'urlencode':
@@ -546,7 +561,19 @@ async function deliver(
   // Send the rendered payload for every method except GET (which can't carry a
   // body) — DELETE included, so the agent receives the object it must remove.
   const hasBody = wh.method !== 'GET';
-  const opts: RequestInit = { method: wh.method, headers, ...(hasBody ? { body } : {}) };
+  // Don't auto-follow redirects — a 3xx to an internal/metadata host would bypass the guard.
+  const opts: RequestInit = {
+    method: wh.method,
+    headers,
+    redirect: 'manual',
+    ...(hasBody ? { body } : {}),
+  };
+  // SSRF guard: refuse to deliver to a blocked address (metadata/link-local by default).
+  try {
+    await assertAllowedUrl(targetUrl);
+  } catch (e) {
+    return { success: false, status: null, attempts: 0, error: (e as Error).message, redacted };
+  }
   if (!wh.sslVerify) {
     try {
       if (!insecureAgent) {

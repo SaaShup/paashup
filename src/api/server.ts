@@ -235,6 +235,14 @@ export function createApiServer(opts: ServerOptions): http.Server {
   const server = http.createServer(async (req, res) => {
     const baseUrl = fixedBase ?? `http://${req.headers.host ?? 'localhost:8000'}`;
     const method = req.method ?? 'GET';
+    // Baseline security headers on every response (set before routing; writeHead merges).
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Content-Security-Policy', "frame-ancestors 'self'"); // anti-clickjacking
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    if (req.headers['x-forwarded-proto'] === 'https') {
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
     try {
       const path = (req.url ?? '/').split('?')[0]!.replace(/\/?$/, '/');
 

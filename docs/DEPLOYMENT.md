@@ -126,6 +126,7 @@ Use both providers together by setting `PB_OIDC_PROVIDERS=keycloak,google` and t
 | `PB_WEBHOOK_RETRIES` | `2` | Extra delivery attempts after the first (total tries = retries + 1) |
 | `PB_WEBHOOK_BACKOFF_MS` | `500` | Base backoff between attempts |
 | `PB_WEBHOOK_TIMEOUT_MS` | `8000` | Per-request timeout |
+| `PB_SSRF_BLOCK_PRIVATE` | — | `1` → outbound webhooks & netbox-migrate also refuse loopback/RFC1918/ULA targets (metadata/link-local are always blocked). Enable for an internet-only egress posture |
 | `PB_PLUGINS` | — | Extra plugin module specifiers (comma list), merged with `package.json` `paas2box.plugins` |
 | `PB_CLOUDFLARE_BASE_URL` | Cloudflare API | Override for the Cloudflare plugin |
 

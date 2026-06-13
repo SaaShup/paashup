@@ -50,7 +50,15 @@ const frameStyle = computed(() => {
       </div>
     </div>
     <div class="frame-wrap">
-      <iframe :src="page.url" :title="page.label" :style="frameStyle" frameborder="0"></iframe>
+      <!-- Sandboxed with an opaque origin (no allow-same-origin): plugin-supplied pages
+           run scripts but cannot reach the parent app's localStorage / token / API. -->
+      <iframe
+        :src="page.url"
+        :title="page.label"
+        :style="frameStyle"
+        frameborder="0"
+        sandbox="allow-scripts allow-forms allow-popups"
+      ></iframe>
     </div>
   </div>
 </template>

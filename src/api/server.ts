@@ -9,7 +9,7 @@ import { Repository, type ListOptions } from '../repository/repository.js';
 import { ApiError, ValidationError } from '../errors.js';
 import { authenticate, ssoExchange, type AuthOptions } from '../auth.js';
 import { listProviders, discover } from '../oidc.js';
-import { appVersion, NETBOX_VERSION } from '../version.js';
+import { appVersion } from '../version.js';
 import { matchRoute, matchAsset, fireHooks, loadedPlugins } from '../plugins/runtime.js';
 import { attachRealtime, broadcast } from '../realtime.js';
 import { dispatchWebhooks, type WebhookEventContext } from '../webhooks.js';
@@ -253,16 +253,13 @@ export function createApiServer(opts: ServerOptions): http.Server {
       if (method === 'GET' && path === '/api/plugins/') {
         return send(res, 200, { results: loadedPlugins() });
       }
-      // NetBox-shaped status/health (public, no DB) — for monitoring, CD checks, and
-      // external tooling that reads `netbox-version`/`plugins`. Superset of a simple
-      // {status, version} health probe; everything here is already public via
-      // /api/schema/ (netbox-version) and /api/plugins/ (plugin list).
+      // Status/health (public, no DB) — for monitoring, CD checks, and external tooling.
+      // {status, version} plus the loaded plugins as a NetBox-style {name: version} map.
+      // Public on purpose; the plugin list is already public via /api/plugins/.
       if (method === 'GET' && path === '/api/status/') {
         return send(res, 200, {
           status: 'ok',
           version: appVersion(),
-          'paas2box-version': appVersion(),
-          'netbox-version': NETBOX_VERSION,
           'node-version': process.version,
           plugins: Object.fromEntries(loadedPlugins().map((p) => [p.name, p.version])),
         });

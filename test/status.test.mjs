@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { SqliteDb } from '../dist/db/sqlite.js';
 import { createApiServer } from '../dist/api/server.js';
-import { appVersion, NETBOX_VERSION } from '../dist/version.js';
+import { appVersion } from '../dist/version.js';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const DB_FILE = join(ROOT, 'test', '.status.sqlite');
@@ -36,16 +36,17 @@ test('GET /api/status/ is public (no auth), 200, JSON', async () => {
   assert.match(res.headers.get('content-type') ?? '', /application\/json/);
 });
 
-test('payload is NetBox-shaped and reports the right versions', async () => {
+test('payload: status, single version (from package.json), node-version, plugins map', async () => {
   const body = await fetch(`${base}/api/status/`).then((r) => r.json());
   assert.equal(body.status, 'ok');
   assert.ok(body.version, 'version present');
-  assert.equal(body.version, PKG_VERSION); // sourced from package.json
-  assert.equal(body['paas2box-version'], PKG_VERSION);
-  assert.equal(body['netbox-version'], NETBOX_VERSION);
+  assert.equal(body.version, PKG_VERSION); // single version field, sourced from package.json
   assert.equal(typeof body['node-version'], 'string');
   assert.equal(typeof body.plugins, 'object'); // NetBox-style {name: version} map
   assert.ok(!Array.isArray(body.plugins));
+  // per review: no duplicate version field, and netbox-version is intentionally absent
+  assert.equal(body['paas2box-version'], undefined);
+  assert.equal(body['netbox-version'], undefined);
 });
 
 test('appVersion() matches package.json and falls back to "unknown"', () => {

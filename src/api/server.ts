@@ -16,7 +16,7 @@ import { dispatchWebhooks, type WebhookEventContext } from '../webhooks.js';
 import { listUserTokens, createUserToken, revokeUserToken } from '../tokens.js';
 import '../journal.js'; // registers the journal-entries entity
 import '../configcontext.js'; // registers config-contexts entity + the /render/ route
-import { Serializer } from './serializer.js';
+import { Serializer, getSerializer } from './serializer.js';
 import { buildOpenApi } from './openapi.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -210,6 +210,28 @@ function toApiError(err: unknown): ApiError {
   if (/NOT NULL|cannot be null|ER_BAD_NULL/i.test(msg + code))
     return new ApiError(400, 'A required field is missing');
   return new ApiError(500, 'Internal server error');
+}
+
+// Serialize a row for the response AND the change/webhook payload. Uses a plugin's
+// registered serializer (e.g. Docker's nested serialization) when present, so every
+// generic CRUD write — create, single update, bulk — emits the same full entity as GET.
+async function serializeRow(
+  db: Db,
+  ser: Serializer,
+  table: string,
+  row: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const custom = getSerializer(table);
+  return custom ? custom(db, row) : ser.object(table, row);
+}
+async function serializeRows(
+  db: Db,
+  ser: Serializer,
+  table: string,
+  rows: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  const custom = getSerializer(table);
+  return custom ? Promise.all(rows.map((r) => custom(db, r))) : ser.objects(table, rows);
 }
 
 function pageLink(
@@ -429,7 +451,7 @@ export function createApiServer(opts: ServerOptions): http.Server {
         if (method === 'GET') {
           const listOpts = parseQuery(url.searchParams);
           const page = await repo.list(listOpts);
-          const results = await ser.objects(route.table, page.results);
+          const results = await serializeRows(db, ser, route.table, page.results);
           const next =
             page.offset + page.limit < page.count
               ? pageLink(
@@ -459,7 +481,12 @@ export function createApiServer(opts: ServerOptions): http.Server {
               const r = new Repository<Record<string, unknown>>(tx, meta);
               return Promise.all(body.map((b) => r.create(b as Record<string, unknown>)));
             });
-            const out = await ser.objects(route.table, created as Record<string, unknown>[]);
+            const out = await serializeRows(
+              db,
+              ser,
+              route.table,
+              created as Record<string, unknown>[],
+            );
             for (const o of out)
               emitChange(db, meta, 'created', (o as { id: number | string }).id, o, {
                 ...evt({ prechange: null, postchange: o }),
@@ -469,7 +496,7 @@ export function createApiServer(opts: ServerOptions): http.Server {
           const created = await repo.create(body as Record<string, unknown>);
           const createdId = (created as { id: number | string }).id;
           await fireHooks(db, route.table, 'created', createdId, created);
-          const obj = await ser.object(route.table, created);
+          const obj = await serializeRow(db, ser, route.table, created);
           emitChange(
             db,
             meta,
@@ -515,7 +542,7 @@ export function createApiServer(opts: ServerOptions): http.Server {
             }
             return rows;
           });
-          const out = await ser.objects(route.table, updated);
+          const out = await serializeRows(db, ser, route.table, updated);
           for (const o of out)
             emitChange(db, meta, 'updated', (o as { id: number | string }).id, o, {
               ...evt({ prechange: null, postchange: o }),
@@ -531,23 +558,23 @@ export function createApiServer(opts: ServerOptions): http.Server {
       if (method === 'GET') {
         const row = await repo.retrieve(rid);
         if (!row) throw new ApiError(404, 'Not found');
-        return send(res, 200, await ser.object(route.table, row));
+        return send(res, 200, await serializeRow(db, ser, route.table, row));
       }
       if (method === 'PUT' || method === 'PATCH') {
         const body = await readBody(req);
         // snapshot the object before the change (for {{ snapshots.prechange.* }})
         const before = await repo.retrieve(rid);
-        const prechange = before ? await ser.object(route.table, before) : null;
+        const prechange = before ? await serializeRow(db, ser, route.table, before) : null;
         const updated = await repo.update(rid, body as Record<string, unknown>);
         if (!updated) throw new ApiError(404, 'Not found');
         await fireHooks(db, route.table, 'updated', rid, updated);
-        const obj = await ser.object(route.table, updated);
+        const obj = await serializeRow(db, ser, route.table, updated);
         emitChange(db, meta, 'updated', rid, obj, evt({ prechange, postchange: obj }));
         return send(res, 200, obj);
       }
       if (method === 'DELETE') {
         const before = await repo.retrieve(rid);
-        const prechange = before ? await ser.object(route.table, before) : null;
+        const prechange = before ? await serializeRow(db, ser, route.table, before) : null;
         const ok = await repo.destroy(rid);
         if (!ok) throw new ApiError(404, 'Not found');
         await fireHooks(db, route.table, 'deleted', rid);

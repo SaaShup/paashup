@@ -9,6 +9,7 @@ import { Repository, type ListOptions } from '../repository/repository.js';
 import { ApiError, ValidationError } from '../errors.js';
 import { authenticate, ssoExchange, type AuthOptions } from '../auth.js';
 import { listProviders, discover } from '../oidc.js';
+import { appVersion, NETBOX_VERSION } from '../version.js';
 import { matchRoute, matchAsset, fireHooks, loadedPlugins } from '../plugins/runtime.js';
 import { attachRealtime, broadcast } from '../realtime.js';
 import { dispatchWebhooks, type WebhookEventContext } from '../webhooks.js';
@@ -251,6 +252,20 @@ export function createApiServer(opts: ServerOptions): http.Server {
       // but no entities (e.g. netbox-migrate), so it can probe their /ui/ manifest.
       if (method === 'GET' && path === '/api/plugins/') {
         return send(res, 200, { results: loadedPlugins() });
+      }
+      // NetBox-shaped status/health (public, no DB) — for monitoring, CD checks, and
+      // external tooling that reads `netbox-version`/`plugins`. Superset of a simple
+      // {status, version} health probe; everything here is already public via
+      // /api/schema/ (netbox-version) and /api/plugins/ (plugin list).
+      if (method === 'GET' && path === '/api/status/') {
+        return send(res, 200, {
+          status: 'ok',
+          version: appVersion(),
+          'paas2box-version': appVersion(),
+          'netbox-version': NETBOX_VERSION,
+          'node-version': process.version,
+          plugins: Object.fromEntries(loadedPlugins().map((p) => [p.name, p.version])),
+        });
       }
       // Public OIDC discovery for the SPA login flow (no secrets). Back-compat shape,
       // derived from the first configured provider; the SPA prefers /api/auth/providers/.

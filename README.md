@@ -51,7 +51,9 @@ docker run -p 8000:8000 -e PB_MIGRATE=1 -v paas2box-data:/data paas2box
 
 The image is multi-stage and runs as a non-root user. It bundles the built Vue UI
 and serves **everything on one port**: the SPA at `/`, the REST API at `/api/`,
-the OpenAPI schema at `/api/schema/`, and the WebSocket change-feed at `/api/ws/`.
+the OpenAPI schema at `/api/schema/`, a NetBox-shaped health/version probe at
+`/api/status/` (public — `status`, `version`, `netbox-version`, `plugins`), and the
+WebSocket change-feed at `/api/ws/`.
 `PB_MIGRATE=1` applies the bundled SQLite migrations on boot (via
 `scripts/migrate-sqlite.mjs`, no Python in the image); for MariaDB, run migrations
 separately.

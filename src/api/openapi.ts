@@ -4,10 +4,9 @@
 // fields) and write request bodies. Served at /api/schema/.
 import type { ColumnMeta, TableMeta } from '../model/meta-types.js';
 import { allTables } from '../model/registry.js';
+import { NETBOX_VERSION } from '../version.js';
 
 type Schema = Record<string, unknown>;
-
-const NETBOX_VERSION = '4.6.2';
 
 const BRIEF_FIELDS = [
   'name',

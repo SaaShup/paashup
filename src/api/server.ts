@@ -497,6 +497,6 @@ export function createApiServer(opts: ServerOptions): http.Server {
     }
   });
 
-  if (opts.realtime) attachRealtime(server);
+  if (opts.realtime) attachRealtime(server, { db, authRequired: !!opts.auth?.required });
   return server;
 }

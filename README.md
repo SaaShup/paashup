@@ -56,6 +56,12 @@ the OpenAPI schema at `/api/schema/`, and the WebSocket change-feed at `/api/ws/
 `scripts/migrate-sqlite.mjs`, no Python in the image); for MariaDB, run migrations
 separately.
 
+**Auth is secure by default.** `PB_AUTH_REQUIRED` defaults to `1`: anonymous requests
+are rejected (`403`), and the WebSocket change-feed at `/api/ws/` likewise requires a
+valid token — so provision an API token or enable OIDC before use (see
+[docs/SSO-API-ACCESS.md](docs/SSO-API-ACCESS.md)). For **local dev only**, run with
+`-e PB_AUTH_REQUIRED=0` to allow anonymous access.
+
 ### Run the web UI
 
 The admin UI (Vue 3, NetBox-style, schema-driven, live over WebSocket) can be run

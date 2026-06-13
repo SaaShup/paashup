@@ -74,7 +74,9 @@ if (pluginPaths.length) {
 const server = createApiServer({
   db,
   baseUrl,
-  auth: { required: process.env.PB_AUTH_REQUIRED === '1' },
+  // Secure by default: anonymous requests are rejected unless explicitly opted out
+  // with PB_AUTH_REQUIRED=0 (e.g. for local dev). Set up a token or OIDC before going live.
+  auth: { required: process.env.PB_AUTH_REQUIRED !== '0' },
   realtime: process.env.PB_REALTIME !== '0', // WebSocket change-feed on by default
   webRoot: process.env.PB_WEB_ROOT, // serve a built SPA if set (single-container)
 });

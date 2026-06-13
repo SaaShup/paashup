@@ -1,5 +1,7 @@
-import type { Server } from 'node:http';
+import type { Server, IncomingMessage } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
+import type { Db } from './db/types.js';
+import { authenticate } from './auth.js';
 
 /** A change broadcast to WebSocket clients after a successful API write. */
 export interface ChangeEvent {
@@ -30,14 +32,51 @@ export function clientCount(): number {
   return clients.size;
 }
 
+export interface RealtimeOptions {
+  db?: Db;
+  /** When true, reject WebSocket clients that don't present a valid token. */
+  authRequired?: boolean;
+}
+
+/**
+ * Authenticate a WebSocket handshake. Browsers can't set request headers on a
+ * `new WebSocket(...)`, so the SPA passes its credential in the query string:
+ *   `?access_token=<jwt>` (OIDC bearer)  or  `?token=<key>` (static API token).
+ * Non-browser clients may still use the `Authorization` header.
+ */
+async function wsAuthenticated(db: Db | undefined, req: IncomingMessage): Promise<boolean> {
+  if (!db) return false;
+  let header = req.headers.authorization;
+  if (!header && req.url) {
+    const q = new URL(req.url, 'http://localhost').searchParams;
+    const jwt = q.get('access_token');
+    const tok = q.get('token');
+    if (jwt) header = `Bearer ${jwt}`;
+    else if (tok) header = `Token ${tok}`;
+  }
+  return (await authenticate(db, header)) != null;
+}
+
 /** Attach a WebSocket change-feed to an HTTP server at `path` (default /api/ws/). */
-export function attachRealtime(server: Server, path = '/api/ws/'): WebSocketServer {
+export function attachRealtime(
+  server: Server,
+  opts: RealtimeOptions = {},
+  path = '/api/ws/',
+): WebSocketServer {
   wss = new WebSocketServer({ server, path });
-  wss.on('connection', (ws) => {
-    clients.add(ws);
-    ws.send(JSON.stringify({ type: 'hello', ts: Date.now() }));
-    ws.on('close', () => clients.delete(ws));
-    ws.on('error', () => clients.delete(ws));
+  wss.on('connection', (ws, req) => {
+    // When auth is required, reject anonymous/invalid clients — otherwise the feed
+    // would stream every create/update/delete (with data) to anyone who connects.
+    void (async () => {
+      if (opts.authRequired && !(await wsAuthenticated(opts.db, req))) {
+        ws.close(1008, 'authentication required');
+        return;
+      }
+      clients.add(ws);
+      ws.send(JSON.stringify({ type: 'hello', ts: Date.now() }));
+      ws.on('close', () => clients.delete(ws));
+      ws.on('error', () => clients.delete(ws));
+    })();
   });
   return wss;
 }

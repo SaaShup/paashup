@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SqliteDb } from '../dist/db/sqlite.js';
 import { createApiServer } from '../dist/api/server.js';
+import { createToken } from '../dist/auth.js';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const DB_FILE = join(ROOT, 'test', '.rt.sqlite');
@@ -106,4 +107,46 @@ test('multiple clients all receive events', async () => {
   assert.equal(eb.event, 'created');
   a.ws.close();
   b.ws.close();
+});
+
+test('when auth is required, the WS rejects anonymous clients and accepts a token', async () => {
+  const F = join(ROOT, 'test', '.rt-auth.sqlite');
+  rmSync(F, { force: true });
+  const adb = new SqliteDb(F);
+  adb.exec(readFileSync(join(ROOT, 'datamodel', 'sql', 'schema.sqlite.sql'), 'utf8'));
+  adb.exec(readFileSync(join(ROOT, 'migrations', '0002_auth_token.sqlite.sql'), 'utf8'));
+  const u = await adb.execute('INSERT INTO users_user (username) VALUES (?)', ['svc']);
+  const { key } = await createToken(adb, { userId: u.insertId, writeEnabled: true });
+
+  const asrv = createApiServer({ db: adb, auth: { required: true }, realtime: true });
+  await new Promise((r) => asrv.listen(0, '127.0.0.1', r));
+  const aWs = `ws://127.0.0.1:${asrv.address().port}/api/ws/`;
+
+  // anonymous (no credential) → closed with 1008, never receives hello
+  await new Promise((resolve, reject) => {
+    const ws = new WebSocket(aWs);
+    let gotHello = false;
+    const t = setTimeout(() => reject(new Error('anonymous WS was not closed')), 3000);
+    ws.addEventListener('message', (e) => {
+      if (JSON.parse(e.data).type === 'hello') gotHello = true;
+    });
+    ws.addEventListener('close', (e) => {
+      clearTimeout(t);
+      assert.equal(gotHello, false, 'anonymous client must not receive the change feed');
+      assert.equal(e.code, 1008);
+      resolve();
+    });
+    ws.addEventListener('error', () => {}); // a close frame follows; ignore
+  });
+
+  // valid token in the query string → accepted (receives hello)
+  const c = connect(`${aWs}?token=${key}`);
+  await c.ready;
+  const hello = await c.next((m) => m.type === 'hello');
+  assert.ok(typeof hello.ts === 'number');
+  c.ws.close();
+
+  await new Promise((r) => asrv.close(r));
+  await adb.close();
+  rmSync(F, { force: true });
 });

@@ -140,17 +140,23 @@ jobs:
         run: docker build -t paas2box:ci .
       - name: Smoke-test image (migrate + serve + request)
         run: |
-          docker run -d --name pbx -e PB_MIGRATE=1 -p 8000:8000 paas2box:ci
+          # Image is secure by default (PB_AUTH_REQUIRED=1); seed a known token to use.
+          TOKEN=0123456789abcdef0123456789abcdef01234567
+          docker run -d --name pbx -e PB_MIGRATE=1 -e PB_SEED_TOKEN=$TOKEN -p 8000:8000 paas2box:ci
           for i in $(seq 1 30); do
-            code=$(curl -s -o /dev/null -w "%{http_code}" localhost:8000/api/dcim/manufacturers/ || echo 000)
+            code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Token $TOKEN" localhost:8000/api/dcim/manufacturers/ || echo 000)
             if [ "$code" = "200" ]; then echo "API up (HTTP $code)"; break; fi
             sleep 1
           done
           test "$code" = "200" || { echo "image smoke test failed"; docker logs pbx; exit 1; }
+          # secure by default: an anonymous request must be rejected
+          anon=$(curl -s -o /dev/null -w "%{http_code}" localhost:8000/api/dcim/manufacturers/ || echo 000)
+          test "$anon" = "403" || { echo "expected 403 for anonymous, got $anon"; docker logs pbx; exit 1; }
           curl -sf -X POST localhost:8000/api/dcim/manufacturers/ \
+            -H "Authorization: Token $TOKEN" \
             -H 'Content-Type: application/json' -d '{"name":"Acme","slug":"acme"}' >/dev/null
-          curl -sf "localhost:8000/api/dcim/manufacturers/?limit=1" | grep -q '"count":1'
-          echo "Docker image smoke test passed"
+          curl -sf -H "Authorization: Token $TOKEN" "localhost:8000/api/dcim/manufacturers/?limit=1" | grep -q '"count":1'
+          echo "Docker image smoke test passed (auth required, seeded token works)"
       - name: Container logs (always)
         if: always()
         run: docker logs pbx 2>/dev/null || true

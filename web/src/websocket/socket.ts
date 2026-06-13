@@ -1,4 +1,5 @@
 import type { ServerEvent } from './events.js';
+import { getAccessToken } from '../auth/oidc.js';
 
 export type ConnectionStatus = 'connecting' | 'open' | 'closed';
 type Listener = (e: ServerEvent) => void;
@@ -25,7 +26,8 @@ export class SocketManager {
 
   private open(): void {
     this.setStatus('connecting');
-    const ws = new WebSocket(this.url);
+    // Recompute the credential on every (re)connect so a refreshed token is used.
+    const ws = new WebSocket(withCredential(this.url));
     this.ws = ws;
     ws.addEventListener('open', () => {
       this.backoff = 500;
@@ -82,6 +84,21 @@ export class SocketManager {
 function defaultUrl(): string {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   return `${proto}://${location.host}/api/ws/`;
+}
+
+/**
+ * Append the caller's credential to the WS URL. Browsers can't set request headers on a
+ * `new WebSocket(...)`, so the server reads it from the query string: an OIDC bearer as
+ * `access_token`, else a static API token as `token`. Anonymous if neither is present.
+ */
+function withCredential(url: string): string {
+  const bearer = getAccessToken();
+  const token = localStorage.getItem('pb_token');
+  if (!bearer && !token) return url;
+  const u = new URL(url);
+  if (bearer) u.searchParams.set('access_token', bearer);
+  else if (token) u.searchParams.set('token', token);
+  return u.toString();
 }
 
 /** Shared singleton used by the app. */

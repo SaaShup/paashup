@@ -25,15 +25,21 @@ ENV NODE_ENV=production \
     PB_DIALECT=sqlite \
     PB_SQLITE_FILE=/data/paas2box.db \
     PB_WEB_ROOT=/app/web
-# Auth / SSO knobs — safe defaults (SSO OFF, anonymous allowed). Override at `docker run`
-# to enable Keycloak/OIDC: set at least PB_OIDC_ISSUER (+ PB_OIDC_CLIENT_ID for the web
-# login). PB_AUTH_REQUIRED=1 rejects unauthenticated requests (shows the SPA login page).
-ENV PB_AUTH_REQUIRED=0 \
+# Auth / SSO knobs. Secure by default: PB_AUTH_REQUIRED=1 rejects unauthenticated requests
+# (provision an API token or enable OIDC before use). For local dev only, run with
+# PB_AUTH_REQUIRED=0 to allow anonymous access. Enable Keycloak/OIDC by setting at least
+# PB_OIDC_ISSUER (+ PB_OIDC_CLIENT_ID for the web login page).
+ENV PB_AUTH_REQUIRED=1 \
     PB_OIDC_ISSUER="" \
     PB_OIDC_AUDIENCE="" \
     PB_OIDC_CLIENT_ID="" \
     PB_OIDC_WRITE_ROLE="" \
     PB_OIDC_USERNAME_CLAIM=preferred_username
+# Deploy-time bootstrap token (idempotent): set PB_SEED_TOKEN to provision an API key on
+# first boot so a secure-by-default instance is usable before any OIDC login. Owned by
+# PB_SEED_USERNAME (find-or-created). Unset = no seeding. Use a strong, random value.
+ENV PB_SEED_TOKEN="" \
+    PB_SEED_USERNAME=admin
 WORKDIR /app
 
 COPY --from=build /app/node_modules ./node_modules

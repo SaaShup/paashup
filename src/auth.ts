@@ -45,6 +45,54 @@ export async function createToken(
   return { id: res.insertId, key };
 }
 
+export interface SeedTokenResult {
+  /** true if a token was created now; false if one with that key already existed. */
+  created: boolean;
+  username: string;
+  tokenId?: number;
+}
+
+/**
+ * Bootstrap an API token from the environment, for deploy-time provisioning (so a
+ * secure-by-default instance has a usable credential before any UI/OIDC login):
+ *   PB_SEED_TOKEN           the token key to ensure exists (no-op if unset)
+ *   PB_SEED_USERNAME        owning user, find-or-created (default "admin")
+ *   PB_SEED_TOKEN_READONLY  "1" → read-only token (default: write-enabled)
+ * Idempotent: if a token with that key already exists, nothing changes. Returns null
+ * when PB_SEED_TOKEN is unset.
+ */
+export async function ensureSeedToken(db: Db): Promise<SeedTokenResult | null> {
+  const key = process.env.PB_SEED_TOKEN?.trim();
+  if (!key) return null;
+  const username = (process.env.PB_SEED_USERNAME || 'admin').trim();
+
+  const existing = await db.get<{ id: number }>('SELECT id FROM auth_token WHERE `key` = ?', [key]);
+  if (existing) return { created: false, username };
+
+  const user = await db.get<{ id: number }>('SELECT id FROM users_user WHERE username = ?', [
+    username,
+  ]);
+  let userId: number;
+  if (user) userId = Number(user.id);
+  else {
+    const res = await db.execute(
+      `INSERT INTO users_user (username, email, first_name, last_name, is_active, date_joined)
+       VALUES (?, '', '', '', 1, ?)`,
+      [username, new Date().toISOString()],
+    );
+    userId = res.insertId;
+  }
+
+  const writeEnabled = process.env.PB_SEED_TOKEN_READONLY !== '1';
+  const { id } = await createToken(db, {
+    userId,
+    key,
+    writeEnabled,
+    description: 'seeded at deploy time (PB_SEED_TOKEN)',
+  });
+  return { created: true, username, tokenId: id };
+}
+
 /**
  * Resolve an `Authorization` header to an auth context, or null. Supports both a
  * static API token (`Token <key>`) and — when OIDC is configured — a Keycloak/OIDC

@@ -56,6 +56,21 @@ the OpenAPI schema at `/api/schema/`, and the WebSocket change-feed at `/api/ws/
 `scripts/migrate-sqlite.mjs`, no Python in the image); for MariaDB, run migrations
 separately.
 
+**Auth is secure by default.** `PB_AUTH_REQUIRED` defaults to `1`: anonymous requests
+are rejected (`403`), and the WebSocket change-feed at `/api/ws/` likewise requires a
+valid token. So **bootstrap a credential before use** — either enable OIDC (see
+[docs/SSO-API-ACCESS.md](docs/SSO-API-ACCESS.md)), or pre-seed an API token with
+`PB_SEED_TOKEN` (idempotent on boot, owned by `PB_SEED_USERNAME`, default `admin`):
+
+```bash
+docker run -p 8000:8000 -e PB_MIGRATE=1 -v paas2box-data:/data \
+  -e PB_SEED_TOKEN="$(openssl rand -hex 20)" paas2box
+# then call the API with:  Authorization: Token <that value>
+```
+
+Outside Docker / for SQLite you can also run `node scripts/seed-token.mjs <db-file>`
+(prints a generated key). For **local dev only**, `-e PB_AUTH_REQUIRED=0` allows anonymous access.
+
 ### Run the web UI
 
 The admin UI (Vue 3, NetBox-style, schema-driven, live over WebSocket) can be run

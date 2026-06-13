@@ -9,6 +9,7 @@ import { createApiServer } from './api/server.js';
 import { loadPlugins, loadedPlugins } from './plugins/runtime.js';
 import { discoverPluginSpecifiers } from './plugins/discovery.js';
 import { ensureWebhooks } from './webhooks.js';
+import { ensureSeedToken } from './auth.js';
 import { closeRealtime } from './realtime.js';
 import type { Plugin } from './plugins/types.js';
 
@@ -71,10 +72,25 @@ if (pluginPaths.length) {
   }
 }
 
+// Deploy-time bootstrap: provision an API token from PB_SEED_TOKEN (idempotent), so a
+// secure-by-default instance has a usable credential. No-op if PB_SEED_TOKEN is unset.
+try {
+  const seeded = await ensureSeedToken(db);
+  if (seeded?.created)
+    console.log(`seeded API token for user "${seeded.username}" (PB_SEED_TOKEN)`);
+  else if (seeded) console.log(`API token for "${seeded.username}" already present; not reseeding`);
+} catch (e) {
+  console.warn(
+    `PB_SEED_TOKEN: could not seed token — have migrations run? ${(e as Error).message}`,
+  );
+}
+
 const server = createApiServer({
   db,
   baseUrl,
-  auth: { required: process.env.PB_AUTH_REQUIRED === '1' },
+  // Secure by default: anonymous requests are rejected unless explicitly opted out
+  // with PB_AUTH_REQUIRED=0 (e.g. for local dev). Set up a token or OIDC before going live.
+  auth: { required: process.env.PB_AUTH_REQUIRED !== '0' },
   realtime: process.env.PB_REALTIME !== '0', // WebSocket change-feed on by default
   webRoot: process.env.PB_WEB_ROOT, // serve a built SPA if set (single-container)
 });

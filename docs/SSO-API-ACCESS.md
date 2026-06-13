@@ -33,8 +33,15 @@ curl -s "$PAASBOX_URL/api/dcim/sites/" -H "Authorization: Token a1b2…"
 ```
 
 `GET /api/users/tokens/` lists your keys; `DELETE /api/users/tokens/{id}/` revokes one.
-`expires` defaults to `null` (never). An admin can pre-provision a key so you skip the
-bootstrap entirely.
+`expires` defaults to `null` (never).
+
+**Bootstrap (no OIDC):** since the API is secure by default, pre-seed the first token at
+deploy time instead of bootstrapping via a bearer:
+
+- **`PB_SEED_TOKEN`** (env, idempotent on boot) — owned by `PB_SEED_USERNAME` (default
+  `admin`): `docker run … -e PB_SEED_TOKEN="$(openssl rand -hex 20)" paas2box`.
+- **`scripts/seed-token.mjs <db-file>`** (SQLite) — inserts a token directly and prints a
+  generated key: `node scripts/seed-token.mjs ./paas2box.db --user admin`.
 
 ---
 
@@ -130,5 +137,21 @@ A ready-made helper script wraps both grants:
 | `403`/auth fails on everything | audience mismatch → set `PB_OIDC_AUDIENCE` to the `client_id` (matches `azp`) or add an aud mapper; or the token expired |
 | username is a UUID | a client-credentials token has no `preferred_username`; paas2box falls back to `sub`. Map `PB_OIDC_USERNAME_CLAIM` to a claim the token carries |
 | inspect a token | `echo "$JWT" \| cut -d. -f2 \| base64 -d 2>/dev/null \| jq` — check `aud`, `azp`, `realm_access.roles`, `exp` |
+
+## WebSocket change-feed (`/api/ws/`)
+
+The live change-feed is authenticated too: when auth is required, an anonymous WebSocket
+is rejected (closed with code `1008`). Browsers can't set request headers on a WebSocket,
+so the credential goes in the query string — an OIDC bearer as `access_token`, else a
+static token as `token`:
+
+```bash
+# OIDC bearer
+wscat -c "wss://paasbox.example.com/api/ws/?access_token=$JWT"
+# static API token
+wscat -c "wss://paasbox.example.com/api/ws/?token=$KEY"
+```
+
+The bundled SPA does this automatically, re-reading the current token on every reconnect.
 
 See also the **SSO via OIDC** entry in the [README](../README.md#features).

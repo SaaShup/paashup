@@ -40,13 +40,23 @@ export interface RealtimeOptions {
 
 /**
  * Authenticate a WebSocket handshake. Browsers can't set request headers on a
- * `new WebSocket(...)`, so the SPA passes its credential in the query string:
- *   `?access_token=<jwt>` (OIDC bearer)  or  `?token=<key>` (static API token).
- * Non-browser clients may still use the `Authorization` header.
+ * `new WebSocket(...)`, so the SPA passes its token as a `Sec-WebSocket-Protocol`
+ * value (`pb-token, <key>`) — keeping it out of the URL and access logs. The query
+ * string (`?token=` / `?access_token=`) and an `Authorization` header remain fallbacks.
  */
 async function wsAuthenticated(db: Db | undefined, req: IncomingMessage): Promise<boolean> {
   if (!db) return false;
   let header = req.headers.authorization;
+  if (!header) {
+    const proto = req.headers['sec-websocket-protocol'];
+    if (proto) {
+      const parts = String(proto)
+        .split(',')
+        .map((s) => s.trim());
+      const i = parts.indexOf('pb-token');
+      if (i !== -1 && parts[i + 1]) header = `Token ${parts[i + 1]}`;
+    }
+  }
   if (!header && req.url) {
     const q = new URL(req.url, 'http://localhost').searchParams;
     const jwt = q.get('access_token');
@@ -63,7 +73,13 @@ export function attachRealtime(
   opts: RealtimeOptions = {},
   path = '/api/ws/',
 ): WebSocketServer {
-  wss = new WebSocketServer({ server, path });
+  wss = new WebSocketServer({
+    server,
+    path,
+    // Accept the SPA's `pb-token` subprotocol (it carries the token in the offered list);
+    // echo only `pb-token` back, never the token value.
+    handleProtocols: (protocols) => (protocols.has('pb-token') ? 'pb-token' : false),
+  });
   wss.on('connection', (ws, req) => {
     // When auth is required, reject anonymous/invalid clients — otherwise the feed
     // would stream every create/update/delete (with data) to anyone who connects.

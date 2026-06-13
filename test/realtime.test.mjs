@@ -115,7 +115,9 @@ test('when auth is required, the WS rejects anonymous clients and accepts a toke
   const adb = new SqliteDb(F);
   adb.exec(readFileSync(join(ROOT, 'datamodel', 'sql', 'schema.sqlite.sql'), 'utf8'));
   adb.exec(readFileSync(join(ROOT, 'migrations', '0002_auth_token.sqlite.sql'), 'utf8'));
-  const u = await adb.execute('INSERT INTO users_user (username) VALUES (?)', ['svc']);
+  const u = await adb.execute('INSERT INTO users_user (username, is_active) VALUES (?, 1)', [
+    'svc',
+  ]);
   const { key } = await createToken(adb, { userId: u.insertId, writeEnabled: true });
 
   const asrv = createApiServer({ db: adb, auth: { required: true }, realtime: true });
@@ -145,6 +147,20 @@ test('when auth is required, the WS rejects anonymous clients and accepts a toke
   const hello = await c.next((m) => m.type === 'hello');
   assert.ok(typeof hello.ts === 'number');
   c.ws.close();
+
+  // valid token via the Sec-WebSocket-Protocol header (the SPA's path) → accepted
+  await new Promise((resolve, reject) => {
+    const ws = new WebSocket(aWs, ['pb-token', key]);
+    const t = setTimeout(() => reject(new Error('subprotocol WS timed out')), 3000);
+    ws.addEventListener('message', (e) => {
+      if (JSON.parse(e.data).type === 'hello') {
+        clearTimeout(t);
+        ws.close();
+        resolve();
+      }
+    });
+    ws.addEventListener('error', () => {});
+  });
 
   await new Promise((r) => asrv.close(r));
   await adb.close();

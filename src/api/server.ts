@@ -165,16 +165,26 @@ function parseQuery(sp: URLSearchParams): ListOptions {
   return opts;
 }
 
+/** Max objects accepted in a single bulk create/update array (DoS bound). */
+const MAX_BULK = 1000;
+
 function readBody(req: http.IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
+    let done = false; // ensure we settle once and stop reading after overflow
     req.on('data', (c: Buffer) => {
+      if (done) return;
       size += c.length;
-      if (size > 10 * 1024 * 1024) reject(new ApiError(413, 'Request body too large'));
-      else chunks.push(c);
+      if (size > 10 * 1024 * 1024) {
+        done = true;
+        req.destroy(); // stop draining an oversized upload
+        reject(new ApiError(413, 'Request body too large'));
+      } else chunks.push(c);
     });
     req.on('end', () => {
+      if (done) return;
+      done = true;
       const raw = Buffer.concat(chunks).toString('utf8').trim();
       if (!raw) return resolve({});
       try {
@@ -183,7 +193,12 @@ function readBody(req: http.IncomingMessage): Promise<unknown> {
         reject(new ApiError(400, 'Invalid JSON in request body'));
       }
     });
-    req.on('error', reject);
+    req.on('error', (e) => {
+      if (!done) {
+        done = true;
+        reject(e);
+      }
+    });
   });
 }
 
@@ -463,6 +478,9 @@ export function createApiServer(opts: ServerOptions): http.Server {
         if (method === 'POST') {
           const body = await readBody(req);
           if (Array.isArray(body)) {
+            if (body.length > MAX_BULK) {
+              throw new ApiError(400, `Bulk create is limited to ${MAX_BULK} objects per request.`);
+            }
             const created = await db.transaction(async (tx) => {
               const r = new Repository<Record<string, unknown>>(tx, meta);
               return Promise.all(body.map((b) => r.create(b as Record<string, unknown>)));
@@ -493,6 +511,9 @@ export function createApiServer(opts: ServerOptions): http.Server {
           const body = await readBody(req);
           if (!Array.isArray(body)) {
             throw new ApiError(400, 'Bulk update expects a list of objects (each with an id).');
+          }
+          if (body.length > MAX_BULK) {
+            throw new ApiError(400, `Bulk update is limited to ${MAX_BULK} objects per request.`);
           }
           const byName = new Map(meta.columns.map((c) => [c.name, c]));
           const updated = await db.transaction(async (tx) => {

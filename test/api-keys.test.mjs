@@ -34,8 +34,10 @@ before(async () => {
   db.exec(readFileSync(join(ROOT, 'datamodel', 'sql', 'schema.sqlite.sql'), 'utf8'));
   db.exec(readFileSync(join(ROOT, 'migrations', '0002_auth_token.sqlite.sql'), 'utf8'));
   // two users, each with a bootstrap read-write token to call the API
-  const a = await db.execute('INSERT INTO users_user (username) VALUES (?)', ['alice']);
-  const b = await db.execute('INSERT INTO users_user (username) VALUES (?)', ['bob']);
+  const a = await db.execute('INSERT INTO users_user (username, is_active) VALUES (?, 1)', [
+    'alice',
+  ]);
+  const b = await db.execute('INSERT INTO users_user (username, is_active) VALUES (?, 1)', ['bob']);
   aKey = (await createToken(db, { userId: a.insertId })).key;
   bKey = (await createToken(db, { userId: b.insertId })).key;
 

@@ -2,7 +2,7 @@
 // live progress bar. It's written to a temp dir at load and served as a static asset
 // (plugin routes can only return JSON, so an HTML page must come from an asset mount).
 // The page is shown in the paasbox sidebar via the /ui/ manifest (see routes.ts).
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -105,6 +105,6 @@ $('dry').onclick=function(){start(true);};
 </script>
 </body></html>`;
 
-export const UI_DIR = join(tmpdir(), 'paasbox-nbmigrate-ui');
-mkdirSync(UI_DIR, { recursive: true });
+// Unpredictable per-process dir (avoids a predictable, world-readable shared tmp path).
+export const UI_DIR = mkdtempSync(join(tmpdir(), 'paasbox-nbmigrate-ui-'));
 writeFileSync(join(UI_DIR, 'index.html'), HTML);

@@ -32,7 +32,9 @@ before(async () => {
   db.exec(readFileSync(join(ROOT, 'datamodel', 'sql', 'schema.sqlite.sql'), 'utf8'));
   db.exec(readFileSync(join(ROOT, 'migrations', '0002_auth_token.sqlite.sql'), 'utf8'));
   // a user + tokens
-  const u = await db.execute('INSERT INTO users_user (username) VALUES (?)', ['admin']);
+  const u = await db.execute('INSERT INTO users_user (username, is_active) VALUES (?, 1)', [
+    'admin',
+  ]);
   rwKey = (await createToken(db, { userId: u.insertId })).key;
   roKey = (await createToken(db, { userId: u.insertId, writeEnabled: false })).key;
   expiredKey = (await createToken(db, { userId: u.insertId, expires: '2000-01-01T00:00:00Z' })).key;
@@ -119,4 +121,19 @@ test('auth disabled by default (no auth option) allows anonymous', async () => {
   const r = await fetch(`${b}/api/dcim/manufacturers/`).then((x) => x.status);
   assert.equal(r, 200);
   await new Promise((r) => open.close(r));
+});
+
+test('a token whose owning user is deactivated is rejected (is_active gate)', async () => {
+  const u = await db.execute('INSERT INTO users_user (username, is_active) VALUES (?, 0)', [
+    'disabled',
+  ]);
+  const key = (await createToken(db, { userId: u.insertId })).key;
+  assert.equal((await api('GET', '/api/dcim/manufacturers/', null, key)).status, 403);
+});
+
+test('bulk create/update is capped at 1000 objects', async () => {
+  const big = Array.from({ length: 1001 }, (_, i) => ({ name: `m${i}`, slug: `m${i}` }));
+  const r = await api('POST', '/api/dcim/manufacturers/', big, rwKey);
+  assert.equal(r.status, 400);
+  assert.match(r.body.detail, /limited to 1000/);
 });

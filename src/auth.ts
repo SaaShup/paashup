@@ -115,25 +115,32 @@ export async function authenticate(
 
   const tok = /^Token\s+(.+)$/i.exec(trimmed);
   if (tok) {
+    // Join the owning user so a deactivated user's tokens stop working (is_active gate).
     const row = await db.get<{
       id: number;
       userId: number;
       writeEnabled: number;
       expires: string | null;
+      lastUsed: string | null;
     }>(
-      'SELECT id, user_id AS userId, write_enabled AS writeEnabled, expires FROM auth_token WHERE `key` = ?',
+      'SELECT t.id, t.user_id AS userId, t.write_enabled AS writeEnabled, t.expires, ' +
+        't.last_used AS lastUsed FROM auth_token t JOIN users_user u ON u.id = t.user_id ' +
+        'WHERE t.`key` = ? AND u.is_active = 1',
       [tok[1]!.trim()],
     );
     if (!row) return null;
     if (row.expires && new Date(row.expires).getTime() < Date.now()) return null;
-    // Record usage (best-effort; never block the request on it).
-    try {
-      await db.execute('UPDATE auth_token SET last_used = ? WHERE id = ?', [
-        new Date().toISOString(),
-        Number(row.id),
-      ]);
-    } catch {
-      /* last_used is advisory — ignore failures */
+    // Record usage — throttled to once a minute so we don't write on every request.
+    const last = row.lastUsed ? Date.parse(row.lastUsed) : 0;
+    if (Date.now() - last > 60_000) {
+      try {
+        await db.execute('UPDATE auth_token SET last_used = ? WHERE id = ?', [
+          new Date().toISOString(),
+          Number(row.id),
+        ]);
+      } catch {
+        /* last_used is advisory — ignore failures */
+      }
     }
     return {
       tokenId: Number(row.id),
@@ -153,6 +160,11 @@ export async function authenticate(
     const id = authorizeIdentity(v.provider, v.claims);
     if ('error' in id) return null;
     const userId = await provisionOidcUser(db, id);
+    // Reject if an admin has since deactivated this auto-provisioned user.
+    const u = await db.get<{ is_active: number }>('SELECT is_active FROM users_user WHERE id = ?', [
+      userId,
+    ]);
+    if (!u?.is_active) return null;
     return { tokenId: 0, userId, writeEnabled: id.writeEnabled };
   }
   return null;

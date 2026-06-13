@@ -26,8 +26,10 @@ export class SocketManager {
 
   private open(): void {
     this.setStatus('connecting');
-    // Recompute the credential on every (re)connect so a refreshed token is used.
-    const ws = new WebSocket(withCredential(this.url));
+    // Pass the token as a Sec-WebSocket-Protocol value (recomputed each reconnect) so it
+    // stays out of the URL/query string and access logs. Server reads "pb-token, <key>".
+    const token = getToken();
+    const ws = token ? new WebSocket(this.url, ['pb-token', token]) : new WebSocket(this.url);
     this.ws = ws;
     ws.addEventListener('open', () => {
       this.backoff = 500;
@@ -84,19 +86,6 @@ export class SocketManager {
 function defaultUrl(): string {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   return `${proto}://${location.host}/api/ws/`;
-}
-
-/**
- * Append the caller's credential to the WS URL. Browsers can't set request headers on a
- * `new WebSocket(...)`, so the server reads the paas2box token from the query string.
- * Anonymous if there's no token.
- */
-function withCredential(url: string): string {
-  const token = getToken();
-  if (!token) return url;
-  const u = new URL(url);
-  u.searchParams.set('token', token);
-  return u.toString();
 }
 
 /** Shared singleton used by the app. */

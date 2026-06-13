@@ -84,6 +84,7 @@ export function deepMerge(
 ): Record<string, unknown> {
   const out: Record<string, unknown> = { ...base };
   for (const [k, v] of Object.entries(over)) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue; // proto-pollution guard
     const cur = out[k];
     out[k] = isPlainObject(cur) && isPlainObject(v) ? deepMerge(cur, v) : v;
   }

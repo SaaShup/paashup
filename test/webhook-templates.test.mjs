@@ -70,7 +70,9 @@ before(async () => {
   base = `http://127.0.0.1:${server.address().port}`;
 
   // a user + token so we can exercise {{ username }} / {{ request_id }}
-  const u = await db.execute('INSERT INTO users_user (username) VALUES (?)', ['wally']);
+  const u = await db.execute('INSERT INTO users_user (username, is_active) VALUES (?, 1)', [
+    'wally',
+  ]);
   token = (await createToken(db, { userId: u.insertId })).key;
 
   // 1) URL template — per-object endpoint

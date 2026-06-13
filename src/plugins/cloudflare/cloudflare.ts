@@ -50,7 +50,7 @@ export async function listDnsRecords(
 ): Promise<{ records: CfRecord[]; totalPages: number }> {
   const content = await cf(
     'GET',
-    `/zones/${zone.zone_id}/dns_records?page=${page}&per_page=${perPage}`,
+    `/zones/${encodeURIComponent(zone.zone_id)}/dns_records?page=${page}&per_page=${perPage}`,
     zone.token,
   );
   const result = (content.result as Record<string, unknown>[] | undefined) ?? [];
@@ -75,13 +75,18 @@ export async function createDnsRecord(
   zone: ZoneAccount,
   rec: { name: string; type: string; content: string; ttl: number; proxied: boolean },
 ): Promise<string> {
-  const content = await cf('POST', `/zones/${zone.zone_id}/dns_records`, zone.token, {
-    name: rec.name,
-    type: rec.type,
-    content: rec.content,
-    ttl: rec.ttl,
-    proxied: rec.proxied,
-  });
+  const content = await cf(
+    'POST',
+    `/zones/${encodeURIComponent(zone.zone_id)}/dns_records`,
+    zone.token,
+    {
+      name: rec.name,
+      type: rec.type,
+      content: rec.content,
+      ttl: rec.ttl,
+      proxied: rec.proxied,
+    },
+  );
   const result = (content.result as { id?: unknown } | undefined) ?? {};
   return String(result.id ?? '');
 }
@@ -92,13 +97,18 @@ export async function updateDnsRecord(
   recordId: string,
   rec: { name: string; type: string; content: string; ttl: number; proxied: boolean },
 ): Promise<void> {
-  await cf('PUT', `/zones/${zone.zone_id}/dns_records/${recordId}`, zone.token, {
-    name: rec.name,
-    type: rec.type,
-    content: rec.content,
-    ttl: rec.ttl,
-    proxied: rec.proxied,
-  });
+  await cf(
+    'PUT',
+    `/zones/${encodeURIComponent(zone.zone_id)}/dns_records/${encodeURIComponent(recordId)}`,
+    zone.token,
+    {
+      name: rec.name,
+      type: rec.type,
+      content: rec.content,
+      ttl: rec.ttl,
+      proxied: rec.proxied,
+    },
+  );
 }
 
 /** Delete a DNS record on Cloudflare by its record id. */

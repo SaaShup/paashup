@@ -48,35 +48,35 @@ issuer's public keys.
 sequenceDiagram
     autonumber
     actor Admin
-    participant KC as Keycloak (realm paasbox)
+    participant KC as Keycloak
     participant Script as paasbox-bearer.sh
     participant PB as paas2box API
 
     rect rgb(235, 245, 255)
-    note over Admin, KC: PHASE 1 — one-time setup (admin console)
-    Admin->>KC: Create client "paasbox-svc"
-    Admin->>KC: Client auth = ON, Service accounts = ON
-    KC-->>Admin: CLIENT_SECRET (••••••••)
+    note over Admin,KC: PHASE 1 - one-time setup in Keycloak
+    Admin->>KC: Create client paasbox-svc
+    Admin->>KC: Client auth ON, Service accounts ON
+    KC-->>Admin: CLIENT_SECRET
     Admin->>KC: Assign PB_OIDC_WRITE_ROLE to service account
-    Admin->>KC: (opt) Audience mapper → aud = paasbox-svc
-    note over PB: paasbox env set once:<br/>PB_OIDC_ISSUER / PB_OIDC_AUDIENCE / PB_OIDC_WRITE_ROLE<br/>(secret is NEVER given to paasbox)
+    Admin->>KC: optional audience mapper, aud = paasbox-svc
+    note over PB: paasbox env set once<br/>PB_OIDC_ISSUER, PB_OIDC_AUDIENCE, PB_OIDC_WRITE_ROLE<br/>secret is NEVER given to paasbox
     end
 
     rect rgb(235, 255, 235)
-    note over Script, KC: PHASE 2 — token request (every run; JWT ~5 min)
+    note over Script,KC: PHASE 2 - token request, every run, JWT ~5 min
     Script->>KC: POST /token<br/>grant_type=client_credentials<br/>client_id + client_secret
-    KC->>KC: Verify client + secret, sign JWT (RS256)
-    KC-->>Script: 200 { access_token: JWT }
+    KC->>KC: Verify client and secret, sign JWT RS256
+    KC-->>Script: 200, access_token = JWT
     end
 
     rect rgb(255, 245, 235)
-    note over Script, PB: PHASE 3 — token usage (paasbox validates live)
+    note over Script,PB: PHASE 3 - token usage, paasbox validates live
     Script->>PB: GET /api/dcim/sites/<br/>Authorization: Bearer JWT
-    PB->>KC: GET JWKS (public keys, cached ~5 min)
+    PB->>KC: GET JWKS public keys, cached ~5 min
     KC-->>PB: public signing keys
-    PB->>PB: Verify signature, iss, aud/azp, exp/nbf<br/>map claims → user (auto-provision)<br/>write? require PB_OIDC_WRITE_ROLE
-    PB-->>Script: 200 [ …sites… ]
-    note over Script: token expires → loop back to PHASE 2
+    PB->>PB: Verify signature, iss, aud and azp, exp and nbf<br/>map claims to user, auto-provision<br/>write requires PB_OIDC_WRITE_ROLE
+    PB-->>Script: 200, list of sites
+    note over Script: token expires, loop back to PHASE 2
     end
 ```
 

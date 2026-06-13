@@ -67,6 +67,7 @@ before(async () => {
   db = new SqliteDb(DB);
   db.exec(readFileSync(join(ROOT, 'datamodel', 'sql', 'schema.sqlite.sql'), 'utf8'));
   db.exec(readFileSync(join(ROOT, 'migrations', '0002_auth_token.sqlite.sql'), 'utf8'));
+  db.exec(readFileSync(join(ROOT, 'migrations', '0011_users_oidc_subject.sqlite.sql'), 'utf8'));
 });
 
 after(async () => {

@@ -38,6 +38,8 @@ ENV NODE_ENV=production \
 # Which vars each provider needs:
 #   Keycloak  → PB_OIDC_ISSUER=https://kc/realms/<realm>, PB_OIDC_CLIENT_ID,
 #               PB_OIDC_WRITE_ROLE   (public client; no secret)
+#               Fail-closed: with no write role, OIDC users are READ-ONLY. To grant write
+#               to every authenticated user instead, set PB_OIDC_<ID>_WRITE_DEFAULT=1.
 #   Google    → PB_OIDC_ISSUER=https://accounts.google.com, PB_OIDC_CLIENT_ID,
 #               PB_OIDC_CLIENT_SECRET     ← REQUIRED: Google is a confidential client;
 #                                            without it login fails "client_secret is missing"

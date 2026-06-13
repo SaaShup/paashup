@@ -77,7 +77,8 @@ provider token. See [SSO-API-ACCESS.md](SSO-API-ACCESS.md) for headless/API acce
 | `PB_OIDC_CLIENT_SECRET` | confidential clients | **Required for Google** (and any confidential client); held server-side only |
 | `PB_OIDC_AUDIENCE` | all | id_token `aud` to require (defaults to the client id) |
 | `PB_OIDC_USERNAME_CLAIM` | oidc | Claim used as the username (default `preferred_username`) |
-| `PB_OIDC_WRITE_ROLE` | Keycloak | Realm/client role granting write (else read-only) |
+| `PB_OIDC_WRITE_ROLE` | Keycloak | Realm/client role granting write. **Fail closed:** with no role configured, OIDC users are **read-only** |
+| `PB_OIDC_WRITE_DEFAULT` | oidc | `1` → grant write to *every* authenticated user when no `WRITE_ROLE` is set (explicit opt-in; default off) |
 | `PB_OIDC_ALLOWED_DOMAINS` | Google | **Required** — comma list of email domains allowed to sign in (fail-closed) |
 | `PB_OIDC_WRITE_EMAILS` | Google | Comma list of emails granted write (others read-only) |
 | `PB_OIDC_SESSION_TTL_HOURS` | all | Lifetime of the paas2box token minted at login (default `12`) |

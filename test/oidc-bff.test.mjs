@@ -94,7 +94,7 @@ before(async () => {
   await new Promise((r) => idp.listen(0, '127.0.0.1', r));
   issuer = `http://127.0.0.1:${idp.address().port}`;
 
-  process.env.PB_OIDC_PROVIDERS = 'corp,gwork';
+  process.env.PB_OIDC_PROVIDERS = 'corp,gwork,norole,wdefault';
   // corp: Keycloak-style (roles), public PKCE client
   process.env.PB_OIDC_CORP_ISSUER = issuer;
   process.env.PB_OIDC_CORP_CLIENT_ID = 'paasbox';
@@ -108,12 +108,24 @@ before(async () => {
   process.env.PB_OIDC_GWORK_KIND = 'google';
   process.env.PB_OIDC_GWORK_ALLOWED_DOMAINS = 'saashup.com';
   process.env.PB_OIDC_GWORK_WRITE_EMAILS = 'admin@saashup.com';
+  // norole: oidc with NO write role and NO opt-in → must fail closed (read-only)
+  process.env.PB_OIDC_NOROLE_ISSUER = issuer;
+  process.env.PB_OIDC_NOROLE_CLIENT_ID = 'paasbox';
+  process.env.PB_OIDC_NOROLE_AUDIENCE = 'paasbox';
+  process.env.PB_OIDC_NOROLE_KIND = 'oidc';
+  // wdefault: oidc with no role but explicit WRITE_DEFAULT=1 → write granted
+  process.env.PB_OIDC_WDEFAULT_ISSUER = issuer;
+  process.env.PB_OIDC_WDEFAULT_CLIENT_ID = 'paasbox';
+  process.env.PB_OIDC_WDEFAULT_AUDIENCE = 'paasbox';
+  process.env.PB_OIDC_WDEFAULT_KIND = 'oidc';
+  process.env.PB_OIDC_WDEFAULT_WRITE_DEFAULT = '1';
   _resetOidcCache();
 
   rmSync(DB, { force: true });
   db = new SqliteDb(DB);
   db.exec(readFileSync(join(ROOT, 'datamodel', 'sql', 'schema.sqlite.sql'), 'utf8'));
   db.exec(readFileSync(join(ROOT, 'migrations', '0002_auth_token.sqlite.sql'), 'utf8'));
+  db.exec(readFileSync(join(ROOT, 'migrations', '0011_users_oidc_subject.sqlite.sql'), 'utf8'));
   server = createApiServer({ db, auth: { required: true }, realtime: false });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${server.address().port}`;
@@ -131,7 +143,7 @@ test('GET /api/auth/providers/ lists both providers with an authorization endpoi
   const r = await fetch(`${base}/api/auth/providers/`).then((x) => x.json());
   assert.equal(r.login_required, true);
   const ids = r.providers.map((p) => p.id).sort();
-  assert.deepEqual(ids, ['corp', 'gwork']);
+  assert.deepEqual(ids, ['corp', 'gwork', 'norole', 'wdefault']);
   for (const p of r.providers) {
     assert.ok(p.authorization_endpoint, `${p.id} has an authorization endpoint`);
     assert.ok(!('client_secret' in p), 'no secret leaks to the SPA');
@@ -238,4 +250,85 @@ test('unknown provider or bad code is rejected', async () => {
     redirect_uri: 'http://x/',
   });
   assert.equal(bad.status, 401); // token endpoint rejected the grant
+});
+
+test('fail closed: an oidc provider with no write role grants read-only', async () => {
+  codes.set('nr', {
+    id_token: sign({ iss: issuer, aud: 'paasbox', preferred_username: 'noroleuser', sub: 'nr-1' }),
+  });
+  const r = await exchange({
+    provider: 'norole',
+    code: 'nr',
+    code_verifier: 'v',
+    redirect_uri: 'http://x/',
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.write_enabled, false); // no role + no opt-in ⇒ read-only
+  assert.equal(await apiPost(r.body.token, 'NoRole'), 403);
+});
+
+test('explicit opt-in: WRITE_DEFAULT=1 grants write without a role', async () => {
+  codes.set('wd', {
+    id_token: sign({ iss: issuer, aud: 'paasbox', preferred_username: 'wd-user', sub: 'wd-1' }),
+  });
+  const r = await exchange({
+    provider: 'wdefault',
+    code: 'wd',
+    code_verifier: 'v',
+    redirect_uri: 'http://x/',
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.write_enabled, true);
+});
+
+test('no hijack: an OIDC login cannot take over a pre-existing local user by username', async () => {
+  // seed a local "admin" (as PB_SEED_TOKEN / the bootstrap would)
+  const seeded = await db.execute("INSERT INTO users_user (username) VALUES ('admin')");
+  const adminId = Number(seeded.insertId);
+  // attacker authenticates claiming preferred_username "admin" — different subject, no role
+  codes.set('hj', {
+    id_token: sign({ iss: issuer, aud: 'paasbox', preferred_username: 'admin', sub: 'attacker-1' }),
+  });
+  const r = await exchange({
+    provider: 'norole',
+    code: 'hj',
+    code_verifier: 'v',
+    redirect_uri: 'http://x/',
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.write_enabled, false); // not admin's privileges
+  // a NEW user was provisioned, keyed on the subject — not the seeded admin
+  const created = await db.get('SELECT id, username FROM users_user WHERE oidc_subject = ?', [
+    'norole:attacker-1',
+  ]);
+  assert.ok(created);
+  assert.notEqual(Number(created.id), adminId);
+  assert.notEqual(created.username, 'admin'); // username disambiguated, didn't clobber admin
+  // the seeded admin row is untouched (no subject attached)
+  const admin = await db.get('SELECT oidc_subject FROM users_user WHERE id = ?', [adminId]);
+  assert.equal(admin.oidc_subject, null);
+});
+
+test('subject stability: same sub, changed preferred_username ⇒ same local user', async () => {
+  codes.set('s1', {
+    id_token: sign({ iss: issuer, aud: 'paasbox', preferred_username: 'first', sub: 'stable-1' }),
+  });
+  codes.set('s2', {
+    id_token: sign({ iss: issuer, aud: 'paasbox', preferred_username: 'changed', sub: 'stable-1' }),
+  });
+  const a = await exchange({
+    provider: 'norole',
+    code: 's1',
+    code_verifier: 'v',
+    redirect_uri: 'http://x/',
+  });
+  const b = await exchange({
+    provider: 'norole',
+    code: 's2',
+    code_verifier: 'v',
+    redirect_uri: 'http://x/',
+  });
+  const ra = await db.get('SELECT user_id FROM auth_token WHERE `key` = ?', [a.body.token]);
+  const rb = await db.get('SELECT user_id FROM auth_token WHERE `key` = ?', [b.body.token]);
+  assert.equal(Number(ra.user_id), Number(rb.user_id));
 });

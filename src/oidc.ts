@@ -37,7 +37,8 @@ export interface OidcProvider {
   audience?: string; // id_token aud to require (defaults to clientId)
   scopes: string;
   usernameClaim: string;
-  writeRole?: string; // oidc authz
+  writeRole?: string; // oidc authz: role granting write
+  writeByDefault?: boolean; // oidc: grant write to all authenticated users (explicit opt-in)
   allowedDomains?: string[]; // google: login gate
   writeEmails?: string[]; // google: write gate
 }
@@ -84,6 +85,7 @@ function envProvider(id: string): OidcProvider | null {
     usernameClaim:
       process.env[`${P}USERNAME_CLAIM`] || (kind === 'google' ? 'email' : 'preferred_username'),
     writeRole: process.env[`${P}WRITE_ROLE`] || undefined,
+    writeByDefault: process.env[`${P}WRITE_DEFAULT`] === '1',
     allowedDomains: csv(process.env[`${P}ALLOWED_DOMAINS`]),
     writeEmails: csv(process.env[`${P}WRITE_EMAILS`]),
   };
@@ -104,6 +106,7 @@ function legacyProvider(): OidcProvider | null {
     scopes: 'openid profile email',
     usernameClaim: process.env.PB_OIDC_USERNAME_CLAIM || 'preferred_username',
     writeRole: process.env.PB_OIDC_WRITE_ROLE || undefined,
+    writeByDefault: process.env.PB_OIDC_WRITE_DEFAULT === '1',
     allowedDomains: csv(process.env.PB_OIDC_ALLOWED_DOMAINS),
     writeEmails: csv(process.env.PB_OIDC_WRITE_EMAILS),
   };
@@ -266,6 +269,9 @@ export function rolesFromClaims(claims: OidcClaims): string[] {
 
 export interface SsoIdentity {
   username: string;
+  /** Stable, provider-namespaced identity (`<provider>:<sub>`) — the key local users
+   *  are provisioned/looked up by, so a display username can't hijack another account. */
+  subject: string;
   email?: string;
   firstName?: string;
   lastName?: string;
@@ -276,13 +282,17 @@ export interface SsoIdentity {
  * Map verified token claims to a local identity + write permission, per provider kind.
  * Returns `{ error }` when the identity isn't permitted to sign in at all.
  *   - google: must have a verified email in an allowed domain; write via the email list.
- *   - oidc:   any realm user; write via the configured role (or all, if no role set).
+ *   - oidc:   any realm user; write requires the configured role. **Fail closed**: if no
+ *             write role is configured, users are read-only unless WRITE_DEFAULT=1.
+ * `subject` is a stable, provider-namespaced id used to provision/look up the local user
+ * (never the display username) so a `preferred_username` can't hijack an existing account.
  */
 export function authorizeIdentity(
   p: OidcProvider,
   idClaims: OidcClaims,
   accessClaims?: OidcClaims,
 ): SsoIdentity | { error: string } {
+  const sub = str(idClaims.sub);
   if (p.kind === 'google') {
     const email = str(idClaims.email).toLowerCase();
     if (!email || idClaims.email_verified !== true) {
@@ -297,6 +307,7 @@ export function authorizeIdentity(
     }
     return {
       username: email,
+      subject: sub ? `${p.id}:${sub}` : `${p.id}:email:${email}`,
       email,
       firstName: str(idClaims.given_name),
       lastName: str(idClaims.family_name),
@@ -309,11 +320,16 @@ export function authorizeIdentity(
     str(idClaims[p.usernameClaim]) ||
     str(idClaims.preferred_username) ||
     str(idClaims.email) ||
-    str(idClaims.sub);
+    sub;
   if (!username) return { error: 'No username claim in token' };
-  const writeEnabled = !p.writeRole || rolesFromClaims(roleClaims).includes(p.writeRole);
+  // Fail closed: a write role must be configured AND present, unless the operator has
+  // explicitly opted into granting write to every authenticated user (WRITE_DEFAULT=1).
+  const writeEnabled = p.writeRole
+    ? rolesFromClaims(roleClaims).includes(p.writeRole)
+    : !!p.writeByDefault;
   return {
     username,
+    subject: sub ? `${p.id}:${sub}` : `${p.id}:u:${username}`,
     email: str(idClaims.email),
     firstName: str(idClaims.given_name),
     lastName: str(idClaims.family_name),

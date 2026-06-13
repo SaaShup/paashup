@@ -1,6 +1,13 @@
 import crypto from 'node:crypto';
 import type { Db } from './db/types.js';
-import { oidcEnabled, verifyBearer, authorizeIdentity, exchangeCode, getProvider } from './oidc.js';
+import {
+  oidcEnabled,
+  verifyBearer,
+  authorizeIdentity,
+  exchangeCode,
+  getProvider,
+  type SsoIdentity,
+} from './oidc.js';
 
 export interface AuthContext {
   tokenId: number;
@@ -145,27 +152,42 @@ export async function authenticate(
     if (!v) return null;
     const id = authorizeIdentity(v.provider, v.claims);
     if ('error' in id) return null;
-    const userId = await findOrCreateUser(db, id.username, id);
+    const userId = await provisionOidcUser(db, id);
     return { tokenId: 0, userId, writeEnabled: id.writeEnabled };
   }
   return null;
 }
 
-interface UserProfile {
-  email?: string;
-  firstName?: string;
-  lastName?: string;
-}
-
-async function findOrCreateUser(db: Db, username: string, p: UserProfile = {}): Promise<number> {
-  const row = await db.get<{ id: number }>('SELECT id FROM users_user WHERE username = ?', [
+/**
+ * Provision (or find) the local user for a verified SSO identity, keyed on its stable
+ * provider-namespaced `subject` — never on the display username. This prevents an OIDC
+ * login (whose `preferred_username` is attacker-controllable) from attaching to a
+ * pre-existing local user that shares that name, e.g. a seeded `admin`.
+ */
+async function provisionOidcUser(db: Db, id: SsoIdentity): Promise<number> {
+  const existing = await db.get<{ id: number }>(
+    'SELECT id FROM users_user WHERE oidc_subject = ?',
+    [id.subject],
+  );
+  if (existing) return Number(existing.id);
+  // Choose a username that doesn't collide with an existing row (local or another
+  // subject); fall back to the unique subject so we never take over someone's username.
+  let username = id.username;
+  const clash = await db.get<{ id: number }>('SELECT id FROM users_user WHERE username = ?', [
     username,
   ]);
-  if (row) return Number(row.id);
+  if (clash) username = id.subject;
   const res = await db.execute(
-    `INSERT INTO users_user (username, email, first_name, last_name, is_active, date_joined)
-     VALUES (?, ?, ?, ?, 1, ?)`,
-    [username, p.email ?? '', p.firstName ?? '', p.lastName ?? '', new Date().toISOString()],
+    `INSERT INTO users_user (username, email, first_name, last_name, is_active, date_joined, oidc_subject)
+     VALUES (?, ?, ?, ?, 1, ?, ?)`,
+    [
+      username,
+      id.email ?? '',
+      id.firstName ?? '',
+      id.lastName ?? '',
+      new Date().toISOString(),
+      id.subject,
+    ],
   );
   return res.insertId;
 }
@@ -194,7 +216,7 @@ export async function ssoExchange(
   const r = await exchangeCode(provider, args);
   if ('error' in r) return r;
   const { identity } = r;
-  const userId = await findOrCreateUser(db, identity.username, identity);
+  const userId = await provisionOidcUser(db, identity);
   const ttlHours = Number(process.env.PB_OIDC_SESSION_TTL_HOURS ?? 12);
   const expires = new Date(Date.now() + ttlHours * 3600_000).toISOString();
   const { id: tokenId, key } = await createToken(db, {

@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { login } from '../auth/oidc.js';
+import { ref, onMounted } from 'vue';
+import { login, loadProviders, type Provider } from '../auth/oidc.js';
 
 const busy = ref(false);
 const logoOk = ref(true);
-async function signIn() {
+const providers = ref<Provider[]>([]);
+
+onMounted(async () => {
+  providers.value = (await loadProviders()).providers;
+});
+async function signIn(id: string) {
   busy.value = true;
-  await login(); // redirects to the identity provider
+  await login(id); // redirects to the chosen identity provider
 }
 </script>
 
@@ -22,9 +27,18 @@ async function signIn() {
       />
       <h1><span class="bar">▌</span> paas2box</h1>
       <p class="sub">Sign in with your organization account to continue.</p>
-      <button class="btn" :disabled="busy" @click="signIn">
-        {{ busy ? 'Redirecting…' : 'Sign in with SSO' }}
-      </button>
+      <div class="providers">
+        <button
+          v-for="p in providers"
+          :key="p.id"
+          class="btn"
+          :disabled="busy"
+          @click="signIn(p.id)"
+        >
+          {{ busy ? 'Redirecting…' : `Sign in with ${p.label}` }}
+        </button>
+        <p v-if="!providers.length" class="sub">No SSO providers are configured.</p>
+      </div>
     </div>
     <div class="bg" aria-hidden="true" />
   </div>
@@ -68,6 +82,11 @@ h1 {
   color: var(--muted);
   font-size: 0.9rem;
   margin: 8px 0 22px;
+}
+.providers {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 .btn {
   width: 100%;

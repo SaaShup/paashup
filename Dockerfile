@@ -27,9 +27,19 @@ ENV NODE_ENV=production \
     PB_WEB_ROOT=/app/web
 # Auth / SSO knobs. Secure by default: PB_AUTH_REQUIRED=1 rejects unauthenticated requests
 # (provision an API token or enable OIDC before use). For local dev only, run with
-# PB_AUTH_REQUIRED=0 to allow anonymous access. Enable Keycloak/OIDC by setting at least
-# PB_OIDC_ISSUER (+ PB_OIDC_CLIENT_ID for the web login page).
+# PB_AUTH_REQUIRED=0 to allow anonymous access.
+#
+# SSO: enable one or more OIDC providers. Either the legacy single provider (PB_OIDC_ISSUER
+# + PB_OIDC_CLIENT_ID, below), or several at once via PB_OIDC_PROVIDERS=keycloak,google and
+# per-provider PB_OIDC_<ID>_* vars, e.g.:
+#   PB_OIDC_KEYCLOAK_ISSUER=https://kc/realms/paasbox  PB_OIDC_KEYCLOAK_CLIENT_ID=paasbox
+#   PB_OIDC_KEYCLOAK_WRITE_ROLE=paasbox-write
+#   PB_OIDC_GOOGLE_ISSUER=https://accounts.google.com  PB_OIDC_GOOGLE_CLIENT_ID=...
+#   PB_OIDC_GOOGLE_CLIENT_SECRET=...  PB_OIDC_GOOGLE_ALLOWED_DOMAINS=acme.com
+#   PB_OIDC_GOOGLE_WRITE_EMAILS=admin@acme.com
+# The browser never sees a client secret — the code→token exchange runs server-side.
 ENV PB_AUTH_REQUIRED=1 \
+    PB_OIDC_PROVIDERS="" \
     PB_OIDC_ISSUER="" \
     PB_OIDC_AUDIENCE="" \
     PB_OIDC_CLIENT_ID="" \

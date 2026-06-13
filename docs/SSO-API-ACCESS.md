@@ -12,6 +12,13 @@ path runs *before* the OIDC check — so static API tokens keep working regardle
 
 > The two are independent. A static token never touches Keycloak; a bearer JWT is verified
 > live against the issuer's JWKS and mapped to an **auto-provisioned** local user.
+>
+> **Bearer JWT only works for providers that issue JWT access tokens** (e.g. Keycloak).
+> Providers with opaque access tokens (e.g. Google) can't be used this way — for those,
+> interactive **browser** login goes through the server-side exchange
+> (`GET /api/auth/providers/` then `POST /api/auth/oidc/exchange/`), which returns a
+> **static paas2box token** you then use as in Option 1. So for headless/automation,
+> prefer a static token regardless of provider.
 
 ---
 

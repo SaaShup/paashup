@@ -1,7 +1,7 @@
 // Thin REST client for the paas2box API. Same-origin (Vite proxies /api in dev,
-// the API serves the built SPA in prod). Auth: an OIDC bearer token (SSO) if signed
-// in, else a static API token from localStorage.
-import { getAccessToken } from '../auth/oidc.js';
+// the API serves the built SPA in prod). Auth: the paas2box token in localStorage —
+// minted by the SSO login (BFF exchange) or a static API key the user pasted in.
+import { getToken } from '../auth/oidc.js';
 
 export interface Page<T = Record<string, unknown>> {
   count: number;
@@ -13,9 +13,7 @@ export interface Page<T = Record<string, unknown>> {
 export type Obj = Record<string, unknown>;
 
 function authHeader(): Record<string, string> {
-  const bearer = getAccessToken();
-  if (bearer) return { Authorization: `Bearer ${bearer}` };
-  const token = localStorage.getItem('pb_token');
+  const token = getToken();
   return token ? { Authorization: `Token ${token}` } : {};
 }
 
@@ -47,7 +45,8 @@ export class ApiError extends Error {
 function qs(params?: Record<string, string | number | undefined>): string {
   if (!params) return '';
   const sp = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== '') sp.set(k, String(v));
+  for (const [k, v] of Object.entries(params))
+    if (v !== undefined && v !== '') sp.set(k, String(v));
   const s = sp.toString();
   return s ? `?${s}` : '';
 }

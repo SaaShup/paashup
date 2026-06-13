@@ -171,7 +171,8 @@ five jobs: **test** (SQLite), **test-mariadb** (service container), **lint**
   tokens keep working alongside it (good for automation). The **web UI** has a built-in
   login (Authorization Code + PKCE, [web/src/auth/oidc.ts](web/src/auth/oidc.ts)):
   Sign in → Keycloak → back, with token refresh and Sign out; the API client then sends
-  the bearer token automatically.
+  the bearer token automatically. For **headless API access** with SSO active (static
+  tokens vs bearer JWTs), see [docs/SSO-API-ACCESS.md](docs/SSO-API-ACCESS.md).
 - **OpenAPI conformance** enforced by `test/contract.test.mjs` (validates live
   responses against the NetBox read schemas with `ajv`).
 - **Plugins** ([src/plugins/](src/plugins/)): third parties extend paas2box by

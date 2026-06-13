@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SqliteDb } from '../dist/db/sqlite.js';
 import { createApiServer } from '../dist/api/server.js';
-import { createToken } from '../dist/auth.js';
+import { createToken, ensureSeedToken } from '../dist/auth.js';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const DB_FILE = join(ROOT, 'test', '.auth.sqlite');
@@ -81,6 +81,35 @@ test('read-only token: GET ok, write -> 403', async () => {
 test('expired token -> 403', async () => {
   const r = await api('GET', '/api/dcim/manufacturers/', null, expiredKey);
   assert.equal(r.status, 403);
+});
+
+test('ensureSeedToken provisions a working token from env (idempotent)', async () => {
+  const seedKey = 'seed00000000000000000000000000000000beef';
+  const prev = { t: process.env.PB_SEED_TOKEN, u: process.env.PB_SEED_USERNAME };
+  process.env.PB_SEED_TOKEN = seedKey;
+  process.env.PB_SEED_USERNAME = 'admin';
+  try {
+    const first = await ensureSeedToken(db);
+    assert.equal(first?.created, true);
+    // the seeded key authenticates against the auth-required server (read + write)
+    assert.equal((await api('GET', '/api/dcim/manufacturers/', null, seedKey)).status, 200);
+    const w = await api(
+      'POST',
+      '/api/dcim/manufacturers/',
+      { name: 'Seeded', slug: 'seeded' },
+      seedKey,
+    );
+    assert.equal(w.status, 201);
+    // running again is a no-op — no duplicate row
+    assert.equal((await ensureSeedToken(db))?.created, false);
+    const row = await db.get('SELECT COUNT(*) AS n FROM auth_token WHERE `key` = ?', [seedKey]);
+    assert.equal(Number(row.n), 1);
+  } finally {
+    if (prev.t === undefined) delete process.env.PB_SEED_TOKEN;
+    else process.env.PB_SEED_TOKEN = prev.t;
+    if (prev.u === undefined) delete process.env.PB_SEED_USERNAME;
+    else process.env.PB_SEED_USERNAME = prev.u;
+  }
 });
 
 test('auth disabled by default (no auth option) allows anonymous', async () => {

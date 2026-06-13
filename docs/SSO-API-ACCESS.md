@@ -33,8 +33,15 @@ curl -s "$PAASBOX_URL/api/dcim/sites/" -H "Authorization: Token a1b2…"
 ```
 
 `GET /api/users/tokens/` lists your keys; `DELETE /api/users/tokens/{id}/` revokes one.
-`expires` defaults to `null` (never). An admin can pre-provision a key so you skip the
-bootstrap entirely.
+`expires` defaults to `null` (never).
+
+**Bootstrap (no OIDC):** since the API is secure by default, pre-seed the first token at
+deploy time instead of bootstrapping via a bearer:
+
+- **`PB_SEED_TOKEN`** (env, idempotent on boot) — owned by `PB_SEED_USERNAME` (default
+  `admin`): `docker run … -e PB_SEED_TOKEN="$(openssl rand -hex 20)" paas2box`.
+- **`scripts/seed-token.mjs <db-file>`** (SQLite) — inserts a token directly and prints a
+  generated key: `node scripts/seed-token.mjs ./paas2box.db --user admin`.
 
 ---
 

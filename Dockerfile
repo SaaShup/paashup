@@ -35,6 +35,11 @@ ENV PB_AUTH_REQUIRED=1 \
     PB_OIDC_CLIENT_ID="" \
     PB_OIDC_WRITE_ROLE="" \
     PB_OIDC_USERNAME_CLAIM=preferred_username
+# Deploy-time bootstrap token (idempotent): set PB_SEED_TOKEN to provision an API key on
+# first boot so a secure-by-default instance is usable before any OIDC login. Owned by
+# PB_SEED_USERNAME (find-or-created). Unset = no seeding. Use a strong, random value.
+ENV PB_SEED_TOKEN="" \
+    PB_SEED_USERNAME=admin
 WORKDIR /app
 
 COPY --from=build /app/node_modules ./node_modules

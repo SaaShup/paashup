@@ -9,6 +9,7 @@ import { createApiServer } from './api/server.js';
 import { loadPlugins, loadedPlugins } from './plugins/runtime.js';
 import { discoverPluginSpecifiers } from './plugins/discovery.js';
 import { ensureWebhooks } from './webhooks.js';
+import { ensureSeedToken } from './auth.js';
 import { closeRealtime } from './realtime.js';
 import type { Plugin } from './plugins/types.js';
 
@@ -69,6 +70,19 @@ if (pluginPaths.length) {
   for (const p of plugins) {
     if (p.seedWebhooks?.length) await ensureWebhooks(db, p.seedWebhooks);
   }
+}
+
+// Deploy-time bootstrap: provision an API token from PB_SEED_TOKEN (idempotent), so a
+// secure-by-default instance has a usable credential. No-op if PB_SEED_TOKEN is unset.
+try {
+  const seeded = await ensureSeedToken(db);
+  if (seeded?.created)
+    console.log(`seeded API token for user "${seeded.username}" (PB_SEED_TOKEN)`);
+  else if (seeded) console.log(`API token for "${seeded.username}" already present; not reseeding`);
+} catch (e) {
+  console.warn(
+    `PB_SEED_TOKEN: could not seed token — have migrations run? ${(e as Error).message}`,
+  );
 }
 
 const server = createApiServer({

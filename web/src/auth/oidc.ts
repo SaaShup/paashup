@@ -1,48 +1,48 @@
-// Browser-side OIDC (Keycloak) login: Authorization Code + PKCE against a public
-// client. Config is discovered at runtime from the backend (`/api/auth/oidc-config/`),
-// so no rebuild is needed to point at a different realm. The resulting access token is
-// sent as `Authorization: Bearer …` by the API client; static `pb_token` still works.
+// Browser-side OIDC login via a Backend-for-Frontend. The SPA only does the PKCE
+// redirect and receives an authorization `code`; it posts that to the backend
+// (`/api/auth/oidc/exchange/`), which holds any client secret, verifies the id_token,
+// applies authorization, and returns a **paas2box token**. The SPA stores that token
+// (as the existing `pb_token`) and uses it for every API/WS call — so it never touches
+// provider secrets or provider tokens, and works for any provider (Keycloak, Google, …).
 
-interface OidcConfig {
-  enabled: boolean;
-  issuer: string | null;
-  client_id: string | null;
-  audience: string | null;
-  login_required?: boolean;
+export interface Provider {
+  id: string;
+  label: string;
+  kind: string;
+  issuer: string;
+  client_id: string;
+  scopes: string;
+  authorization_endpoint: string | null;
 }
-interface Discovery {
-  authorization_endpoint: string;
-  token_endpoint: string;
-  end_session_endpoint?: string;
+interface ProvidersResponse {
+  login_required: boolean;
+  providers: Provider[];
 }
 
 const LS = {
-  access: 'pb_oidc_access',
-  refresh: 'pb_oidc_refresh',
-  expires: 'pb_oidc_expires', // epoch ms
-  id: 'pb_oidc_id_token',
+  token: 'pb_token', // paas2box token (also used by the REST client + WS)
+  username: 'pb_username',
+  tokenId: 'pb_token_id',
+  expires: 'pb_token_expires', // ISO string
 };
-const SS = { verifier: 'pb_oidc_verifier', state: 'pb_oidc_state' };
+const SS = { verifier: 'pb_oidc_verifier', state: 'pb_oidc_state', provider: 'pb_oidc_provider' };
 
-let configCache: OidcConfig | null = null;
-let discoveryCache: Discovery | null = null;
+let cache: ProvidersResponse | null = null;
 
-export async function loadOidcConfig(): Promise<OidcConfig> {
-  if (configCache) return configCache;
+export async function loadProviders(): Promise<ProvidersResponse> {
+  if (cache) return cache;
   try {
-    const res = await fetch('/api/auth/oidc-config/');
-    configCache = (await res.json()) as OidcConfig;
+    cache = (await (await fetch('/api/auth/providers/')).json()) as ProvidersResponse;
   } catch {
-    configCache = { enabled: false, issuer: null, client_id: null, audience: null };
+    cache = { login_required: false, providers: [] };
   }
-  return configCache;
+  return cache;
 }
 
-async function discover(issuer: string): Promise<Discovery> {
-  if (discoveryCache) return discoveryCache;
-  const res = await fetch(`${issuer.replace(/\/+$/, '')}/.well-known/openid-configuration`);
-  discoveryCache = (await res.json()) as Discovery;
-  return discoveryCache;
+/** Back-compat shape used by App.vue's gating. */
+export async function loadOidcConfig(): Promise<{ enabled: boolean; login_required: boolean }> {
+  const r = await loadProviders();
+  return { enabled: r.providers.length > 0, login_required: r.login_required };
 }
 
 // ---- PKCE helpers -------------------------------------------------------------
@@ -63,154 +63,108 @@ async function challenge(verifier: string): Promise<string> {
 const redirectUri = (): string => `${location.origin}/`;
 
 // ---- token store --------------------------------------------------------------
-function store(tok: {
-  access_token: string;
-  refresh_token?: string;
-  id_token?: string;
-  expires_in?: number;
-}): void {
-  localStorage.setItem(LS.access, tok.access_token);
-  if (tok.refresh_token) localStorage.setItem(LS.refresh, tok.refresh_token);
-  if (tok.id_token) localStorage.setItem(LS.id, tok.id_token);
-  const ttl = (tok.expires_in ?? 300) * 1000;
-  localStorage.setItem(LS.expires, String(Date.now() + ttl));
+export function getToken(): string | null {
+  return localStorage.getItem(LS.token);
 }
 function clearTokens(): void {
   for (const k of Object.values(LS)) localStorage.removeItem(k);
 }
-
-/** The current access token (sent as Bearer), or null. */
-export function getAccessToken(): string | null {
-  return localStorage.getItem(LS.access);
-}
 export function isAuthenticated(): boolean {
-  return !!getAccessToken();
-}
-
-function decodeJwt(token: string): Record<string, unknown> {
-  try {
-    const p = token.split('.')[1]!.replace(/-/g, '+').replace(/_/g, '/');
-    return JSON.parse(decodeURIComponent(escape(atob(p)))) as Record<string, unknown>;
-  } catch {
-    return {};
+  const exp = localStorage.getItem(LS.expires);
+  if (exp && Date.parse(exp) < Date.now()) {
+    clearTokens();
+    return false;
   }
+  return !!getToken();
 }
-/** Display name for the signed-in user, or null. */
 export function currentUsername(): string | null {
-  const t = getAccessToken();
-  if (!t) return null;
-  const c = decodeJwt(t);
-  return (c.preferred_username as string) ?? (c.email as string) ?? (c.sub as string) ?? 'user';
+  return localStorage.getItem(LS.username) || null;
 }
 
 // ---- flow ---------------------------------------------------------------------
-/** Start the login: redirect to Keycloak's authorization endpoint with PKCE. */
-export async function login(): Promise<void> {
-  const cfg = await loadOidcConfig();
-  if (!cfg.enabled || !cfg.issuer || !cfg.client_id) return;
-  const d = await discover(cfg.issuer);
+/** Start login: PKCE redirect to a provider's authorization endpoint. */
+export async function login(providerId?: string): Promise<void> {
+  const { providers } = await loadProviders();
+  const p = (providerId && providers.find((x) => x.id === providerId)) || providers[0];
+  if (!p || !p.authorization_endpoint) return;
   const verifier = randomString();
   const state = randomString(16);
   sessionStorage.setItem(SS.verifier, verifier);
   sessionStorage.setItem(SS.state, state);
+  sessionStorage.setItem(SS.provider, p.id);
   const q = new URLSearchParams({
     response_type: 'code',
-    client_id: cfg.client_id,
+    client_id: p.client_id,
     redirect_uri: redirectUri(),
-    scope: 'openid profile email',
+    scope: p.scopes || 'openid profile email',
     state,
     code_challenge: await challenge(verifier),
     code_challenge_method: 'S256',
   });
-  location.assign(`${d.authorization_endpoint}?${q.toString()}`);
+  location.assign(`${p.authorization_endpoint}?${q.toString()}`);
 }
 
 /**
- * If the URL carries an auth code (post-redirect), exchange it for tokens and clean
- * the URL. Returns true if a sign-in completed. Safe to call on every load.
+ * If the URL carries an auth code (post-redirect), hand it to the backend to exchange
+ * for a paas2box token, store it, and clean the URL. Returns true if sign-in completed.
  */
 export async function handleRedirectCallback(): Promise<boolean> {
   const params = new URLSearchParams(location.search);
   const code = params.get('code');
   const state = params.get('state');
   if (!code) return false;
-  const cfg = await loadOidcConfig();
-  if (!cfg.enabled || !cfg.issuer || !cfg.client_id) return false;
   const verifier = sessionStorage.getItem(SS.verifier);
   const expectedState = sessionStorage.getItem(SS.state);
-  // always strip code/state from the URL, even on mismatch
-  history.replaceState({}, '', location.pathname);
-  if (!verifier || !state || state !== expectedState) return false;
+  const provider = sessionStorage.getItem(SS.provider);
+  history.replaceState({}, '', location.pathname); // strip code/state regardless
+  if (!verifier || !state || state !== expectedState || !provider) return false;
   sessionStorage.removeItem(SS.verifier);
   sessionStorage.removeItem(SS.state);
+  sessionStorage.removeItem(SS.provider);
 
-  const d = await discover(cfg.issuer);
-  const res = await fetch(d.token_endpoint, {
+  const res = await fetch('/api/auth/oidc/exchange/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: redirectUri(),
-      client_id: cfg.client_id,
-      code_verifier: verifier,
-    }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, code, code_verifier: verifier, redirect_uri: redirectUri() }),
   });
   if (!res.ok) return false;
-  store(await res.json());
+  const d = (await res.json()) as {
+    token: string;
+    token_id?: number;
+    username?: string;
+    expires?: string;
+  };
+  localStorage.setItem(LS.token, d.token);
+  if (d.username) localStorage.setItem(LS.username, d.username);
+  if (d.token_id != null) localStorage.setItem(LS.tokenId, String(d.token_id));
+  if (d.expires) localStorage.setItem(LS.expires, d.expires);
   return true;
 }
 
-/** Refresh the access token if it is missing/near expiry. Returns false if signed out. */
+/** Validate the stored session locally; clears it (→ false) when expired. */
 export async function ensureValidToken(): Promise<boolean> {
-  if (!getAccessToken()) return false;
-  const exp = Number(localStorage.getItem(LS.expires) ?? 0);
-  if (Date.now() < exp - 30_000) return true; // still valid (30s margin)
-  const refresh = localStorage.getItem(LS.refresh);
-  const cfg = await loadOidcConfig();
-  if (!refresh || !cfg.enabled || !cfg.issuer || !cfg.client_id) {
-    clearTokens();
-    return false;
-  }
-  try {
-    const d = await discover(cfg.issuer);
-    const res = await fetch(d.token_endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: refresh,
-        client_id: cfg.client_id,
-      }),
-    });
-    if (!res.ok) throw new Error(`refresh ${res.status}`);
-    store(await res.json());
-    return true;
-  } catch {
-    clearTokens();
-    return false;
-  }
+  return isAuthenticated();
 }
 
-/** Sign out: clear local tokens and (if available) hit Keycloak's end-session endpoint. */
+/** Sign out: revoke the paas2box token server-side (best-effort) and clear local state. */
 export async function logout(): Promise<void> {
-  const idToken = localStorage.getItem(LS.id);
-  clearTokens();
-  const cfg = await loadOidcConfig();
-  if (cfg.enabled && cfg.issuer) {
-    const d = await discover(cfg.issuer).catch(() => null);
-    if (d?.end_session_endpoint) {
-      const q = new URLSearchParams({ post_logout_redirect_uri: location.origin });
-      if (idToken) q.set('id_token_hint', idToken);
-      if (cfg.client_id) q.set('client_id', cfg.client_id);
-      location.assign(`${d.end_session_endpoint}?${q.toString()}`);
-      return;
+  const id = localStorage.getItem(LS.tokenId);
+  const token = getToken();
+  if (id && token) {
+    try {
+      await fetch(`/api/users/tokens/${id}/`, {
+        method: 'DELETE',
+        headers: { Authorization: `Token ${token}` },
+      });
+    } catch {
+      /* best-effort */
     }
   }
+  clearTokens();
   location.assign('/');
 }
 
-/** Periodically refresh so the Bearer token stays valid while the app is open. */
+/** Periodically drop the session once it expires, so the UI returns to the login gate. */
 export function startAutoRefresh(): void {
-  setInterval(() => void ensureValidToken(), 60_000);
+  setInterval(() => void isAuthenticated(), 60_000);
 }

@@ -1,5 +1,5 @@
 import type { ServerEvent } from './events.js';
-import { getAccessToken } from '../auth/oidc.js';
+import { getToken } from '../auth/oidc.js';
 
 export type ConnectionStatus = 'connecting' | 'open' | 'closed';
 type Listener = (e: ServerEvent) => void;
@@ -88,16 +88,14 @@ function defaultUrl(): string {
 
 /**
  * Append the caller's credential to the WS URL. Browsers can't set request headers on a
- * `new WebSocket(...)`, so the server reads it from the query string: an OIDC bearer as
- * `access_token`, else a static API token as `token`. Anonymous if neither is present.
+ * `new WebSocket(...)`, so the server reads the paas2box token from the query string.
+ * Anonymous if there's no token.
  */
 function withCredential(url: string): string {
-  const bearer = getAccessToken();
-  const token = localStorage.getItem('pb_token');
-  if (!bearer && !token) return url;
+  const token = getToken();
+  if (!token) return url;
   const u = new URL(url);
-  if (bearer) u.searchParams.set('access_token', bearer);
-  else if (token) u.searchParams.set('token', token);
+  u.searchParams.set('token', token);
   return u.toString();
 }
 

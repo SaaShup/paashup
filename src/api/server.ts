@@ -7,7 +7,8 @@ import type { TableMeta } from '../model/meta-types.js';
 import { allTables, getTable } from '../model/registry.js';
 import { Repository, type ListOptions } from '../repository/repository.js';
 import { ApiError, ValidationError } from '../errors.js';
-import { authenticate, type AuthOptions } from '../auth.js';
+import { authenticate, ssoExchange, type AuthOptions } from '../auth.js';
+import { listProviders, discover } from '../oidc.js';
 import { matchRoute, matchAsset, fireHooks, loadedPlugins } from '../plugins/runtime.js';
 import { attachRealtime, broadcast } from '../realtime.js';
 import { dispatchWebhooks, type WebhookEventContext } from '../webhooks.js';
@@ -251,15 +252,69 @@ export function createApiServer(opts: ServerOptions): http.Server {
       if (method === 'GET' && path === '/api/plugins/') {
         return send(res, 200, { results: loadedPlugins() });
       }
-      // Public OIDC discovery for the SPA login flow (no secrets).
+      // Public OIDC discovery for the SPA login flow (no secrets). Back-compat shape,
+      // derived from the first configured provider; the SPA prefers /api/auth/providers/.
       if (method === 'GET' && path === '/api/auth/oidc-config/') {
+        const first = listProviders()[0];
         return send(res, 200, {
-          enabled: !!process.env.PB_OIDC_ISSUER,
-          issuer: process.env.PB_OIDC_ISSUER ?? null,
-          client_id: process.env.PB_OIDC_CLIENT_ID ?? null,
-          audience: process.env.PB_OIDC_AUDIENCE ?? null,
+          enabled: !!first,
+          issuer: first?.issuer ?? null,
+          client_id: first?.clientId ?? null,
+          audience: first?.audience ?? null,
           // when true, the SPA shows a dedicated login page (anonymous access is rejected)
-          login_required: !!process.env.PB_OIDC_ISSUER && !!opts.auth?.required,
+          login_required: !!first && !!opts.auth?.required,
+        });
+      }
+      // Configured SSO providers for the SPA login buttons (public; no secrets). Each
+      // entry carries what the browser needs to start the PKCE redirect; the resulting
+      // code is exchanged server-side at /api/auth/oidc/exchange/.
+      if (method === 'GET' && path === '/api/auth/providers/') {
+        const providers = await Promise.all(
+          listProviders().map(async (p) => {
+            let authorization_endpoint: string | null = null;
+            try {
+              authorization_endpoint = (await discover(p.issuer)).authorization_endpoint;
+            } catch {
+              /* discovery unavailable — still list it; the SPA surfaces the error */
+            }
+            return {
+              id: p.id,
+              label: p.label,
+              kind: p.kind,
+              issuer: p.issuer,
+              client_id: p.clientId,
+              scopes: p.scopes,
+              authorization_endpoint,
+            };
+          }),
+        );
+        return send(res, 200, { login_required: !!opts.auth?.required, providers });
+      }
+      // BFF code exchange: the SPA posts the OIDC `code`; we exchange it server-side
+      // (holding any client secret) and return a paas2box token. Public — you're logging
+      // in — so it sits before the auth gate.
+      if (method === 'POST' && path === '/api/auth/oidc/exchange/') {
+        const b = (await readBody(req)) as {
+          provider?: string;
+          code?: string;
+          code_verifier?: string;
+          redirect_uri?: string;
+        };
+        if (!b.provider || !b.code || !b.redirect_uri) {
+          return send(res, 400, { detail: 'provider, code and redirect_uri are required' });
+        }
+        const r = await ssoExchange(db, b.provider, {
+          code: b.code,
+          codeVerifier: b.code_verifier,
+          redirectUri: b.redirect_uri,
+        });
+        if ('error' in r) return send(res, r.status, { detail: r.error });
+        return send(res, 200, {
+          token: r.token,
+          token_id: r.tokenId,
+          username: r.username,
+          write_enabled: r.writeEnabled,
+          expires: r.expires,
         });
       }
       // Static SPA for non-API GET routes (single-container deploy).

@@ -175,19 +175,23 @@ five jobs: **test** (SQLite), **test-mariadb** (service container), **lint**
   `children`/`_depth`, reverse-FK `*_count`).
 - Query lookups (`__ic`, `__in`, `__gte`, `q`, `ordering`), pre-write validation
   (NetBox field-error shape), and optional token auth (`Authorization: Token …`).
-- **SSO via OIDC / Keycloak** ([src/oidc.ts](src/oidc.ts)): in addition to static API
-  tokens, paas2box accepts `Authorization: Bearer <JWT>` access tokens. The token is
-  verified against the issuer's JWKS (RS256, signature + `iss`/`aud`/`exp`, no extra
-  dependency), then mapped to a local user (**auto-provisioned**), with write access
-  granted by a configurable realm/client role. Enable with env:
-  `PB_OIDC_ISSUER` (e.g. `https://kc/realms/paasbox`), optional `PB_OIDC_AUDIENCE`,
-  `PB_OIDC_WRITE_ROLE`, `PB_OIDC_USERNAME_CLAIM` (default `preferred_username`), and
-  `PB_OIDC_CLIENT_ID` (advertised to the SPA via `GET /api/auth/oidc-config/`). Static
-  tokens keep working alongside it (good for automation). The **web UI** has a built-in
-  login (Authorization Code + PKCE, [web/src/auth/oidc.ts](web/src/auth/oidc.ts)):
-  Sign in → Keycloak → back, with token refresh and Sign out; the API client then sends
-  the bearer token automatically. For **headless API access** with SSO active (static
-  tokens vs bearer JWTs), see [docs/SSO-API-ACCESS.md](docs/SSO-API-ACCESS.md).
+- **SSO via OIDC — multiple providers** ([src/oidc.ts](src/oidc.ts)): sign in via several
+  OIDC providers at once (e.g. **Keycloak _and_ Google**), chosen on the login page.
+  Because providers differ in ways OIDC leaves open (JWT vs opaque access tokens, public
+  vs confidential clients, roles vs no roles), the SPA only does the PKCE redirect; the
+  **code→token exchange runs server-side** (a Backend-for-Frontend, `POST
+  /api/auth/oidc/exchange/`). The backend holds any client secret, verifies the **id_token**
+  against the issuer's JWKS, normalizes authorization, auto-provisions the user, and mints
+  a **paas2box token** the SPA uses for all API/WS calls — so the browser never holds a
+  provider secret or token. Authorization is per provider: **Keycloak** → a realm/client
+  **role** grants write; **Google** → a **domain allowlist** gates login and an **email
+  allowlist** grants write. Configure with `PB_OIDC_PROVIDERS=keycloak,google` and
+  per-provider `PB_OIDC_<ID>_*` vars (issuer, client id/secret, write role, allowed
+  domains/emails); a legacy single `PB_OIDC_*` provider is still honored. Service-account
+  **`Authorization: Bearer <JWT>`** (Keycloak) still works directly for automation. The
+  web UI ([web/src/auth/oidc.ts](web/src/auth/oidc.ts)) renders a button per provider and
+  signs out by revoking the token. For **headless API access**, see
+  [docs/SSO-API-ACCESS.md](docs/SSO-API-ACCESS.md).
 - **OpenAPI conformance** enforced by `test/contract.test.mjs` (validates live
   responses against the NetBox read schemas with `ajv`).
 - **Plugins** ([src/plugins/](src/plugins/)): third parties extend paas2box by

@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import type { Db } from './db/types.js';
-import { oidcEnabled, verifyOidcToken, rolesFromClaims, type OidcClaims } from './oidc.js';
+import { oidcEnabled, verifyBearer, authorizeIdentity, exchangeCode, getProvider } from './oidc.js';
 
 export interface AuthContext {
   tokenId: number;
@@ -135,28 +135,29 @@ export async function authenticate(
     };
   }
 
+  // Machine-to-machine: a Keycloak (or other) service-account JWT presented directly.
+  // The provider is selected by the token's issuer; opaque tokens (e.g. Google access
+  // tokens) aren't JWTs and are rejected here — interactive users go through the
+  // BFF exchange (ssoExchange) and then use the resulting paas2box token.
   const bearer = /^Bearer\s+(.+)$/i.exec(trimmed);
   if (bearer && oidcEnabled()) {
-    const claims = await verifyOidcToken(bearer[1]!.trim());
-    if (!claims) return null;
-    return contextFromOidc(db, claims);
+    const v = await verifyBearer(bearer[1]!.trim());
+    if (!v) return null;
+    const id = authorizeIdentity(v.provider, v.claims);
+    if ('error' in id) return null;
+    const userId = await findOrCreateUser(db, id.username, id);
+    return { tokenId: 0, userId, writeEnabled: id.writeEnabled };
   }
   return null;
 }
 
-/** Map verified OIDC claims to a local user (find-or-create) + write permission. */
-async function contextFromOidc(db: Db, claims: OidcClaims): Promise<AuthContext | null> {
-  const usernameClaim = process.env.PB_OIDC_USERNAME_CLAIM || 'preferred_username';
-  const username = String(claims[usernameClaim] ?? claims.sub ?? '').trim();
-  if (!username) return null;
-  const userId = await findOrCreateUser(db, username, claims);
-  const writeRole = process.env.PB_OIDC_WRITE_ROLE;
-  // No role configured ⇒ any authenticated SSO user may write; else require the role.
-  const writeEnabled = !writeRole || rolesFromClaims(claims).includes(writeRole);
-  return { tokenId: 0, userId, writeEnabled };
+interface UserProfile {
+  email?: string;
+  firstName?: string;
+  lastName?: string;
 }
 
-async function findOrCreateUser(db: Db, username: string, claims: OidcClaims): Promise<number> {
+async function findOrCreateUser(db: Db, username: string, p: UserProfile = {}): Promise<number> {
   const row = await db.get<{ id: number }>('SELECT id FROM users_user WHERE username = ?', [
     username,
   ]);
@@ -164,13 +165,49 @@ async function findOrCreateUser(db: Db, username: string, claims: OidcClaims): P
   const res = await db.execute(
     `INSERT INTO users_user (username, email, first_name, last_name, is_active, date_joined)
      VALUES (?, ?, ?, ?, 1, ?)`,
-    [
-      username,
-      String(claims.email ?? ''),
-      String(claims.given_name ?? ''),
-      String(claims.family_name ?? ''),
-      new Date().toISOString(),
-    ],
+    [username, p.email ?? '', p.firstName ?? '', p.lastName ?? '', new Date().toISOString()],
   );
   return res.insertId;
+}
+
+export interface SsoSession {
+  token: string;
+  tokenId: number;
+  username: string;
+  writeEnabled: boolean;
+  expires: string;
+}
+
+/**
+ * Backend-for-Frontend login: exchange an OIDC authorization `code` (sent by the SPA)
+ * for tokens server-side, verify + authorize the identity, find-or-create the user, and
+ * mint a paas2box session token the SPA then uses for all API/WS calls. Works uniformly
+ * for any configured provider (Keycloak roles, Google domain/email) — see oidc.ts.
+ */
+export async function ssoExchange(
+  db: Db,
+  providerId: string,
+  args: { code: string; codeVerifier?: string; redirectUri: string },
+): Promise<SsoSession | { error: string; status: number }> {
+  const provider = getProvider(providerId);
+  if (!provider) return { error: `unknown provider "${providerId}"`, status: 400 };
+  const r = await exchangeCode(provider, args);
+  if ('error' in r) return r;
+  const { identity } = r;
+  const userId = await findOrCreateUser(db, identity.username, identity);
+  const ttlHours = Number(process.env.PB_OIDC_SESSION_TTL_HOURS ?? 12);
+  const expires = new Date(Date.now() + ttlHours * 3600_000).toISOString();
+  const { id: tokenId, key } = await createToken(db, {
+    userId,
+    writeEnabled: identity.writeEnabled,
+    expires,
+    description: `sso:${provider.id}`,
+  });
+  return {
+    token: key,
+    tokenId,
+    username: identity.username,
+    writeEnabled: identity.writeEnabled,
+    expires,
+  };
 }

@@ -71,6 +71,10 @@ docker run -p 8000:8000 -e PB_MIGRATE=1 -v paas2box-data:/data \
 Outside Docker / for SQLite you can also run `node scripts/seed-token.mjs <db-file>`
 (prints a generated key). For **local dev only**, `-e PB_AUTH_REQUIRED=0` allows anonymous access.
 
+**Full deployment reference** — every environment variable (database, server, auth/SSO,
+webhooks), Keycloak + Google OIDC setup, a docker-compose example, and reverse-proxy/TLS
+notes: see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 ### Run the web UI
 
 The admin UI (Vue 3, NetBox-style, schema-driven, live over WebSocket) can be run

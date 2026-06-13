@@ -21,6 +21,17 @@ import {
   serializeRegistry,
   serializeVolume,
 } from './serialize.js';
+import { registerSerializer } from '../../api/serializer.js';
+
+// Use the nested serializers for the generic CRUD response + change/webhook payloads too,
+// so EVERY write (create / single update / bulk update) emits the full entity — matching
+// GET and NetBox — not just the routes the plugin overrides explicitly.
+registerSerializer(T.host, serializeHost);
+registerSerializer(T.image, serializeImage);
+registerSerializer(T.volume, serializeVolume);
+registerSerializer(T.network, serializeNetwork);
+registerSerializer(T.registry, serializeRegistry);
+registerSerializer(T.container, serializeContainer);
 
 const dockerPlugin: Plugin = {
   name: 'docker',

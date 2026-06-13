@@ -6,6 +6,24 @@ import { readRelations } from '../repository/relations.js';
 import { customFieldsFor } from '../customfields/registry.js';
 import { computeFields } from './computed.js';
 
+/**
+ * Optional per-table serializer override. A plugin whose entity has nested data outside
+ * the registry (e.g. a Docker container's ports/env/mounts) registers a serializer here;
+ * the generic CRUD path then uses it for both the HTTP response AND the change/webhook
+ * payload, so every write (create / update / bulk) carries the same full entity as GET.
+ */
+export type RowSerializer = (
+  db: Db,
+  row: Record<string, unknown>,
+) => Promise<Record<string, unknown>>;
+const serializerOverrides = new Map<string, RowSerializer>();
+export function registerSerializer(table: string, fn: RowSerializer): void {
+  serializerOverrides.set(table, fn);
+}
+export function getSerializer(table: string): RowSerializer | undefined {
+  return serializerOverrides.get(table);
+}
+
 // Lookups derived from the registry, rebuilt when a plugin registers an entity.
 let MODEL_TO_TABLE: Record<string, string> = {};
 let CONTENTTYPE_TO_TABLE: Record<string, string> = {};

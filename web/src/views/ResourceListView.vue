@@ -2,7 +2,8 @@
 import { ref, computed, watch } from 'vue';
 import { useUiStore } from '../stores/ui.js';
 import { useObjectsStore } from '../stores/objects.js';
-import { api, type Obj } from '../api/client.js';
+import type { Obj } from '../api/client.js';
+import { buildFilterOptions, type FilterOptions } from '../api/columnFilters.js';
 import ObjectTable from '../components/ObjectTable.vue';
 import ObjectForm from '../components/ObjectForm.vue';
 import IpRangeAddresses from '../components/IpRangeAddresses.vue';
@@ -30,16 +31,11 @@ const editing = ref<Obj | null>(null);
 const addrRange = ref<Obj | null>(null); // IP range whose addresses are being browsed
 const selectedIds = ref<number[]>([]); // checked container rows — toolbar ops act on these
 
-// Container host filter: dropdown of Docker hosts; '' = all hosts. The list endpoint
-// already supports `?host=<id>` (NetBox-style FK filter), so we just add it to the query.
-interface HostBrief {
-  id: number;
-  display?: string;
-  name?: string;
-}
-const hosts = ref<HostBrief[]>([]);
-const hostFilter = ref(''); // selected host id as string, or '' for all
-const hostLabel = (h: HostBrief) => h.display || h.name || `host #${h.id}`;
+// Per-column header filters: { fieldName -> selected value } sent as `?<field>=<value>`,
+// with the selectable values per column in `filterOptions` (FK rows / enum choices /
+// distinct scalar values — see api/columnFilters).
+const filters = ref<Record<string, string>>({});
+const filterOptions = ref<FilterOptions>({});
 
 const resource = computed(() => ui.selected!);
 const slot = computed(() => (resource.value ? objects.byTable[resource.value.table] : undefined));
@@ -73,21 +69,40 @@ async function load() {
       limit: PAGE,
       offset: offset.value,
       ...(search.value ? { q: search.value } : {}),
-      ...(isContainer.value && hostFilter.value ? { host: hostFilter.value } : {}),
+      ...filters.value, // active per-column filters (empty selections are removed)
     });
   } catch (e) {
     error.value = String(e);
   }
 }
 
-/** Load the host list once, for the container host-filter dropdown. */
-async function loadHosts() {
-  if (hosts.value.length) return;
+/** Apply / clear one column's filter, then reload from the first page. */
+function setFilter(payload: { field: string; value: string }) {
+  const next = { ...filters.value };
+  if (payload.value) next[payload.field] = payload.value;
+  else delete next[payload.field];
+  filters.value = next;
+  offset.value = 0;
+  load();
+}
+
+/** Clear every active column filter and reload. */
+function clearFilters() {
+  if (!Object.keys(filters.value).length) return;
+  filters.value = {};
+  offset.value = 0;
+  load();
+}
+
+/** Build the per-column filter options for the current resource (best-effort). */
+async function loadFilterOptions() {
+  filterOptions.value = {};
+  const r = resource.value;
+  if (!r?.model) return;
   try {
-    const page = await api.list<HostBrief>('/api/plugins/docker/hosts/', { limit: 1000 });
-    hosts.value = page.results.slice().sort((a, b) => hostLabel(a).localeCompare(hostLabel(b)));
+    filterOptions.value = await buildFilterOptions(r.model, r.endpoint);
   } catch {
-    /* hosts are optional UI sugar; ignore failures */
+    /* filters are optional sugar; ignore failures */
   }
 }
 
@@ -96,9 +111,9 @@ watch(
   () => {
     offset.value = 0;
     search.value = '';
-    hostFilter.value = '';
+    filters.value = {};
     load();
-    if (isContainer.value) loadHosts();
+    loadFilterOptions();
   },
   { immediate: true },
 );
@@ -155,6 +170,14 @@ function edit(row: Obj) {
     <div class="head">
       <h2>{{ resource.label }}</h2>
       <span v-if="slot" class="total muted">{{ slot.count }} records</span>
+      <button
+        v-if="Object.keys(filters).length"
+        class="btn btn-ghost clear-filters"
+        title="Clear all column filters"
+        @click="clearFilters"
+      >
+        ✕ Clear filters ({{ Object.keys(filters).length }})
+      </button>
       <span class="spacer" />
       <button v-if="resource.writable" class="btn btn-ok" @click="add">+ Add</button>
     </div>
@@ -168,13 +191,6 @@ function edit(row: Obj) {
         @keyup.enter="((offset = 0), load())"
       />
       <button class="btn btn-ghost" @click="((offset = 0), load())">Search</button>
-      <label v-if="isContainer" class="host-filter">
-        <span class="hf-label muted">Host</span>
-        <select v-model="hostFilter" @change="((offset = 0), load())">
-          <option value="">All hosts</option>
-          <option v-for="h in hosts" :key="h.id" :value="String(h.id)">{{ hostLabel(h) }}</option>
-        </select>
-      </label>
       <span v-if="slot?.loading" class="muted">loading…</span>
       <template v-if="isContainer">
         <span class="sel-count muted">{{ selectedIds.length }} selected</span>
@@ -219,11 +235,14 @@ function edit(row: Obj) {
         :extra-action="resource.table === 'ipam_iprange' ? 'IPs' : undefined"
         :selectable="isContainer"
         :selected="selectedIds"
+        :filters="filters"
+        :filter-options="filterOptions"
         @delete="del"
         @edit="edit"
         @action="(row) => (addrRange = row)"
         @toggle="toggleSel"
         @toggle-all="toggleAllSel"
+        @filter="setFilter"
       />
     </div>
 
@@ -281,16 +300,9 @@ function edit(row: Obj) {
   font-size: 0.82rem;
   white-space: nowrap;
 }
-.host-filter {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.host-filter .hf-label {
-  font-size: 0.82rem;
-}
-.host-filter select {
-  max-width: 200px;
+.clear-filters {
+  font-size: 0.78rem;
+  padding: 4px 10px;
 }
 /* Docker container operation buttons — colour-coded by intent. */
 .op-btn {

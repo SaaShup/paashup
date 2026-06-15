@@ -4,6 +4,7 @@ import uiGuide from './ui-guide.md?raw';
 import objects from './objects.md?raw';
 import api from './api.md?raw';
 import apiKeys from './api-keys.md?raw';
+import userTokens from './user-tokens.md?raw';
 import webhooks from './webhooks.md?raw';
 import plugins from './plugins.md?raw';
 
@@ -19,6 +20,7 @@ export const docs: DocPage[] = [
   { id: 'objects', title: 'The object model', body: objects },
   { id: 'api', title: 'The API', body: api },
   { id: 'api-keys', title: 'API keys', body: apiKeys },
+  { id: 'user-tokens', title: 'Adding a token per user', body: userTokens },
   { id: 'webhooks', title: 'Webhooks & realtime', body: webhooks },
   { id: 'plugins', title: 'Plugins', body: plugins },
 ];

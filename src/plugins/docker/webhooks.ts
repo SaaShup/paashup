@@ -33,7 +33,7 @@ export const DOCKER_WEBHOOKS: readonly WebhookSeed[] = [
     events: ['created'],
     httpMethod: 'GET',
     payloadUrl:
-      '{{ data.endpoint }}/api/engine/endpoint?id={{ data.id }}&token=nbt_{{ data.token.key }}.{{ data.token.token }}&endpoint={{ data.endpoint }}&url={{ data.netbox_base_url }}',
+      '{{ data.endpoint }}/api/engine/endpoint?id={{ data.id }}&token={{ data.token.key }}&endpoint={{ data.endpoint }}&url={{ data.netbox_base_url }}',
   },
   {
     ...base,

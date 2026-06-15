@@ -53,6 +53,7 @@ before(async () => {
   rmSync(DB_FILE, { force: true });
   db = new SqliteDb(DB_FILE);
   db.exec(readFileSync(join(ROOT, 'datamodel', 'sql', 'schema.sqlite.sql'), 'utf8'));
+  db.exec(readFileSync(join(ROOT, 'migrations', '0002_auth_token.sqlite.sql'), 'utf8'));
   await loadPlugins(db, [dockerPlugin]);
   server = createApiServer({ db });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -76,7 +77,11 @@ test('plugin loads and registers its migration once', async () => {
   );
   assert.deepEqual(
     rows.map((r) => r.version),
-    ['plugin:docker:0001_initial', 'plugin:docker:0002_host_scope'],
+    [
+      'plugin:docker:0001_initial',
+      'plugin:docker:0002_host_scope',
+      'plugin:docker:0003_host_token',
+    ],
   );
 });
 
@@ -90,10 +95,13 @@ test('host create fires the default-registry hook; GET embeds nested arrays', as
   // host state/operation are bare strings (agent-consumed), not {value,label}
   assert.equal(created.body.state, 'created');
   assert.equal(created.body.operation, 'none');
+  // a static API token is minted and returned once, in the create response only
+  assert.match(created.body.token.key, /^[0-9a-f]{40}$/);
 
   const got = await api('GET', `/api/plugins/docker/hosts/${ids.host}/`);
   assert.equal(got.status, 200);
   assert.ok(got.body.url.endsWith(`/api/plugins/docker/hosts/${ids.host}/`));
+  assert.ok(!('token' in got.body)); // never exposed on plain reads
   // hook created a "dockerhub" registry
   assert.equal(got.body.registries.length, 1);
   assert.equal(got.body.registries[0].name, 'dockerhub');
@@ -442,6 +450,24 @@ test('exec rejects a non-list cmd', async () => {
   });
   assert.equal(res.status, 400);
   assert.ok(Array.isArray(res.body.cmd));
+});
+
+test('host token: minted for the agent, owned by service user, revoked on delete', async () => {
+  const h = (
+    await api('POST', '/api/plugins/docker/hosts/', { endpoint: 'http://t', name: 'tok-host' })
+  ).body;
+  const key = h.token.key;
+  // stored in auth_token, owned by the docker-agent service user, write-enabled
+  const row = await db.get(
+    'SELECT t.write_enabled AS w, u.username AS owner FROM auth_token t JOIN users_user u ON u.id = t.user_id WHERE t.`key` = ?',
+    [key],
+  );
+  assert.equal(row.owner, 'docker-agent');
+  assert.equal(row.w, 1);
+  // host carries the token_id; deleting the host revokes the token
+  await api('DELETE', `/api/plugins/docker/hosts/${h.id}/`);
+  const gone = await db.get('SELECT id FROM auth_token WHERE `key` = ?', [key]);
+  assert.equal(gone, undefined);
 });
 
 test('core API still works alongside the plugin', async () => {

@@ -2,12 +2,36 @@
 import { computed } from 'vue';
 import type { Obj } from '../api/client.js';
 
-const props = defineProps<{ items: Obj[]; editable?: boolean; extraAction?: string }>();
+const props = defineProps<{
+  items: Obj[];
+  editable?: boolean;
+  extraAction?: string;
+  /** Render a leading checkbox column for row selection (e.g. Docker containers). */
+  selectable?: boolean;
+  /** Currently-selected row ids (controlled by the parent). */
+  selected?: readonly number[];
+}>();
 const emit = defineEmits<{
   (e: 'delete', id: number): void;
   (e: 'edit', row: Obj): void;
   (e: 'action', row: Obj): void;
+  (e: 'toggle', payload: { id: number; checked: boolean }): void;
+  (e: 'toggle-all', checked: boolean): void;
 }>();
+
+const idOf = (row: Obj): number => (row as { id: number }).id;
+const selectedSet = computed(() => new Set(props.selected ?? []));
+const allSelected = computed(
+  () => props.items.length > 0 && props.items.every((r) => selectedSet.value.has(idOf(r))),
+);
+const someSelected = computed(() => props.items.some((r) => selectedSet.value.has(idOf(r))));
+
+function onToggle(row: Obj, e: Event): void {
+  emit('toggle', { id: idOf(row), checked: (e.target as HTMLInputElement).checked });
+}
+function onToggleAll(e: Event): void {
+  emit('toggle-all', (e.target as HTMLInputElement).checked);
+}
 
 const HIDE = new Set(['url', 'display_url', 'custom_fields', 'tags']);
 const FIRST = ['id', 'display'];
@@ -39,12 +63,32 @@ function cell(value: unknown): string {
   <table v-if="items.length">
     <thead>
       <tr>
+        <th v-if="selectable" class="selcol">
+          <input
+            type="checkbox"
+            :checked="allSelected"
+            :indeterminate.prop="someSelected && !allSelected"
+            title="Select all"
+            @change="onToggleAll"
+          />
+        </th>
         <th v-for="c in columns" :key="c">{{ c }}</th>
         <th></th>
       </tr>
     </thead>
     <tbody>
-      <tr v-for="row in items" :key="(row as any).id">
+      <tr
+        v-for="row in items"
+        :key="(row as any).id"
+        :class="{ selected: selectable && selectedSet.has(idOf(row)) }"
+      >
+        <td v-if="selectable" class="selcol">
+          <input
+            type="checkbox"
+            :checked="selectedSet.has(idOf(row))"
+            @change="onToggle(row, $event)"
+          />
+        </td>
         <td v-for="c in columns" :key="c">{{ cell(row[c]) }}</td>
         <td class="ops">
           <button v-if="extraAction" class="extra" @click="emit('action', row)">
@@ -60,7 +104,12 @@ function cell(value: unknown): string {
             >API</a
           >
           <button v-if="editable" class="edit" title="Edit" @click="emit('edit', row)">✎</button>
-          <button v-if="editable" class="del" title="Delete" @click="emit('delete', (row as any).id)">
+          <button
+            v-if="editable"
+            class="del"
+            title="Delete"
+            @click="emit('delete', (row as any).id)"
+          >
             ✕
           </button>
         </td>
@@ -95,6 +144,17 @@ tbody tr:hover {
 .ops {
   white-space: nowrap;
   text-align: right;
+}
+.selcol {
+  width: 1%;
+  white-space: nowrap;
+  text-align: center;
+}
+.selcol input {
+  cursor: pointer;
+}
+tbody tr.selected {
+  background: var(--surface-2);
 }
 .api,
 .extra {

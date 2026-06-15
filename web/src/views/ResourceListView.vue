@@ -8,6 +8,17 @@ import ObjectForm from '../components/ObjectForm.vue';
 import IpRangeAddresses from '../components/IpRangeAddresses.vue';
 
 const PAGE = 50;
+// Docker container lifecycle ops — PATCH each *selected* container's `operation`, which
+// fires the agent webhook (the agent performs the real action). The toolbar buttons act
+// on the rows checked in the table. Colour-coded by intent: start=green, restart=amber,
+// recreate=blue, stop=red, kill=dark-red.
+const CONTAINER_OP_BTNS = [
+  { op: 'start', label: 'Start', cls: 'op-start' },
+  { op: 'restart', label: 'Restart', cls: 'op-restart' },
+  { op: 'recreate', label: 'Recreate', cls: 'op-recreate' },
+  { op: 'stop', label: 'Stop', cls: 'op-stop' },
+  { op: 'kill', label: 'Kill', cls: 'op-kill' },
+] as const;
 const ui = useUiStore();
 const objects = useObjectsStore();
 
@@ -17,9 +28,11 @@ const error = ref('');
 const formOpen = ref(false);
 const editing = ref<Obj | null>(null);
 const addrRange = ref<Obj | null>(null); // IP range whose addresses are being browsed
+const selectedIds = ref<number[]>([]); // checked container rows — toolbar ops act on these
 
 const resource = computed(() => ui.selected!);
 const slot = computed(() => (resource.value ? objects.byTable[resource.value.table] : undefined));
+const isContainer = computed(() => resource.value?.table === 'plugin_docker_container');
 const apiUrl = computed(() => (resource.value ? location.origin + resource.value.endpoint : ''));
 const copied = ref(false);
 
@@ -43,6 +56,7 @@ const rangeTo = computed(() => Math.min(offset.value + PAGE, slot.value?.count ?
 async function load() {
   if (!resource.value) return;
   error.value = '';
+  selectedIds.value = []; // a new page / search / table invalidates the selection
   try {
     await objects.load(resource.value.table, resource.value.endpoint, {
       limit: PAGE,
@@ -70,6 +84,35 @@ function go(delta: number) {
 }
 async function del(id: number) {
   if (resource.value) await objects.remove(resource.value.table, id);
+}
+/** Toggle one container row's selection. */
+function toggleSel(payload: { id: number; checked: boolean }) {
+  const set = new Set(selectedIds.value);
+  if (payload.checked) set.add(payload.id);
+  else set.delete(payload.id);
+  selectedIds.value = [...set];
+}
+/** Select / clear all currently-listed container rows. */
+function toggleAllSel(checked: boolean) {
+  selectedIds.value =
+    checked && slot.value ? slot.value.items.map((r) => (r as { id: number }).id) : [];
+}
+/** Apply an operation to the selected containers (one confirm, one PATCH each). */
+async function bulkOp(op: string) {
+  if (!resource.value || !selectedIds.value.length) return;
+  const ids = [...selectedIds.value];
+  if (
+    !window.confirm(
+      `Run "${op}" on ${ids.length} selected container${ids.length === 1 ? '' : 's'}?`,
+    )
+  )
+    return;
+  error.value = '';
+  try {
+    for (const id of ids) await objects.update(resource.value.table, id, { operation: op });
+  } catch (e) {
+    error.value = String(e);
+  }
 }
 function add() {
   editing.value = null;
@@ -101,8 +144,32 @@ function edit(row: Obj) {
       />
       <button class="btn btn-ghost" @click="((offset = 0), load())">Search</button>
       <span v-if="slot?.loading" class="muted">loading…</span>
+      <template v-if="isContainer">
+        <span class="sel-count muted">{{ selectedIds.length }} selected</span>
+        <button
+          v-for="b in CONTAINER_OP_BTNS"
+          :key="b.op"
+          class="btn op-btn"
+          :class="b.cls"
+          :disabled="!selectedIds.length"
+          :title="
+            selectedIds.length
+              ? `Run ${b.label} on ${selectedIds.length} selected container(s)`
+              : 'Select one or more containers first'
+          "
+          @click="bulkOp(b.op)"
+        >
+          {{ b.label }}
+        </button>
+      </template>
       <span class="spacer" />
-      <a class="api-pill" :href="apiUrl" target="_blank" rel="noopener" title="Open this endpoint's JSON">
+      <a
+        class="api-pill"
+        :href="apiUrl"
+        target="_blank"
+        rel="noopener"
+        title="Open this endpoint's JSON"
+      >
         {&nbsp;} API ↗
       </a>
       <button class="btn btn-ghost copy" :title="apiUrl" @click="copyApi">
@@ -118,9 +185,13 @@ function edit(row: Obj) {
         :items="slot.items"
         :editable="resource.writable"
         :extra-action="resource.table === 'ipam_iprange' ? 'IPs' : undefined"
+        :selectable="isContainer"
+        :selected="selectedIds"
         @delete="del"
         @edit="edit"
         @action="(row) => (addrRange = row)"
+        @toggle="toggleSel"
+        @toggle-all="toggleAllSel"
       />
     </div>
 
@@ -173,6 +244,56 @@ function edit(row: Obj) {
 .search {
   flex: 1;
   max-width: 360px;
+}
+.sel-count {
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+/* Docker container operation buttons — colour-coded by intent. */
+.op-btn {
+  padding: 6px 11px;
+  font-size: 0.85rem;
+  color: #fff;
+}
+.op-start {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+.op-start:hover {
+  background: #15803d;
+  border-color: #15803d;
+}
+.op-restart {
+  background: var(--warn);
+  border-color: var(--warn);
+}
+.op-restart:hover {
+  background: #b45309;
+  border-color: #b45309;
+}
+.op-recreate {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.op-recreate:hover {
+  background: var(--primary-d);
+  border-color: var(--primary-d);
+}
+.op-stop {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+.op-stop:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+.op-kill {
+  background: #991b1b;
+  border-color: #991b1b;
+}
+.op-kill:hover {
+  background: #7f1d1d;
+  border-color: #7f1d1d;
 }
 .api-pill {
   font-family: ui-monospace, monospace;

@@ -11,6 +11,16 @@ const PAGE = 50;
 // Docker container lifecycle ops — PATCH the container's `operation`, which fires the
 // agent webhook (the agent performs the real action). Values are the operation enum.
 const CONTAINER_OPS = ['start', 'stop', 'restart', 'recreate', 'kill'] as const;
+// Toolbar bulk ops for the Docker container list: each applies to *every* container
+// currently shown (one PATCH per container → one agent webhook each). Colour-coded by
+// intent: start=green, restart=amber, recreate=blue, stop=red, kill=dark-red.
+const CONTAINER_OP_BTNS = [
+  { op: 'start', label: 'Start', cls: 'op-start' },
+  { op: 'restart', label: 'Restart', cls: 'op-restart' },
+  { op: 'recreate', label: 'Recreate', cls: 'op-recreate' },
+  { op: 'stop', label: 'Stop', cls: 'op-stop' },
+  { op: 'kill', label: 'Kill', cls: 'op-kill' },
+] as const;
 const ui = useUiStore();
 const objects = useObjectsStore();
 
@@ -23,6 +33,7 @@ const addrRange = ref<Obj | null>(null); // IP range whose addresses are being b
 
 const resource = computed(() => ui.selected!);
 const slot = computed(() => (resource.value ? objects.byTable[resource.value.table] : undefined));
+const isContainer = computed(() => resource.value?.table === 'plugin_docker_container');
 const apiUrl = computed(() => (resource.value ? location.origin + resource.value.endpoint : ''));
 const copied = ref(false);
 
@@ -86,6 +97,18 @@ async function setOp(payload: { row: Obj; op: string }) {
     error.value = String(e);
   }
 }
+/** Apply an operation to every container currently listed (one confirm, one PATCH each). */
+async function bulkOp(op: string) {
+  if (!resource.value || !slot.value?.items.length) return;
+  const ids = slot.value.items.map((r) => (r as { id: number }).id);
+  if (!window.confirm(`Run "${op}" on ${ids.length} container${ids.length === 1 ? '' : 's'} shown?`)) return;
+  error.value = '';
+  try {
+    for (const id of ids) await objects.update(resource.value.table, id, { operation: op });
+  } catch (e) {
+    error.value = String(e);
+  }
+}
 function add() {
   editing.value = null;
   formOpen.value = true;
@@ -116,6 +139,19 @@ function edit(row: Obj) {
       />
       <button class="btn btn-ghost" @click="((offset = 0), load())">Search</button>
       <span v-if="slot?.loading" class="muted">loading…</span>
+      <template v-if="isContainer">
+        <button
+          v-for="b in CONTAINER_OP_BTNS"
+          :key="b.op"
+          class="btn op-btn"
+          :class="b.cls"
+          :disabled="!slot?.items.length"
+          :title="`Run ${b.label} on all containers shown`"
+          @click="bulkOp(b.op)"
+        >
+          {{ b.label }}
+        </button>
+      </template>
       <span class="spacer" />
       <a class="api-pill" :href="apiUrl" target="_blank" rel="noopener" title="Open this endpoint's JSON">
         {&nbsp;} API ↗
@@ -180,6 +216,7 @@ function edit(row: Obj) {
 }
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   align-items: center;
   padding: 10px 12px;
@@ -188,6 +225,52 @@ function edit(row: Obj) {
 .search {
   flex: 1;
   max-width: 360px;
+}
+/* Docker container operation buttons — colour-coded by intent. */
+.op-btn {
+  padding: 6px 11px;
+  font-size: 0.85rem;
+  color: #fff;
+}
+.op-start {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+.op-start:hover {
+  background: #15803d;
+  border-color: #15803d;
+}
+.op-restart {
+  background: var(--warn);
+  border-color: var(--warn);
+}
+.op-restart:hover {
+  background: #b45309;
+  border-color: #b45309;
+}
+.op-recreate {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.op-recreate:hover {
+  background: var(--primary-d);
+  border-color: var(--primary-d);
+}
+.op-stop {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+.op-stop:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+.op-kill {
+  background: #991b1b;
+  border-color: #991b1b;
+}
+.op-kill:hover {
+  background: #7f1d1d;
+  border-color: #7f1d1d;
 }
 .api-pill {
   font-family: ui-monospace, monospace;

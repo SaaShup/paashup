@@ -397,3 +397,20 @@ export const HOST_SCOPE_MIGRATION: PluginMigration = {
   sqlite: scopeSqlite,
   mariadb: scopeMariadb,
 };
+
+// A static API token minted for the host on creation and handed to the agent via the
+// "[Docker] Add host" webhook. Kept as a plain column (not a FK) so the migration runs
+// even on minimal deploys that haven't applied the core auth_token table; the token's
+// lifecycle is managed in code (minted on host create, revoked on host delete).
+const tokenSqlite = `
+ALTER TABLE plugin_docker_host ADD COLUMN token_id INTEGER
+`;
+const tokenMariadb = `
+ALTER TABLE plugin_docker_host ADD COLUMN token_id BIGINT NULL
+`;
+
+export const HOST_TOKEN_MIGRATION: PluginMigration = {
+  version: '0003_host_token',
+  sqlite: tokenSqlite,
+  mariadb: tokenMariadb,
+};

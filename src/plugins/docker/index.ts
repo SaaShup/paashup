@@ -6,7 +6,7 @@
 // and the Docker-agent proxy actions, and seeds a default registry on host creation.
 import type { Plugin } from '../../plugins/types.js';
 import { ENTITY_METAS, META, T } from './meta.js';
-import { INITIAL_MIGRATION, HOST_SCOPE_MIGRATION } from './migrations.js';
+import { INITIAL_MIGRATION, HOST_SCOPE_MIGRATION, HOST_TOKEN_MIGRATION } from './migrations.js';
 import { readRoutes } from './routes/crud.js';
 import { containerWriteRoutes } from './routes/containers.js';
 import { hostWriteRoutes } from './routes/hosts.js';
@@ -37,7 +37,7 @@ const dockerPlugin: Plugin = {
   name: 'docker',
   version: '0.1.0',
   entities: ENTITY_METAS.map((meta) => ({ meta })),
-  migrations: [INITIAL_MIGRATION, HOST_SCOPE_MIGRATION],
+  migrations: [INITIAL_MIGRATION, HOST_SCOPE_MIGRATION, HOST_TOKEN_MIGRATION],
   routes: [
     // GET list/detail overrides that embed the source's nested arrays.
     ...readRoutes(T.host, META.host.endpoint, serializeHost),

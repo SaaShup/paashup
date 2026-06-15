@@ -108,7 +108,11 @@ export async function serializeContainer(db: Db, row: Row): Promise<Obj> {
   return base;
 }
 
-export async function serializeHost(db: Db, row: Row): Promise<Obj> {
+export async function serializeHost(
+  db: Db,
+  row: Row,
+  opts: { withToken?: boolean } = {},
+): Promise<Obj> {
   const ser = new Serializer(db, baseUrl());
   const base = await ser.object(T.host, row);
   const id = Number(row.id);
@@ -117,6 +121,19 @@ export async function serializeHost(db: Db, row: Row): Promise<Obj> {
   base.networks = await briefList(db, ser, T.network, 'host', id);
   base.containers = await briefList(db, ser, T.container, 'host', id);
   base.registries = await briefList(db, ser, T.registry, 'host', id);
+  // The host's agent token is sensitive — exposed only when explicitly requested
+  // (the create response + the "[Docker] Add host" webhook), never on plain reads.
+  if (opts.withToken) {
+    const tok = await db
+      .get<{
+        key: string;
+      }>(
+        `SELECT k.\`key\` AS key FROM ${ident(T.host)} h JOIN auth_token k ON k.id = h.token_id WHERE h.id = ?`,
+        [id],
+      )
+      .catch(() => undefined); // auth_token may be absent on minimal deploys
+    base.token = tok ? { key: tok.key } : null;
+  }
   return base;
 }
 

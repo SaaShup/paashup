@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue';
+import { onMounted, ref, computed, watch } from 'vue';
 import { loadResources } from './api/resources.js';
 import { discoverPluginMenus } from './api/pluginMenus.js';
 import { useUiStore } from './stores/ui.js';
@@ -29,6 +29,16 @@ const ssoEnabled = ref(false);
 const loginRequired = ref(false);
 const authed = ref(false);
 const username = ref<string | null>(null);
+
+// Mobile: the sidebar is an off-canvas drawer. Close it whenever the active
+// view / resource / plugin page changes (i.e. after the user picks something).
+const sidebarOpen = ref(false);
+watch(
+  () => `${ui.view}:${ui.selected?.table ?? ''}:${ui.pluginPage?.url ?? ''}`,
+  () => {
+    sidebarOpen.value = false;
+  },
+);
 
 // Show the dedicated login page only when SSO is required and the user isn't signed in.
 const showLogin = computed(() => ssoEnabled.value && loginRequired.value && !authed.value);
@@ -60,7 +70,16 @@ onMounted(async () => {
   <LoginView v-if="showLogin" />
   <div v-else class="app">
     <header class="topbar">
-      <div class="brand"><span class="logo">▌</span> paas2box</div>
+      <button
+        class="hamburger"
+        type="button"
+        aria-label="Toggle navigation"
+        :aria-expanded="sidebarOpen"
+        @click="sidebarOpen = !sidebarOpen"
+      >
+        ☰
+      </button>
+      <div class="brand"><span class="logo">▌</span> <span class="brand-text">paas2box</span></div>
       <input class="globalsearch" type="search" placeholder="Search resources…" v-model="ui.search" />
       <span class="spacer" />
       <div v-if="ssoEnabled" class="sso">
@@ -74,7 +93,8 @@ onMounted(async () => {
       <StatusBadge />
     </header>
     <div class="body">
-      <Sidebar />
+      <div class="sidebar-host" :class="{ open: sidebarOpen }"><Sidebar /></div>
+      <div v-if="sidebarOpen" class="scrim" @click="sidebarOpen = false" />
       <main class="content">
         <div class="page-watermark" aria-hidden="true" />
         <DashboardView v-if="ui.view === 'dashboard'" />
@@ -191,5 +211,94 @@ onMounted(async () => {
 .content > :not(.page-watermark) {
   position: relative;
   z-index: 1;
+}
+
+/* sidebar host: in-flow on desktop, an off-canvas drawer on small screens */
+.sidebar-host {
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 0;
+}
+.sidebar-host :deep(.sidebar) {
+  height: 100%;
+}
+.hamburger {
+  display: none; /* desktop: sidebar is always visible */
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  margin-left: -6px;
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.hamburger:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+.scrim {
+  display: none;
+}
+
+/* ---- tablet / mobile: sidebar becomes a toggleable drawer ---- */
+@media (max-width: 900px) {
+  .hamburger {
+    display: inline-flex;
+  }
+  .sidebar-host {
+    position: fixed;
+    top: var(--topbar-h);
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: var(--shadow);
+  }
+  .sidebar-host.open {
+    transform: translateX(0);
+  }
+  .scrim {
+    display: block;
+    position: fixed;
+    inset: var(--topbar-h) 0 0 0;
+    z-index: 30;
+    background: rgba(15, 23, 42, 0.4);
+  }
+}
+@media (max-width: 700px) {
+  .topbar {
+    gap: 10px;
+    padding: 0 12px;
+  }
+  .globalsearch {
+    width: auto;
+    flex: 1 1 60px;
+    min-width: 0;
+    max-width: none;
+  }
+  .who {
+    max-width: 84px;
+  }
+  .topbar-logo {
+    display: none;
+  }
+  .content {
+    padding: 16px 14px;
+  }
+}
+@media (max-width: 460px) {
+  .brand-text {
+    display: none; /* keep just the ▌ glyph to save room */
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-host {
+    transition: none;
+  }
 }
 </style>

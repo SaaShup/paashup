@@ -151,6 +151,7 @@ function edit(row: Obj) {
 .head {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 14px;
 }
@@ -163,6 +164,7 @@ function edit(row: Obj) {
 }
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   align-items: center;
   padding: 10px 12px;

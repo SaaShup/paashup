@@ -8,6 +8,9 @@ import ObjectForm from '../components/ObjectForm.vue';
 import IpRangeAddresses from '../components/IpRangeAddresses.vue';
 
 const PAGE = 50;
+// Docker container lifecycle ops — PATCH the container's `operation`, which fires the
+// agent webhook (the agent performs the real action). Values are the operation enum.
+const CONTAINER_OPS = ['start', 'stop', 'restart', 'recreate', 'kill'] as const;
 const ui = useUiStore();
 const objects = useObjectsStore();
 
@@ -71,6 +74,18 @@ function go(delta: number) {
 async function del(id: number) {
   if (resource.value) await objects.remove(resource.value.table, id);
 }
+async function setOp(payload: { row: Obj; op: string }) {
+  if (!resource.value) return;
+  const id = (payload.row as { id: number }).id;
+  const name = (payload.row as { display?: string }).display ?? `#${id}`;
+  if (!window.confirm(`Run "${payload.op}" on container ${name}?`)) return;
+  error.value = '';
+  try {
+    await objects.update(resource.value.table, id, { operation: payload.op });
+  } catch (e) {
+    error.value = String(e);
+  }
+}
 function add() {
   editing.value = null;
   formOpen.value = true;
@@ -118,9 +133,11 @@ function edit(row: Obj) {
         :items="slot.items"
         :editable="resource.writable"
         :extra-action="resource.table === 'ipam_iprange' ? 'IPs' : undefined"
+        :operations="resource.table === 'plugin_docker_container' ? CONTAINER_OPS : undefined"
         @delete="del"
         @edit="edit"
         @action="(row) => (addrRange = row)"
+        @operation="setOp"
       />
     </div>
 

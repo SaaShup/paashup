@@ -2,12 +2,27 @@
 import { computed } from 'vue';
 import type { Obj } from '../api/client.js';
 
-const props = defineProps<{ items: Obj[]; editable?: boolean; extraAction?: string }>();
+const props = defineProps<{
+  items: Obj[];
+  editable?: boolean;
+  extraAction?: string;
+  /** Per-row operations (e.g. Docker container start/stop/…) rendered as a dropdown. */
+  operations?: readonly string[];
+}>();
 const emit = defineEmits<{
   (e: 'delete', id: number): void;
   (e: 'edit', row: Obj): void;
   (e: 'action', row: Obj): void;
+  (e: 'operation', payload: { row: Obj; op: string }): void;
 }>();
+
+/** Emit the chosen operation and reset the <select> so the same op can be re-picked. */
+function onOperation(row: Obj, e: Event): void {
+  const sel = e.target as HTMLSelectElement;
+  const op = sel.value;
+  sel.value = '';
+  if (op) emit('operation', { row, op });
+}
 
 const HIDE = new Set(['url', 'display_url', 'custom_fields', 'tags']);
 const FIRST = ['id', 'display'];
@@ -47,6 +62,15 @@ function cell(value: unknown): string {
       <tr v-for="row in items" :key="(row as any).id">
         <td v-for="c in columns" :key="c">{{ cell(row[c]) }}</td>
         <td class="ops">
+          <select
+            v-if="operations && operations.length"
+            class="op-select"
+            title="Run an operation on this object"
+            @change="onOperation(row, $event)"
+          >
+            <option value="" disabled selected>⚙ Op…</option>
+            <option v-for="op in operations" :key="op" :value="op">{{ op }}</option>
+          </select>
           <button v-if="extraAction" class="extra" @click="emit('action', row)">
             {{ extraAction }}
           </button>
@@ -95,6 +119,16 @@ tbody tr:hover {
 .ops {
   white-space: nowrap;
   text-align: right;
+}
+.op-select {
+  font-size: 0.74rem;
+  padding: 2px 4px;
+  margin-right: 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--primary-d);
+  cursor: pointer;
 }
 .api,
 .extra {

@@ -43,6 +43,12 @@ export const useObjectsStore = defineStore('objects', {
       // the resulting WebSocket 'deleted' event removes the row via applyChange()
     },
 
+    /** Partial-update a record (PATCH); the WebSocket 'updated' event refreshes the row. */
+    async update(table: string, id: number, patch: Obj) {
+      const slot = this.byTable[table];
+      if (slot) await api.update(slot.endpoint, id, patch);
+    },
+
     /** Apply a live change to a currently-loaded table (no-op otherwise). */
     applyChange(e: ChangeEvent) {
       const slot = this.byTable[e.table];

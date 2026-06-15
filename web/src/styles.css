@@ -33,6 +33,14 @@ body {
   font-size: 14px;
 }
 
+/* Responsive media: never let an image/svg force horizontal page scroll. */
+img,
+svg,
+video {
+  max-width: 100%;
+  height: auto;
+}
+
 a {
   color: var(--primary-d);
   text-decoration: none;

@@ -65,11 +65,12 @@ const frameStyle = computed(() => {
 }
 .ppbar {
   flex: 0 0 auto;
-  height: 40px;
+  min-height: 40px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 14px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 4px 14px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
 }

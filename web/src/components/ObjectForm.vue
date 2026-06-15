@@ -199,6 +199,16 @@ h3 {
   align-items: start;
   margin-bottom: 8px;
 }
+/* narrow screens: stack the label above its control */
+@media (max-width: 560px) {
+  .row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+  label {
+    padding-top: 0;
+  }
+}
 label {
   font-size: 0.85rem;
   color: #555;

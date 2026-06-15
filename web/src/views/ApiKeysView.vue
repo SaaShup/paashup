@@ -154,7 +154,7 @@ onMounted(load);
         <h3>Your keys</h3>
         <p v-if="loading" class="muted">Loading…</p>
         <p v-else-if="!tokens.length" class="muted">No API keys yet.</p>
-        <table v-else class="grid">
+        <div v-else class="table-wrap"><table class="grid">
           <thead>
             <tr>
               <th>Description</th>
@@ -183,7 +183,7 @@ onMounted(load);
               <td><button class="btn ghost danger" @click="revoke(t)">Revoke</button></td>
             </tr>
           </tbody>
-        </table>
+        </table></div>
       </div>
     </template>
   </div>
@@ -279,6 +279,9 @@ input[type='date'] {
 .btn.danger {
   color: var(--danger);
   border-color: var(--danger);
+}
+.table-wrap {
+  overflow-x: auto;
 }
 .grid {
   width: 100%;

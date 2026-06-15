@@ -146,8 +146,9 @@ async function save(row: { ip: string; existing: Obj | null }) {
       </p>
 
       <template v-else>
-        <table>
-          <thead>
+        <div class="table-wrap">
+          <table>
+            <thead>
             <tr>
               <th>GW</th>
               <th>Address</th>
@@ -184,7 +185,8 @@ async function save(row: { ip: string; existing: Obj | null }) {
               </td>
             </tr>
           </tbody>
-        </table>
+          </table>
+        </div>
 
         <div v-if="total > PAGE" class="pager">
           <button class="btn-ghost" :disabled="offset === 0" @click="go(-1)">‹ Prev</button>
@@ -264,6 +266,9 @@ tr.gw {
 .gwcell {
   text-align: center;
   width: 38px;
+}
+.table-wrap {
+  overflow-x: auto;
 }
 table {
   border-collapse: collapse;

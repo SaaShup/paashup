@@ -176,6 +176,7 @@ watch(
 <style scoped>
 .cards {
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
 }
 .card {

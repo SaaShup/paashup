@@ -71,6 +71,23 @@ const html = computed(() => marked.parse(page.value.body, { async: false }) as s
   padding: 8px 30px 30px;
   max-width: 820px;
 }
+/* narrow screens: stack the table-of-contents above the content */
+@media (max-width: 768px) {
+  .docs {
+    flex-direction: column;
+  }
+  .toc {
+    flex: 0 0 auto;
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .md {
+    padding: 8px 0 24px;
+    max-width: none;
+  }
+}
 </style>
 
 <style>

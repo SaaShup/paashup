@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue';
 import { useUiStore } from '../stores/ui.js';
 import { useObjectsStore } from '../stores/objects.js';
-import type { Obj } from '../api/client.js';
+import { api, type Obj } from '../api/client.js';
 import ObjectTable from '../components/ObjectTable.vue';
 import ObjectForm from '../components/ObjectForm.vue';
 import IpRangeAddresses from '../components/IpRangeAddresses.vue';
@@ -29,6 +29,17 @@ const formOpen = ref(false);
 const editing = ref<Obj | null>(null);
 const addrRange = ref<Obj | null>(null); // IP range whose addresses are being browsed
 const selectedIds = ref<number[]>([]); // checked container rows — toolbar ops act on these
+
+// Container host filter: dropdown of Docker hosts; '' = all hosts. The list endpoint
+// already supports `?host=<id>` (NetBox-style FK filter), so we just add it to the query.
+interface HostBrief {
+  id: number;
+  display?: string;
+  name?: string;
+}
+const hosts = ref<HostBrief[]>([]);
+const hostFilter = ref(''); // selected host id as string, or '' for all
+const hostLabel = (h: HostBrief) => h.display || h.name || `host #${h.id}`;
 
 const resource = computed(() => ui.selected!);
 const slot = computed(() => (resource.value ? objects.byTable[resource.value.table] : undefined));
@@ -62,9 +73,21 @@ async function load() {
       limit: PAGE,
       offset: offset.value,
       ...(search.value ? { q: search.value } : {}),
+      ...(isContainer.value && hostFilter.value ? { host: hostFilter.value } : {}),
     });
   } catch (e) {
     error.value = String(e);
+  }
+}
+
+/** Load the host list once, for the container host-filter dropdown. */
+async function loadHosts() {
+  if (hosts.value.length) return;
+  try {
+    const page = await api.list<HostBrief>('/api/plugins/docker/hosts/', { limit: 1000 });
+    hosts.value = page.results.slice().sort((a, b) => hostLabel(a).localeCompare(hostLabel(b)));
+  } catch {
+    /* hosts are optional UI sugar; ignore failures */
   }
 }
 
@@ -73,7 +96,9 @@ watch(
   () => {
     offset.value = 0;
     search.value = '';
+    hostFilter.value = '';
     load();
+    if (isContainer.value) loadHosts();
   },
   { immediate: true },
 );
@@ -143,6 +168,13 @@ function edit(row: Obj) {
         @keyup.enter="((offset = 0), load())"
       />
       <button class="btn btn-ghost" @click="((offset = 0), load())">Search</button>
+      <label v-if="isContainer" class="host-filter">
+        <span class="hf-label muted">Host</span>
+        <select v-model="hostFilter" @change="((offset = 0), load())">
+          <option value="">All hosts</option>
+          <option v-for="h in hosts" :key="h.id" :value="String(h.id)">{{ hostLabel(h) }}</option>
+        </select>
+      </label>
       <span v-if="slot?.loading" class="muted">loading…</span>
       <template v-if="isContainer">
         <span class="sel-count muted">{{ selectedIds.length }} selected</span>
@@ -248,6 +280,17 @@ function edit(row: Obj) {
 .sel-count {
   font-size: 0.82rem;
   white-space: nowrap;
+}
+.host-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.host-filter .hf-label {
+  font-size: 0.82rem;
+}
+.host-filter select {
+  max-width: 200px;
 }
 /* Docker container operation buttons — colour-coded by intent. */
 .op-btn {

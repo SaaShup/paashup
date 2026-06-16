@@ -20,6 +20,9 @@ const CONTAINER_OP_BTNS = [
   { op: 'stop', label: 'Stop', cls: 'op-stop' },
   { op: 'kill', label: 'Kill', cls: 'op-kill' },
 ] as const;
+// Docker host op — PATCH each *selected* host's `operation` to "refresh"; the backend
+// marks it state=refreshing and re-discovers its resources (see routes/hosts.ts).
+const HOST_OP_BTNS = [{ op: 'refresh', label: 'Refresh', cls: 'op-refresh' }] as const;
 const ui = useUiStore();
 const objects = useObjectsStore();
 
@@ -40,6 +43,13 @@ const filterOptions = ref<FilterOptions>({});
 const resource = computed(() => ui.selected!);
 const slot = computed(() => (resource.value ? objects.byTable[resource.value.table] : undefined));
 const isContainer = computed(() => resource.value?.table === 'plugin_docker_container');
+const isHost = computed(() => resource.value?.table === 'plugin_docker_host');
+// Tables that expose row selection + a bulk-operation toolbar (containers / hosts).
+const opButtons = computed(() =>
+  isContainer.value ? CONTAINER_OP_BTNS : isHost.value ? HOST_OP_BTNS : [],
+);
+const opNoun = computed(() => (isHost.value ? 'host' : 'container'));
+const selectable = computed(() => isContainer.value || isHost.value);
 const apiUrl = computed(() => (resource.value ? location.origin + resource.value.endpoint : ''));
 const copied = ref(false);
 
@@ -137,16 +147,16 @@ function toggleAllSel(checked: boolean) {
   selectedIds.value =
     checked && slot.value ? slot.value.items.map((r) => (r as { id: number }).id) : [];
 }
-/** Apply an operation to the selected containers (one confirm, one PATCH each). */
+/** Apply an operation to the selected rows (one confirm, one PATCH each). */
 async function bulkOp(op: string) {
   if (!resource.value || !selectedIds.value.length) return;
   const ids = [...selectedIds.value];
-  if (
-    !window.confirm(
-      `Run "${op}" on ${ids.length} selected container${ids.length === 1 ? '' : 's'}?`,
-    )
-  )
-    return;
+  const noun = `${opNoun.value}${ids.length === 1 ? '' : 's'}`;
+  const msg =
+    op === 'refresh'
+      ? `Refresh ${ids.length} selected ${noun}? This clears their discovered resources.`
+      : `Run "${op}" on ${ids.length} selected ${noun}?`;
+  if (!window.confirm(msg)) return;
   error.value = '';
   try {
     for (const id of ids) await objects.update(resource.value.table, id, { operation: op });
@@ -192,18 +202,18 @@ function edit(row: Obj) {
       />
       <button class="btn btn-ghost" @click="((offset = 0), load())">Search</button>
       <span v-if="slot?.loading" class="muted">loading…</span>
-      <template v-if="isContainer">
+      <template v-if="opButtons.length">
         <span class="sel-count muted">{{ selectedIds.length }} selected</span>
         <button
-          v-for="b in CONTAINER_OP_BTNS"
+          v-for="b in opButtons"
           :key="b.op"
           class="btn op-btn"
           :class="b.cls"
           :disabled="!selectedIds.length"
           :title="
             selectedIds.length
-              ? `Run ${b.label} on ${selectedIds.length} selected container(s)`
-              : 'Select one or more containers first'
+              ? `Run ${b.label} on ${selectedIds.length} selected ${opNoun}(s)`
+              : `Select one or more ${opNoun}s first`
           "
           @click="bulkOp(b.op)"
         >
@@ -233,7 +243,7 @@ function edit(row: Obj) {
         :items="slot.items"
         :editable="resource.writable"
         :extra-action="resource.table === 'ipam_iprange' ? 'IPs' : undefined"
-        :selectable="isContainer"
+        :selectable="selectable"
         :selected="selectedIds"
         :filters="filters"
         :filter-options="filterOptions"
@@ -349,6 +359,14 @@ function edit(row: Obj) {
 .op-kill:hover {
   background: #7f1d1d;
   border-color: #7f1d1d;
+}
+.op-refresh {
+  background: #0891b2;
+  border-color: #0891b2;
+}
+.op-refresh:hover {
+  background: #0e7490;
+  border-color: #0e7490;
 }
 .api-pill {
   font-family: ui-monospace, monospace;

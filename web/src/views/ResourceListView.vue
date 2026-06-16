@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue';
 import { useUiStore } from '../stores/ui.js';
 import { useObjectsStore } from '../stores/objects.js';
 import type { Obj } from '../api/client.js';
+import { buildFilterOptions, type FilterOptions } from '../api/columnFilters.js';
 import ObjectTable from '../components/ObjectTable.vue';
 import ObjectForm from '../components/ObjectForm.vue';
 import IpRangeAddresses from '../components/IpRangeAddresses.vue';
@@ -29,6 +30,12 @@ const formOpen = ref(false);
 const editing = ref<Obj | null>(null);
 const addrRange = ref<Obj | null>(null); // IP range whose addresses are being browsed
 const selectedIds = ref<number[]>([]); // checked container rows — toolbar ops act on these
+
+// Per-column header filters: { fieldName -> selected value } sent as `?<field>=<value>`,
+// with the selectable values per column in `filterOptions` (FK rows / enum choices /
+// distinct scalar values — see api/columnFilters).
+const filters = ref<Record<string, string>>({});
+const filterOptions = ref<FilterOptions>({});
 
 const resource = computed(() => ui.selected!);
 const slot = computed(() => (resource.value ? objects.byTable[resource.value.table] : undefined));
@@ -62,9 +69,40 @@ async function load() {
       limit: PAGE,
       offset: offset.value,
       ...(search.value ? { q: search.value } : {}),
+      ...filters.value, // active per-column filters (empty selections are removed)
     });
   } catch (e) {
     error.value = String(e);
+  }
+}
+
+/** Apply / clear one column's filter, then reload from the first page. */
+function setFilter(payload: { field: string; value: string }) {
+  const next = { ...filters.value };
+  if (payload.value) next[payload.field] = payload.value;
+  else delete next[payload.field];
+  filters.value = next;
+  offset.value = 0;
+  load();
+}
+
+/** Clear every active column filter and reload. */
+function clearFilters() {
+  if (!Object.keys(filters.value).length) return;
+  filters.value = {};
+  offset.value = 0;
+  load();
+}
+
+/** Build the per-column filter options for the current resource (best-effort). */
+async function loadFilterOptions() {
+  filterOptions.value = {};
+  const r = resource.value;
+  if (!r?.model) return;
+  try {
+    filterOptions.value = await buildFilterOptions(r.model, r.endpoint);
+  } catch {
+    /* filters are optional sugar; ignore failures */
   }
 }
 
@@ -73,7 +111,9 @@ watch(
   () => {
     offset.value = 0;
     search.value = '';
+    filters.value = {};
     load();
+    loadFilterOptions();
   },
   { immediate: true },
 );
@@ -130,6 +170,14 @@ function edit(row: Obj) {
     <div class="head">
       <h2>{{ resource.label }}</h2>
       <span v-if="slot" class="total muted">{{ slot.count }} records</span>
+      <button
+        v-if="Object.keys(filters).length"
+        class="btn btn-ghost clear-filters"
+        title="Clear all column filters"
+        @click="clearFilters"
+      >
+        ✕ Clear filters ({{ Object.keys(filters).length }})
+      </button>
       <span class="spacer" />
       <button v-if="resource.writable" class="btn btn-ok" @click="add">+ Add</button>
     </div>
@@ -187,11 +235,14 @@ function edit(row: Obj) {
         :extra-action="resource.table === 'ipam_iprange' ? 'IPs' : undefined"
         :selectable="isContainer"
         :selected="selectedIds"
+        :filters="filters"
+        :filter-options="filterOptions"
         @delete="del"
         @edit="edit"
         @action="(row) => (addrRange = row)"
         @toggle="toggleSel"
         @toggle-all="toggleAllSel"
+        @filter="setFilter"
       />
     </div>
 
@@ -248,6 +299,10 @@ function edit(row: Obj) {
 .sel-count {
   font-size: 0.82rem;
   white-space: nowrap;
+}
+.clear-filters {
+  font-size: 0.78rem;
+  padding: 4px 10px;
 }
 /* Docker container operation buttons — colour-coded by intent. */
 .op-btn {

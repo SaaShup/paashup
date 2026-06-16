@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { Obj } from '../api/client.js';
+import type { FilterOptions } from '../api/columnFilters.js';
 
 const props = defineProps<{
   items: Obj[];
@@ -10,6 +11,10 @@ const props = defineProps<{
   selectable?: boolean;
   /** Currently-selected row ids (controlled by the parent). */
   selected?: readonly number[];
+  /** Active per-column filters: { columnName -> selected value }. */
+  filters?: Record<string, string>;
+  /** Selectable values per column; a column gets a header dropdown when present. */
+  filterOptions?: FilterOptions;
 }>();
 const emit = defineEmits<{
   (e: 'delete', id: number): void;
@@ -17,7 +22,12 @@ const emit = defineEmits<{
   (e: 'action', row: Obj): void;
   (e: 'toggle', payload: { id: number; checked: boolean }): void;
   (e: 'toggle-all', checked: boolean): void;
+  (e: 'filter', payload: { field: string; value: string }): void;
 }>();
+
+function onFilter(field: string, e: Event): void {
+  emit('filter', { field, value: (e.target as HTMLSelectElement).value });
+}
 
 const idOf = (row: Obj): number => (row as { id: number }).id;
 const selectedSet = computed(() => new Set(props.selected ?? []));
@@ -72,7 +82,21 @@ function cell(value: unknown): string {
             @change="onToggleAll"
           />
         </th>
-        <th v-for="c in columns" :key="c">{{ c }}</th>
+        <th v-for="c in columns" :key="c" class="colhead">
+          <div class="th-title">{{ c }}</div>
+          <select
+            v-if="filterOptions && filterOptions[c]"
+            class="col-filter"
+            :value="filters?.[c] ?? ''"
+            :title="`Filter by ${c}`"
+            @change="onFilter(c, $event)"
+          >
+            <option value="">All</option>
+            <option v-for="o in filterOptions[c]" :key="o.value" :value="o.value">
+              {{ o.label }}
+            </option>
+          </select>
+        </th>
         <th></th>
       </tr>
     </thead>
@@ -137,6 +161,22 @@ thead th {
   font-weight: 600;
   position: sticky;
   top: 0;
+}
+.colhead {
+  vertical-align: top;
+}
+.th-title {
+  margin-bottom: 2px;
+}
+.col-filter {
+  display: block;
+  width: 100%;
+  max-width: 180px;
+  margin-top: 2px;
+  padding: 3px 6px;
+  font-size: 0.76rem;
+  font-weight: 400;
+  color: var(--text);
 }
 tbody tr:hover {
   background: var(--surface);

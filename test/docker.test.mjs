@@ -479,6 +479,22 @@ test('docker resources appear in the OpenAPI schema', async () => {
   const schema = await api('GET', '/api/schema/');
   assert.ok(schema.body.paths['/api/plugins/docker/hosts/']);
   assert.ok(schema.body.paths['/api/plugins/docker/containers/']);
+  // agent proxy actions are documented when the docker plugin is loaded
+  assert.ok(schema.body.paths['/api/plugins/docker/images/{id}/force_pull/']);
+  assert.ok(schema.body.paths['/api/plugins/docker/containers/{id}/logs/']);
+  assert.ok(schema.body.paths['/api/plugins/docker/containers/{id}/exec/']);
+  // host create response exposes its one-time agent token
+  assert.ok(schema.body.components.schemas.DockerHost.properties.token);
+  // list endpoints document their filter query params (FKs as <field>_id, scalars/enums by name)
+  for (const [ep, want] of [
+    ['/api/plugins/docker/containers/', ['host_id', 'image_id', 'name', 'state']],
+    ['/api/plugins/docker/images/', ['host_id', 'registry_id', 'name', 'version']],
+    ['/api/plugins/docker/networks/', ['host_id', 'name', 'driver', 'state']],
+    ['/api/plugins/docker/volumes/', ['host_id', 'name', 'driver']],
+  ]) {
+    const names = schema.body.paths[ep].get.parameters.map((p) => p.name);
+    for (const w of want) assert.ok(names.includes(w), `${ep} missing filter param ${w}`);
+  }
 });
 
 test('host operation=refresh marks state refreshing and purges resources', async () => {

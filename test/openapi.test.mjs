@@ -83,6 +83,27 @@ test('read-only entity exposes only GET', async () => {
   assert.equal(ro.post, undefined);
 });
 
+test('schema documents the custom (non-CRUD) routes', async () => {
+  const doc = JSON.parse((await get('/api/schema/')).text);
+  for (const p of [
+    '/api/status/',
+    '/api/plugins/',
+    '/api/auth/oidc-config/',
+    '/api/auth/providers/',
+    '/api/auth/oidc/exchange/',
+    '/api/users/tokens/',
+    '/api/users/tokens/{id}/',
+  ]) {
+    assert.ok(doc.paths[p], `missing custom path ${p}`);
+  }
+  // public endpoints opt out of auth; token endpoints use the default (tokenAuth)
+  assert.deepEqual(doc.paths['/api/status/'].get.security, []);
+  assert.equal('security' in doc.paths['/api/users/tokens/'].get, false);
+  assert.ok(doc.components.schemas.APIToken && doc.components.schemas.PaginatedAPITokenList);
+  // docker isn't loaded in this test, so its agent actions must NOT appear
+  assert.equal(doc.paths['/api/plugins/docker/images/{id}/force_pull/'], undefined);
+});
+
 test('published schema is self-consistent (every $ref resolves)', async () => {
   const doc = JSON.parse((await get('/api/schema/')).text);
   const defined = new Set(Object.keys(doc.components.schemas));

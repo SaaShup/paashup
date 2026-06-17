@@ -72,6 +72,11 @@ export interface PluginRouteContext {
   readonly query: URLSearchParams;
   /** Parsed JSON request body (for POST/PUT/PATCH). */
   readonly body: unknown;
+  /**
+   * Externally visible request origin (`scheme://host`), honoring a configured public
+   * URL / PB_TRUST_PROXY. For defaulting origin fields like a host's `netbox_base_url`.
+   */
+  readonly origin: string;
 }
 
 export interface PluginRouteResult {

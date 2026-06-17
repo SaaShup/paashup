@@ -43,6 +43,13 @@ export interface ColumnMeta {
    */
   readonly formHidden?: boolean;
   /**
+   * On create, if this column is omitted/empty, default it to the externally visible
+   * origin of the request (scheme://host). Surfaced in the OpenAPI write schema as
+   * `x-default-origin` so the UI form can prefill it from `window.location.origin`.
+   * Example: a Docker host's `netbox_base_url` (the agent's callback URL).
+   */
+  readonly defaultFromOrigin?: boolean;
+  /**
    * For a json column holding an array of object-type strings (e.g. the webhook
    * `object_types` field), render it in the schema as a multi-select whose choices
    * are every object type currently in the registry.

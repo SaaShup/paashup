@@ -14,6 +14,7 @@ import { fireHooks } from '../../../plugins/runtime.js';
 import { broadcast } from '../../../realtime.js';
 import { dispatchWebhooks } from '../../../webhooks.js';
 import { createToken } from '../../../auth.js';
+import { applyOriginDefaults } from '../../../api/origin.js';
 import { META, T } from '../meta.js';
 import { serializeHost } from '../serialize.js';
 
@@ -69,8 +70,10 @@ async function attachHostToken(db: Db, hostId: number, name: string): Promise<vo
 }
 
 /** Create one host: persist it, mint+attach its agent token, seed the default registry. */
-async function createOneHost(db: Db, body: Row): Promise<Obj> {
-  const repo = new Repository<Row>(db, getTable(T.host)!);
+async function createOneHost(db: Db, body: Row, origin: string): Promise<Obj> {
+  const meta = getTable(T.host)!;
+  applyOriginDefaults(meta, body, origin); // default netbox_base_url from the request (issue #33)
+  const repo = new Repository<Row>(db, meta);
   const created = await repo.create(body);
   const id = Number((created as { id: number }).id);
   await attachHostToken(db, id, String((created as { name?: unknown }).name ?? ''));
@@ -95,13 +98,13 @@ async function purgeHostResources(tx: Db, hostId: number): Promise<void> {
 const createRoute: PluginRoute = {
   method: 'POST',
   path: META.host.endpoint,
-  handler: async ({ db, body }) => {
+  handler: async ({ db, body, origin }) => {
     if (Array.isArray(body)) {
       const out: Obj[] = [];
-      for (const item of body) out.push(await createOneHost(db, (item ?? {}) as Row));
+      for (const item of body) out.push(await createOneHost(db, (item ?? {}) as Row, origin));
       return { status: 201, body: out };
     }
-    return { status: 201, body: await createOneHost(db, (body ?? {}) as Row) };
+    return { status: 201, body: await createOneHost(db, (body ?? {}) as Row, origin) };
   },
 };
 

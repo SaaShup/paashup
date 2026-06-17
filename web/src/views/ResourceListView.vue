@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue';
 import { useUiStore } from '../stores/ui.js';
 import { useObjectsStore } from '../stores/objects.js';
 import type { Obj } from '../api/client.js';
+import { buildFilterOptions, type FilterOptions } from '../api/columnFilters.js';
 import ObjectTable from '../components/ObjectTable.vue';
 import ObjectForm from '../components/ObjectForm.vue';
 import IpRangeAddresses from '../components/IpRangeAddresses.vue';
@@ -19,6 +20,9 @@ const CONTAINER_OP_BTNS = [
   { op: 'stop', label: 'Stop', cls: 'op-stop' },
   { op: 'kill', label: 'Kill', cls: 'op-kill' },
 ] as const;
+// Docker host op — PATCH each *selected* host's `operation` to "refresh"; the backend
+// marks it state=refreshing and re-discovers its resources (see routes/hosts.ts).
+const HOST_OP_BTNS = [{ op: 'refresh', label: 'Refresh', cls: 'op-refresh' }] as const;
 const ui = useUiStore();
 const objects = useObjectsStore();
 
@@ -30,9 +34,22 @@ const editing = ref<Obj | null>(null);
 const addrRange = ref<Obj | null>(null); // IP range whose addresses are being browsed
 const selectedIds = ref<number[]>([]); // checked container rows — toolbar ops act on these
 
+// Per-column header filters: { fieldName -> selected value } sent as `?<field>=<value>`,
+// with the selectable values per column in `filterOptions` (FK rows / enum choices /
+// distinct scalar values — see api/columnFilters).
+const filters = ref<Record<string, string>>({});
+const filterOptions = ref<FilterOptions>({});
+
 const resource = computed(() => ui.selected!);
 const slot = computed(() => (resource.value ? objects.byTable[resource.value.table] : undefined));
 const isContainer = computed(() => resource.value?.table === 'plugin_docker_container');
+const isHost = computed(() => resource.value?.table === 'plugin_docker_host');
+// Tables that expose row selection + a bulk-operation toolbar (containers / hosts).
+const opButtons = computed(() =>
+  isContainer.value ? CONTAINER_OP_BTNS : isHost.value ? HOST_OP_BTNS : [],
+);
+const opNoun = computed(() => (isHost.value ? 'host' : 'container'));
+const selectable = computed(() => isContainer.value || isHost.value);
 const apiUrl = computed(() => (resource.value ? location.origin + resource.value.endpoint : ''));
 const copied = ref(false);
 
@@ -62,9 +79,40 @@ async function load() {
       limit: PAGE,
       offset: offset.value,
       ...(search.value ? { q: search.value } : {}),
+      ...filters.value, // active per-column filters (empty selections are removed)
     });
   } catch (e) {
     error.value = String(e);
+  }
+}
+
+/** Apply / clear one column's filter, then reload from the first page. */
+function setFilter(payload: { field: string; value: string }) {
+  const next = { ...filters.value };
+  if (payload.value) next[payload.field] = payload.value;
+  else delete next[payload.field];
+  filters.value = next;
+  offset.value = 0;
+  load();
+}
+
+/** Clear every active column filter and reload. */
+function clearFilters() {
+  if (!Object.keys(filters.value).length) return;
+  filters.value = {};
+  offset.value = 0;
+  load();
+}
+
+/** Build the per-column filter options for the current resource (best-effort). */
+async function loadFilterOptions() {
+  filterOptions.value = {};
+  const r = resource.value;
+  if (!r?.model) return;
+  try {
+    filterOptions.value = await buildFilterOptions(r.model, r.endpoint);
+  } catch {
+    /* filters are optional sugar; ignore failures */
   }
 }
 
@@ -73,7 +121,9 @@ watch(
   () => {
     offset.value = 0;
     search.value = '';
+    filters.value = {};
     load();
+    loadFilterOptions();
   },
   { immediate: true },
 );
@@ -97,16 +147,16 @@ function toggleAllSel(checked: boolean) {
   selectedIds.value =
     checked && slot.value ? slot.value.items.map((r) => (r as { id: number }).id) : [];
 }
-/** Apply an operation to the selected containers (one confirm, one PATCH each). */
+/** Apply an operation to the selected rows (one confirm, one PATCH each). */
 async function bulkOp(op: string) {
   if (!resource.value || !selectedIds.value.length) return;
   const ids = [...selectedIds.value];
-  if (
-    !window.confirm(
-      `Run "${op}" on ${ids.length} selected container${ids.length === 1 ? '' : 's'}?`,
-    )
-  )
-    return;
+  const noun = `${opNoun.value}${ids.length === 1 ? '' : 's'}`;
+  const msg =
+    op === 'refresh'
+      ? `Refresh ${ids.length} selected ${noun}? This clears their discovered resources.`
+      : `Run "${op}" on ${ids.length} selected ${noun}?`;
+  if (!window.confirm(msg)) return;
   error.value = '';
   try {
     for (const id of ids) await objects.update(resource.value.table, id, { operation: op });
@@ -130,6 +180,14 @@ function edit(row: Obj) {
     <div class="head">
       <h2>{{ resource.label }}</h2>
       <span v-if="slot" class="total muted">{{ slot.count }} records</span>
+      <button
+        v-if="Object.keys(filters).length"
+        class="btn btn-ghost clear-filters"
+        title="Clear all column filters"
+        @click="clearFilters"
+      >
+        ✕ Clear filters ({{ Object.keys(filters).length }})
+      </button>
       <span class="spacer" />
       <button v-if="resource.writable" class="btn btn-ok" @click="add">+ Add</button>
     </div>
@@ -144,18 +202,18 @@ function edit(row: Obj) {
       />
       <button class="btn btn-ghost" @click="((offset = 0), load())">Search</button>
       <span v-if="slot?.loading" class="muted">loading…</span>
-      <template v-if="isContainer">
+      <template v-if="opButtons.length">
         <span class="sel-count muted">{{ selectedIds.length }} selected</span>
         <button
-          v-for="b in CONTAINER_OP_BTNS"
+          v-for="b in opButtons"
           :key="b.op"
           class="btn op-btn"
           :class="b.cls"
           :disabled="!selectedIds.length"
           :title="
             selectedIds.length
-              ? `Run ${b.label} on ${selectedIds.length} selected container(s)`
-              : 'Select one or more containers first'
+              ? `Run ${b.label} on ${selectedIds.length} selected ${opNoun}(s)`
+              : `Select one or more ${opNoun}s first`
           "
           @click="bulkOp(b.op)"
         >
@@ -185,13 +243,16 @@ function edit(row: Obj) {
         :items="slot.items"
         :editable="resource.writable"
         :extra-action="resource.table === 'ipam_iprange' ? 'IPs' : undefined"
-        :selectable="isContainer"
+        :selectable="selectable"
         :selected="selectedIds"
+        :filters="filters"
+        :filter-options="filterOptions"
         @delete="del"
         @edit="edit"
         @action="(row) => (addrRange = row)"
         @toggle="toggleSel"
         @toggle-all="toggleAllSel"
+        @filter="setFilter"
       />
     </div>
 
@@ -249,6 +310,10 @@ function edit(row: Obj) {
   font-size: 0.82rem;
   white-space: nowrap;
 }
+.clear-filters {
+  font-size: 0.78rem;
+  padding: 4px 10px;
+}
 /* Docker container operation buttons — colour-coded by intent. */
 .op-btn {
   padding: 6px 11px;
@@ -294,6 +359,14 @@ function edit(row: Obj) {
 .op-kill:hover {
   background: #7f1d1d;
   border-color: #7f1d1d;
+}
+.op-refresh {
+  background: #0891b2;
+  border-color: #0891b2;
+}
+.op-refresh:hover {
+  background: #0e7490;
+  border-color: #0e7490;
 }
 .api-pill {
   font-family: ui-monospace, monospace;

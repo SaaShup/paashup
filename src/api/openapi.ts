@@ -155,10 +155,13 @@ function writeSchema(meta: TableMeta, patched: boolean): Schema {
   const required: string[] = [];
   for (const c of meta.columns) {
     if (!c.writable) continue;
-    // Writable but not user-editable — the UI form omits it (e.g. agent-set ImageID).
-    props[c.name] = c.formHidden
-      ? { ...writeProperty(c), 'x-form-hidden': true }
-      : writeProperty(c);
+    // Vendor hints: `x-form-hidden` omits the field from the UI form (e.g. agent-set
+    // ImageID); `x-default-origin` lets the form prefill it from window.location.origin.
+    props[c.name] = {
+      ...writeProperty(c),
+      ...(c.formHidden ? { 'x-form-hidden': true } : {}),
+      ...(c.defaultFromOrigin ? { 'x-default-origin': true } : {}),
+    };
     if (!patched && c.required && !c.nullable) required.push(c.name);
   }
   for (const rel of meta.relations) {

@@ -45,6 +45,7 @@ For MariaDB, run migrations separately (they are not auto-applied):
 |-----|---------|-------|
 | `PORT` | `8000` | HTTP listen port |
 | `BASE_URL` | `http://localhost:<PORT>` | Public base URL — set this behind a proxy/TLS so generated `url`/`display_url` and webhook absolute links are correct |
+| `PB_TRUST_PROXY` | — | `1` → trust `X-Forwarded-Proto`/`X-Forwarded-Host` when deriving the request origin (e.g. a Docker host's `netbox_base_url`). Leave **off** unless behind a trusted reverse proxy that sets these headers — they are client-spoofable. Prefer setting `BASE_URL` instead, which always wins |
 | `PB_WEB_ROOT` | `/app/web` (image) | Directory of the built SPA to serve; unset = API only |
 | `PB_REALTIME` | on | `0` disables the `/api/ws/` change-feed |
 

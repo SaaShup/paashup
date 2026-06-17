@@ -18,6 +18,7 @@ import '../journal.js'; // registers the journal-entries entity
 import '../configcontext.js'; // registers config-contexts entity + the /render/ route
 import { Serializer, getSerializer } from './serializer.js';
 import { buildOpenApi } from './openapi.js';
+import { externalBaseUrl, applyOriginDefaults } from './origin.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -412,6 +413,7 @@ export function createApiServer(opts: ServerOptions): http.Server {
           params: custom.params,
           query: url.searchParams,
           body,
+          origin: externalBaseUrl(req, fixedBase),
         });
         return send(res, result.status, result.body);
       }
@@ -476,10 +478,16 @@ export function createApiServer(opts: ServerOptions): http.Server {
         }
         if (method === 'POST') {
           const body = await readBody(req);
+          const origin = externalBaseUrl(req, fixedBase);
           if (Array.isArray(body)) {
             const created = await db.transaction(async (tx) => {
               const r = new Repository<Record<string, unknown>>(tx, meta);
-              return Promise.all(body.map((b) => r.create(b as Record<string, unknown>)));
+              return Promise.all(
+                body.map((b) => {
+                  applyOriginDefaults(meta, b as Record<string, unknown>, origin);
+                  return r.create(b as Record<string, unknown>);
+                }),
+              );
             });
             const out = await serializeRows(
               db,
@@ -493,6 +501,7 @@ export function createApiServer(opts: ServerOptions): http.Server {
               });
             return send(res, 201, out);
           }
+          applyOriginDefaults(meta, body as Record<string, unknown>, origin);
           const created = await repo.create(body as Record<string, unknown>);
           const createdId = (created as { id: number | string }).id;
           await fireHooks(db, route.table, 'created', createdId, created);

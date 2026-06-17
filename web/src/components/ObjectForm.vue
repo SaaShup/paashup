@@ -16,6 +16,11 @@ const isEdit = !!props.object;
 
 function initValue(f: FieldDef): unknown {
   const v = props.object?.[f.name];
+  // On create, prefill an origin-defaulted field (e.g. a host's netbox_base_url) with
+  // the current browser origin; the user can still override it before saving.
+  if (!isEdit && f.defaultOrigin && (v === undefined || v === null || v === '')) {
+    return window.location.origin;
+  }
   if (f.kind === 'multiselect') return Array.isArray(v) ? [...v] : [];
   if (v === undefined || v === null) return f.kind === 'boolean' ? false : '';
   if (f.kind === 'fk') return (v as { id?: number }).id ?? '';
@@ -152,7 +157,12 @@ async function submit() {
               rows="3"
               placeholder="one IP per line"
             />
-            <textarea v-else-if="f.kind === 'json'" v-model="values[f.name]" rows="3" placeholder="{ }" />
+            <textarea
+              v-else-if="f.kind === 'json'"
+              v-model="values[f.name]"
+              rows="3"
+              placeholder="{ }"
+            />
             <input
               v-else
               :type="f.kind === 'number' ? 'number' : 'text'"

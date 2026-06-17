@@ -25,6 +25,8 @@ export interface FieldDef {
   choices?: (string | number)[];
   /** For `fk`: the target model name (e.g. "Manufacturer"). */
   targetModel?: string;
+  /** Prefill an empty value with window.location.origin when creating (x-default-origin). */
+  defaultOrigin?: boolean;
 }
 
 function refName(s: any): string | undefined {
@@ -61,7 +63,8 @@ export async function formFields(model: string): Promise<FieldDef[]> {
       choices = p.items.enum;
     } else if (p.type === 'boolean') kind = 'boolean';
     else if (p.type === 'integer' || p.type === 'number') kind = 'number';
-    else if (name === 'dhcp_relays') kind = 'iplist'; // friendly one-IP-per-line editor
+    else if (name === 'dhcp_relays')
+      kind = 'iplist'; // friendly one-IP-per-line editor
     else if (p.type === 'object' || p.type === 'array') kind = 'json';
     out.push({
       name,
@@ -71,6 +74,7 @@ export async function formFields(model: string): Promise<FieldDef[]> {
       maxLength: p.maxLength,
       choices,
       targetModel,
+      defaultOrigin: !!raw['x-default-origin'],
     });
   }
   return out;

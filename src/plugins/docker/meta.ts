@@ -165,6 +165,7 @@ const hostMeta: TableMeta = {
       writable: true,
       required: false,
       maxLength: 1024,
+      defaultFromOrigin: true, // default to the request origin when omitted (issue #33)
     },
     {
       name: 'agent_version',

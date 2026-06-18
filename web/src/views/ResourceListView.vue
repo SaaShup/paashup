@@ -121,7 +121,8 @@ watch(
   () => {
     offset.value = 0;
     search.value = '';
-    filters.value = {};
+    filters.value = ui.pendingFilters ?? {}; // one-shot filters from a cross-page link
+    ui.pendingFilters = null;
     load();
     loadFilterOptions();
   },
@@ -174,8 +175,16 @@ function edit(row: Obj) {
 }
 /** Per-row extra action: containers open the read-only detail view; IP ranges, their addresses. */
 function onAction(row: Obj) {
-  if (isContainer.value) ui.openDetail(resource.value!, (row as { id: number }).id);
-  else addrRange.value = row;
+  const id = (row as { id: number }).id;
+  if (isContainer.value) {
+    ui.openDetail(resource.value!, id);
+  } else if (isHost.value) {
+    // jump to the Containers list, pre-filtered to this host
+    const containers = ui.resources.find((r) => r.table === 'plugin_docker_container');
+    if (containers) ui.openResourceFiltered(containers, { host: String(id) });
+  } else {
+    addrRange.value = row; // IP range → addresses
+  }
 }
 </script>
 
@@ -247,7 +256,15 @@ function onAction(row: Obj) {
         v-if="slot"
         :items="slot.items"
         :editable="resource.writable"
-        :extra-action="isContainer ? 'View' : resource.table === 'ipam_iprange' ? 'IPs' : undefined"
+        :extra-action="
+          isContainer
+            ? 'View'
+            : isHost
+              ? 'Containers'
+              : resource.table === 'ipam_iprange'
+                ? 'IPs'
+                : undefined
+        "
         :selectable="selectable"
         :selected="selectedIds"
         :filters="filters"

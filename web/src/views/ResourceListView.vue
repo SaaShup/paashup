@@ -172,6 +172,11 @@ function edit(row: Obj) {
   editing.value = row;
   formOpen.value = true;
 }
+/** Per-row extra action: containers open the read-only detail view; IP ranges, their addresses. */
+function onAction(row: Obj) {
+  if (isContainer.value) ui.openDetail(resource.value!, (row as { id: number }).id);
+  else addrRange.value = row;
+}
 </script>
 
 <template>
@@ -242,14 +247,14 @@ function edit(row: Obj) {
         v-if="slot"
         :items="slot.items"
         :editable="resource.writable"
-        :extra-action="resource.table === 'ipam_iprange' ? 'IPs' : undefined"
+        :extra-action="isContainer ? 'View' : resource.table === 'ipam_iprange' ? 'IPs' : undefined"
         :selectable="selectable"
         :selected="selectedIds"
         :filters="filters"
         :filter-options="filterOptions"
         @delete="del"
         @edit="edit"
-        @action="(row) => (addrRange = row)"
+        @action="onAction"
         @toggle="toggleSel"
         @toggle-all="toggleAllSel"
         @filter="setFilter"

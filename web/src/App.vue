@@ -17,6 +17,7 @@ import StatusBadge from './components/StatusBadge.vue';
 import Sidebar from './components/Sidebar.vue';
 import DashboardView from './views/DashboardView.vue';
 import ResourceListView from './views/ResourceListView.vue';
+import ContainerDetailView from './views/ContainerDetailView.vue';
 import DocsView from './views/DocsView.vue';
 import ApiKeysView from './views/ApiKeysView.vue';
 import PluginPageView from './views/PluginPageView.vue';
@@ -80,7 +81,12 @@ onMounted(async () => {
         ☰
       </button>
       <div class="brand"><span class="logo">▌</span> <span class="brand-text">paas2box</span></div>
-      <input class="globalsearch" type="search" placeholder="Search resources…" v-model="ui.search" />
+      <input
+        class="globalsearch"
+        type="search"
+        placeholder="Search resources…"
+        v-model="ui.search"
+      />
       <span class="spacer" />
       <div v-if="ssoEnabled" class="sso">
         <template v-if="username">
@@ -89,7 +95,13 @@ onMounted(async () => {
         </template>
         <button v-else class="sso-btn" @click="login()">Sign in</button>
       </div>
-      <img v-show="logoOk" class="topbar-logo" :src="logoUrl" alt="paas2box" @error="logoOk = false" />
+      <img
+        v-show="logoOk"
+        class="topbar-logo"
+        :src="logoUrl"
+        alt="paas2box"
+        @error="logoOk = false"
+      />
       <StatusBadge />
     </header>
     <div class="body">
@@ -101,6 +113,7 @@ onMounted(async () => {
         <DocsView v-else-if="ui.view === 'docs'" />
         <ApiKeysView v-else-if="ui.view === 'api-keys'" />
         <PluginPageView v-else-if="ui.view === 'plugin-page'" />
+        <ContainerDetailView v-else-if="ui.view === 'detail'" />
         <ResourceListView v-else />
       </main>
     </div>

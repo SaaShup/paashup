@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useUiStore } from '../stores/ui.js';
-import { api } from '../api/client.js';
 import { sectionLabel, sectionRank } from '../groups.js';
 import EventLog from '../components/EventLog.vue';
 
@@ -28,38 +27,30 @@ const loading = ref(false);
 const titleize = (s: string) => s.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 const pluginOf = (endpoint: string) => endpoint.split('/').filter(Boolean)[2] ?? '';
 
-/** run async fn over items with limited concurrency */
-async function mapLimit<T, R>(items: T[], limit: number, fn: (x: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = [];
-  let i = 0;
-  const worker = async () => {
-    while (i < items.length) {
-      const idx = i++;
-      out[idx] = await fn(items[idx]!);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return out;
-}
-
-async function loadUsage() {
+async function loadUsage(force = false) {
   if (!ui.resources.length) return;
   loading.value = true;
   try {
-    const counts = await mapLimit(ui.resources, 8, async (r) => {
-      try {
-        const page = await api.list(r.endpoint, { limit: 1 });
-        return { section: r.section, endpoint: r.endpoint, count: page.count };
-      } catch {
-        return { section: r.section, endpoint: r.endpoint, count: 0 };
-      }
-    });
+    // Counts live in the UI store (shared with the sidebar item badges + cached).
+    await ui.loadCounts(ui.resources, force);
+    const counts = ui.resources.map((r) => ({
+      section: r.section,
+      endpoint: r.endpoint,
+      count: ui.counts[r.table] ?? 0,
+    }));
     // aggregate per section
     const by = new Map<string, SectionUsage>();
     for (const c of counts) {
       const u =
         by.get(c.section) ??
-        by.set(c.section, { section: c.section, label: sectionLabel(c.section), types: 0, total: 0 }).get(c.section)!;
+        by
+          .set(c.section, {
+            section: c.section,
+            label: sectionLabel(c.section),
+            types: 0,
+            total: 0,
+          })
+          .get(c.section)!;
       u.types += 1;
       u.total += c.count;
     }
@@ -72,7 +63,8 @@ async function loadUsage() {
       if (c.section !== 'plugins') continue;
       const name = pluginOf(c.endpoint);
       const p =
-        pby.get(name) ?? pby.set(name, { name, label: titleize(name), types: 0, total: 0 }).get(name)!;
+        pby.get(name) ??
+        pby.set(name, { name, label: titleize(name), types: 0, total: 0 }).get(name)!;
       p.types += 1;
       p.total += c.count;
     }
@@ -84,7 +76,8 @@ async function loadUsage() {
 }
 
 function onCard(u: SectionUsage) {
-  if (u.section === 'plugins') pluginsOpen.value = !pluginsOpen.value; // expand inline sub-tree
+  if (u.section === 'plugins')
+    pluginsOpen.value = !pluginsOpen.value; // expand inline sub-tree
   else ui.expandedSections[u.section] = true; // expand that section in the menu
 }
 
@@ -126,7 +119,7 @@ watch(
 
     <div class="usage-head">
       <h3>Usage by section</h3>
-      <button class="refresh" :disabled="loading" @click="loadUsage">
+      <button class="refresh" :disabled="loading" @click="loadUsage(true)">
         {{ loading ? 'Counting…' : '↻ Refresh' }}
       </button>
     </div>
@@ -136,8 +129,13 @@ watch(
         v-for="u in usage"
         :key="u.section"
         class="usage-card"
-        :class="{ expandable: u.section === 'plugins', open: u.section === 'plugins' && pluginsOpen }"
-        :title="u.section === 'plugins' ? 'Expand — usage per plugin' : 'Open this section in the menu'"
+        :class="{
+          expandable: u.section === 'plugins',
+          open: u.section === 'plugins' && pluginsOpen,
+        }"
+        :title="
+          u.section === 'plugins' ? 'Expand — usage per plugin' : 'Open this section in the menu'
+        "
         @click="onCard(u)"
       >
         <span v-if="u.section === 'plugins'" class="caret">{{ pluginsOpen ? '▾' : '▸' }}</span>

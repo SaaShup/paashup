@@ -95,7 +95,7 @@ if wants web; then
   if have npm && [ -d web ]; then
     banner "web"
     [ -d web/node_modules ] || (cd web && npm ci >/dev/null 2>&1)
-    if (cd web && npm run build); then pass "web"; else fail "web"; fi
+    if (cd web && npm run build && npm test); then pass "web"; else fail "web"; fi
   else
     skip "web" "npm or web/ missing"
   fi

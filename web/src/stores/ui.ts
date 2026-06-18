@@ -19,8 +19,10 @@ export const useUiStore = defineStore('ui', {
     /** Plugin-contributed sidebar entries (each opens a plugin page in a frame). */
     pluginMenus: [] as PluginMenuItem[],
     pluginPage: null as PluginMenuItem | null,
-    view: 'dashboard' as 'dashboard' | 'list' | 'docs' | 'plugin-page' | 'api-keys',
+    view: 'dashboard' as 'dashboard' | 'list' | 'detail' | 'docs' | 'plugin-page' | 'api-keys',
     selected: null as Resource | null,
+    /** Object id being shown in the read-only detail view (with `selected` as its resource). */
+    detailId: null as number | null,
     // accordion: everything collapsed by default; user expands by clicking.
     expandedSections: {} as Record<string, boolean>,
     expandedGroups: {} as Record<string, boolean>,
@@ -86,6 +88,13 @@ export const useUiStore = defineStore('ui', {
     openResource(r: Resource) {
       this.view = 'list';
       this.selected = r;
+      this.detailId = null;
+    },
+    /** Open the read-only detail view for one object of resource `r`. */
+    openDetail(r: Resource, id: number) {
+      this.view = 'detail';
+      this.selected = r;
+      this.detailId = id;
     },
     toggleSection(section: string) {
       this.expandedSections[section] = !this.expandedSections[section];

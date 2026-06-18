@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia';
+import { api } from '../api/client.js';
 import type { Resource } from '../api/resources.js';
 import type { PluginMenuItem } from '../api/pluginMenus.js';
+import type { ChangeEvent } from '../websocket/events.js';
 import {
   subgroupsFor,
   sectionRank,
@@ -23,6 +25,8 @@ export const useUiStore = defineStore('ui', {
     expandedSections: {} as Record<string, boolean>,
     expandedGroups: {} as Record<string, boolean>,
     search: '',
+    /** Record count per table (sidebar item badges); kept live via the change-feed. */
+    counts: {} as Record<string, number>,
   }),
   getters: {
     /** Sections → functional sub-groups → resources, filtered by the top-bar search. */
@@ -34,7 +38,9 @@ export const useUiStore = defineStore('ui', {
         if (q && !`${r.section} ${r.label} ${r.table}`.toLowerCase().includes(q)) continue;
         // promote configured plugins (e.g. docker) to their own top-level section
         const sec =
-          r.section === 'plugins' ? effectiveSection(r.section, pluginNameOf(r.endpoint)) : r.section;
+          r.section === 'plugins'
+            ? effectiveSection(r.section, pluginNameOf(r.endpoint))
+            : r.section;
         (by.get(sec) ?? by.set(sec, []).get(sec)!).push(r);
       }
       // plugin-contributed pages, bucketed by their (possibly promoted) section
@@ -87,6 +93,34 @@ export const useUiStore = defineStore('ui', {
     toggleGroup(section: string, label: string) {
       const key = `${section}::${label}`;
       this.expandedGroups[key] = !this.expandedGroups[key];
+    },
+    /**
+     * Fetch the record count for each resource (via `?limit=1` → `page.count`), skipping
+     * tables already counted. Limited concurrency; failures leave a table uncounted.
+     * Shared by the sidebar item badges and the dashboard usage cards.
+     */
+    async loadCounts(resources: Resource[], force = false) {
+      const todo = force ? resources : resources.filter((r) => !(r.table in this.counts));
+      if (!todo.length) return;
+      let i = 0;
+      const worker = async () => {
+        while (i < todo.length) {
+          const r = todo[i++]!;
+          try {
+            const page = await api.list(r.endpoint, { limit: 1 });
+            this.counts[r.table] = page.count;
+          } catch {
+            /* leave uncounted on error */
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(8, todo.length) }, worker));
+    },
+    /** Live-adjust a table's count from a change-feed event (no-op if not yet counted). */
+    bumpCount(e: ChangeEvent) {
+      if (!(e.table in this.counts)) return;
+      if (e.event === 'created') this.counts[e.table] += 1;
+      else if (e.event === 'deleted') this.counts[e.table] = Math.max(0, this.counts[e.table] - 1);
     },
   },
 });

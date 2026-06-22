@@ -369,6 +369,89 @@ test('container POST resolves agent natural keys (image ImageID, network name)',
   assert.match(bad.body.image[0], /No image with ImageID/);
 });
 
+test('container env accepts Docker-native shapes (KEY=VALUE strings, name/key objects)', async () => {
+  // Docker's Config.Env is an array of "KEY=VALUE" strings; the agent may also key
+  // objects by name/key. All must normalise to {var_name, value} and be stored.
+  const made = await api('POST', '/api/plugins/docker/containers/', {
+    host: ids.host,
+    image: ids.image,
+    name: 'env-shapes',
+    env: ['PATH=/usr/bin:/bin', { name: 'NODE_VERSION', value: '20' }, { key: 'K', value: 'v' }],
+  });
+  assert.equal(made.status, 201, JSON.stringify(made.body));
+  const byName = Object.fromEntries(made.body.env.map((e) => [e.var_name, e.value]));
+  assert.equal(byName['PATH'], '/usr/bin:/bin');
+  assert.equal(byName['NODE_VERSION'], '20');
+  assert.equal(byName['K'], 'v');
+
+  // PATCH with KEY=VALUE strings replaces the env collection too
+  const patched = await api('PATCH', `/api/plugins/docker/containers/${made.body.id}/`, {
+    env: ['ONLY=this'],
+  });
+  assert.equal(patched.status, 200, JSON.stringify(patched.body));
+  assert.deepEqual(patched.body.env, [{ var_name: 'ONLY', value: 'this' }]);
+});
+
+test('bulk PATCH on the container collection persists nested children (env, ports)', async () => {
+  // PATCH a list to the collection (NetBox-style bulk update) — must keep children,
+  // which the generic bulk path would drop.
+  const a = (
+    await api('POST', '/api/plugins/docker/containers/', {
+      host: ids.host,
+      image: ids.image,
+      name: 'bulk-a',
+    })
+  ).body;
+  const b = (
+    await api('POST', '/api/plugins/docker/containers/', {
+      host: ids.host,
+      image: ids.image,
+      name: 'bulk-b',
+    })
+  ).body;
+  const res = await api('PATCH', '/api/plugins/docker/containers/', [
+    { id: a.id, env: ['FOO=bar'], ports: [{ private_port: 80, public_port: 8080, type: 'tcp' }] },
+    { id: b.id, env: [{ var_name: 'A', value: '1' }] },
+  ]);
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.equal(res.body.length, 2);
+  const ga = await api('GET', `/api/plugins/docker/containers/${a.id}/`);
+  assert.deepEqual(ga.body.env, [{ var_name: 'FOO', value: 'bar' }]);
+  assert.equal(ga.body.ports.length, 1);
+  const gb = await api('GET', `/api/plugins/docker/containers/${b.id}/`);
+  assert.deepEqual(gb.body.env, [{ var_name: 'A', value: '1' }]);
+});
+
+test('agent sync auto-creates an unknown mount volume / network by name', async () => {
+  const VOL = 'anon-vol-' + Date.now();
+  const c = (
+    await api('POST', '/api/plugins/docker/containers/', {
+      host: ids.host,
+      image: ids.image,
+      name: 'mounty',
+    })
+  ).body;
+  // the agent reports a mount to a volume + a network that don't exist in paasbox yet
+  const res = await api('PATCH', '/api/plugins/docker/containers/', [
+    {
+      id: c.id,
+      mounts: [{ source: '/data', volume: { name: VOL, host: String(ids.host) } }],
+      network_settings: [{ network: { name: 'bridge-x', host: String(ids.host) } }],
+    },
+  ]);
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  const got = await api('GET', `/api/plugins/docker/containers/${c.id}/`);
+  assert.equal(got.body.mounts.length, 1);
+  assert.equal(got.body.mounts[0].volume.name, VOL);
+  assert.equal(got.body.network_settings[0].network.name, 'bridge-x');
+  // the missing resources were registered on the host
+  assert.ok(
+    (await api('GET', `/api/plugins/docker/volumes/?host_id=${ids.host}`)).body.results.some(
+      (v) => v.name === VOL,
+    ),
+  );
+});
+
 test('Network driver accepts "none"', async () => {
   const net = await api('POST', '/api/plugins/docker/networks/', {
     host: ids.host,

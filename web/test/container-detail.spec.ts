@@ -143,11 +143,28 @@ describe('ContainerDetailView', () => {
     const w = mountDetail();
     await flushPromises();
     const t = w.text();
-    expect(t).toContain('FOO'); // env var_name
-    expect(t).toContain('bar'); // env value
+    // env is an inline editor for writable containers → values live in inputs, not text
+    const inputs = w.findAll('.env-table input').map((i) => (i.element as HTMLInputElement).value);
+    expect(inputs).toContain('FOO'); // env var_name
+    expect(inputs).toContain('bar'); // env value
     expect(t).toContain('8080'); // port public
     expect(t).toContain('tcp'); // port type
     expect(t).toContain('✓'); // mount read_only = true
+  });
+
+  it('env editor: Save PATCHes the container with the edited env array', async () => {
+    const update = vi.spyOn(api, 'update').mockResolvedValue(fixture as never);
+    const w = mountDetail();
+    await flushPromises();
+    // edit the value of the one existing env row, then Save
+    const inputs = w.findAll('.env-table input');
+    await inputs[1]!.setValue('baz');
+    const save = w.findAll('button').find((b) => b.text() === 'Save')!;
+    await save.trigger('click');
+    await flushPromises();
+    expect(update).toHaveBeenCalledWith('/api/plugins/docker/containers/', 1, {
+      env: [{ var_name: 'FOO', value: 'baz' }],
+    });
   });
 
   it('shows an empty state for empty collections', async () => {

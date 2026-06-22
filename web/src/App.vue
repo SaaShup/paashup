@@ -18,6 +18,7 @@ import Sidebar from './components/Sidebar.vue';
 import DashboardView from './views/DashboardView.vue';
 import ResourceListView from './views/ResourceListView.vue';
 import ContainerDetailView from './views/ContainerDetailView.vue';
+import HostDetailView from './views/HostDetailView.vue';
 import DocsView from './views/DocsView.vue';
 import ApiKeysView from './views/ApiKeysView.vue';
 import PluginPageView from './views/PluginPageView.vue';
@@ -113,6 +114,9 @@ onMounted(async () => {
         <DocsView v-else-if="ui.view === 'docs'" />
         <ApiKeysView v-else-if="ui.view === 'api-keys'" />
         <PluginPageView v-else-if="ui.view === 'plugin-page'" />
+        <HostDetailView
+          v-else-if="ui.view === 'detail' && ui.selected?.table === 'plugin_docker_host'"
+        />
         <ContainerDetailView v-else-if="ui.view === 'detail'" />
         <ResourceListView v-else />
       </main>

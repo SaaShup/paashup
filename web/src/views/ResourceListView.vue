@@ -173,6 +173,12 @@ function edit(row: Obj) {
   editing.value = row;
   formOpen.value = true;
 }
+/** Name-link click: open the read-only detail view for containers and hosts. */
+function onOpen(row: Obj) {
+  if (resource.value && (isContainer.value || isHost.value)) {
+    ui.openDetail(resource.value, (row as { id: number }).id);
+  }
+}
 /** Per-row extra action: containers open the read-only detail view; IP ranges, their addresses. */
 function onAction(row: Obj) {
   const id = (row as { id: number }).id;
@@ -269,9 +275,11 @@ function onAction(row: Obj) {
         :selected="selectedIds"
         :filters="filters"
         :filter-options="filterOptions"
+        :linkable="isHost || isContainer"
         @delete="del"
         @edit="edit"
         @action="onAction"
+        @open="onOpen"
         @toggle="toggleSel"
         @toggle-all="toggleAllSel"
         @filter="setFilter"

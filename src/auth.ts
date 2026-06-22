@@ -93,61 +93,106 @@ export async function ensureSeedToken(db: Db): Promise<SeedTokenResult | null> {
   return { created: true, username, tokenId: id };
 }
 
+/** Name of the HttpOnly browser-session cookie carrying a paas2box token. */
+export const SESSION_COOKIE = 'pb_session';
+
+/** Validate a raw token key → auth context. Shared by the `Token` header and the
+ *  browser session cookie. Updates `last_used` best-effort. */
+async function authByToken(db: Db, key: string): Promise<AuthContext | null> {
+  const row = await db.get<{
+    id: number;
+    userId: number;
+    writeEnabled: number;
+    expires: string | null;
+  }>(
+    'SELECT id, user_id AS userId, write_enabled AS writeEnabled, expires FROM auth_token WHERE `key` = ?',
+    [key],
+  );
+  if (!row) return null;
+  if (row.expires && new Date(row.expires).getTime() < Date.now()) return null;
+  try {
+    await db.execute('UPDATE auth_token SET last_used = ? WHERE id = ?', [
+      new Date().toISOString(),
+      Number(row.id),
+    ]);
+  } catch {
+    /* last_used is advisory — ignore failures */
+  }
+  return { tokenId: Number(row.id), userId: Number(row.userId), writeEnabled: !!row.writeEnabled };
+}
+
+/** Read the `pb_session` token from a Cookie header, or null. */
+export function tokenFromCookie(cookieHeader: string | undefined): string | null {
+  if (!cookieHeader) return null;
+  for (const part of cookieHeader.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq < 0) continue;
+    if (part.slice(0, eq).trim() === SESSION_COOKIE) {
+      return decodeURIComponent(part.slice(eq + 1).trim());
+    }
+  }
+  return null;
+}
+
+/** Set-Cookie value that establishes the browser session (HttpOnly, SameSite=Lax so
+ *  it rides top-level navigations — the whole point of issue #36). */
+export function sessionCookieHeader(
+  token: string,
+  opts: { secure: boolean; maxAgeSec?: number },
+): string {
+  const parts = [
+    `${SESSION_COOKIE}=${encodeURIComponent(token)}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+  ];
+  if (opts.secure) parts.push('Secure');
+  if (opts.maxAgeSec != null) parts.push(`Max-Age=${Math.max(0, Math.floor(opts.maxAgeSec))}`);
+  return parts.join('; ');
+}
+
+/** Set-Cookie value that clears the browser session (logout). */
+export function clearSessionCookieHeader(opts: { secure: boolean }): string {
+  const parts = [`${SESSION_COOKIE}=`, 'Path=/', 'HttpOnly', 'SameSite=Lax', 'Max-Age=0'];
+  if (opts.secure) parts.push('Secure');
+  return parts.join('; ');
+}
+
 /**
- * Resolve an `Authorization` header to an auth context, or null. Supports both a
- * static API token (`Token <key>`) and — when OIDC is configured — a Keycloak/OIDC
- * bearer JWT (`Bearer <jwt>`), which is validated and mapped to a (auto-provisioned)
- * local user.
+ * Resolve a request's credentials to an auth context, or null. In order: a static API
+ * token (`Authorization: Token <key>`); an OIDC bearer JWT (`Authorization: Bearer
+ * <jwt>`, when OIDC is configured); else the `pb_session` browser cookie (same paas2box
+ * token, HttpOnly) — so a logged-in user can open API URLs directly in the browser
+ * (links, address bar, bookmarks) without a 403 (issue #36).
  */
 export async function authenticate(
   db: Db,
   header: string | undefined,
+  cookieHeader?: string | undefined,
 ): Promise<AuthContext | null> {
-  if (!header) return null;
-  const trimmed = header.trim();
+  const trimmed = header?.trim();
+  if (trimmed) {
+    const tok = /^Token\s+(.+)$/i.exec(trimmed);
+    if (tok) return authByToken(db, tok[1]!.trim());
 
-  const tok = /^Token\s+(.+)$/i.exec(trimmed);
-  if (tok) {
-    const row = await db.get<{
-      id: number;
-      userId: number;
-      writeEnabled: number;
-      expires: string | null;
-    }>(
-      'SELECT id, user_id AS userId, write_enabled AS writeEnabled, expires FROM auth_token WHERE `key` = ?',
-      [tok[1]!.trim()],
-    );
-    if (!row) return null;
-    if (row.expires && new Date(row.expires).getTime() < Date.now()) return null;
-    // Record usage (best-effort; never block the request on it).
-    try {
-      await db.execute('UPDATE auth_token SET last_used = ? WHERE id = ?', [
-        new Date().toISOString(),
-        Number(row.id),
-      ]);
-    } catch {
-      /* last_used is advisory — ignore failures */
+    // Machine-to-machine: a Keycloak (or other) service-account JWT presented directly.
+    // The provider is selected by the token's issuer; opaque tokens (e.g. Google access
+    // tokens) aren't JWTs and are rejected here — interactive users go through the
+    // BFF exchange (ssoExchange) and then use the resulting paas2box token.
+    const bearer = /^Bearer\s+(.+)$/i.exec(trimmed);
+    if (bearer && oidcEnabled()) {
+      const v = await verifyBearer(bearer[1]!.trim());
+      if (!v) return null;
+      const id = authorizeIdentity(v.provider, v.claims);
+      if ('error' in id) return null;
+      const userId = await findOrCreateUser(db, id.username, id);
+      return { tokenId: 0, userId, writeEnabled: id.writeEnabled };
     }
-    return {
-      tokenId: Number(row.id),
-      userId: Number(row.userId),
-      writeEnabled: !!row.writeEnabled,
-    };
+    return null; // a malformed Authorization header is not a cookie fallback case
   }
 
-  // Machine-to-machine: a Keycloak (or other) service-account JWT presented directly.
-  // The provider is selected by the token's issuer; opaque tokens (e.g. Google access
-  // tokens) aren't JWTs and are rejected here — interactive users go through the
-  // BFF exchange (ssoExchange) and then use the resulting paas2box token.
-  const bearer = /^Bearer\s+(.+)$/i.exec(trimmed);
-  if (bearer && oidcEnabled()) {
-    const v = await verifyBearer(bearer[1]!.trim());
-    if (!v) return null;
-    const id = authorizeIdentity(v.provider, v.claims);
-    if ('error' in id) return null;
-    const userId = await findOrCreateUser(db, id.username, id);
-    return { tokenId: 0, userId, writeEnabled: id.writeEnabled };
-  }
+  const cookieKey = tokenFromCookie(cookieHeader);
+  if (cookieKey) return authByToken(db, cookieKey);
   return null;
 }
 

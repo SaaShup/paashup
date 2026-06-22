@@ -7,7 +7,13 @@ import type { TableMeta } from '../model/meta-types.js';
 import { allTables, getTable } from '../model/registry.js';
 import { Repository, type ListOptions } from '../repository/repository.js';
 import { ApiError, ValidationError } from '../errors.js';
-import { authenticate, ssoExchange, type AuthOptions } from '../auth.js';
+import {
+  authenticate,
+  ssoExchange,
+  sessionCookieHeader,
+  clearSessionCookieHeader,
+  type AuthOptions,
+} from '../auth.js';
 import { listProviders, discover } from '../oidc.js';
 import { appVersion } from '../version.js';
 import { matchRoute, matchAsset, fireHooks, loadedPlugins } from '../plugins/runtime.js';
@@ -188,6 +194,17 @@ function readBody(req: http.IncomingMessage): Promise<unknown> {
   });
 }
 
+/** Whether the external request is HTTPS (honours a reverse proxy's X-Forwarded-Proto),
+ *  used to mark the session cookie `Secure`. */
+function isHttps(req: http.IncomingMessage): boolean {
+  const xf = String(req.headers['x-forwarded-proto'] ?? '')
+    .split(',')[0]!
+    .trim()
+    .toLowerCase();
+  if (xf) return xf === 'https';
+  return (req.socket as { encrypted?: boolean }).encrypted === true;
+}
+
 function send(res: http.ServerResponse, status: number, body?: unknown): void {
   if (body === undefined) {
     res.writeHead(status);
@@ -344,6 +361,16 @@ export function createApiServer(opts: ServerOptions): http.Server {
           redirectUri: b.redirect_uri,
         });
         if ('error' in r) return send(res, r.status, { detail: r.error });
+        // Also establish a browser session cookie so the user can open API URLs
+        // directly in the browser (links/address bar), not only via the SPA's fetch.
+        const maxAgeSec = Math.max(
+          0,
+          Math.floor((new Date(r.expires).getTime() - Date.now()) / 1000),
+        );
+        res.setHeader(
+          'Set-Cookie',
+          sessionCookieHeader(r.token, { secure: isHttps(req), maxAgeSec }),
+        );
         return send(res, 200, {
           token: r.token,
           token_id: r.tokenId,
@@ -351,6 +378,20 @@ export function createApiServer(opts: ServerOptions): http.Server {
           write_enabled: r.writeEnabled,
           expires: r.expires,
         });
+      }
+      // Establish the browser session cookie from a static token (the SPA calls this
+      // after a manual token login). Requires a valid `Authorization: Token <key>`.
+      if (method === 'POST' && path === '/api/auth/session/') {
+        const m = /^Token\s+(.+)$/i.exec(req.headers.authorization?.trim() ?? '');
+        const a = m ? await authenticate(db, req.headers.authorization) : null;
+        if (!a) throw new ApiError(403, 'A valid token is required to start a session.');
+        res.setHeader('Set-Cookie', sessionCookieHeader(m![1]!.trim(), { secure: isHttps(req) }));
+        return send(res, 204);
+      }
+      // Log out: clear the browser session cookie (public — you're ending a session).
+      if (method === 'POST' && path === '/api/auth/logout/') {
+        res.setHeader('Set-Cookie', clearSessionCookieHeader({ secure: isHttps(req) }));
+        return send(res, 204);
       }
       // Static SPA for non-API GET routes (single-container deploy).
       const rawPath = (req.url ?? '/').split('?')[0]!;
@@ -363,7 +404,7 @@ export function createApiServer(opts: ServerOptions): http.Server {
         if (asset) return serveAsset(res, asset.dir, asset.rel);
       }
       // Authentication (token). When `auth.required`, anonymous requests are rejected.
-      const auth = await authenticate(db, req.headers.authorization);
+      const auth = await authenticate(db, req.headers.authorization, req.headers.cookie);
       if (opts.auth?.required && !auth) {
         throw new ApiError(403, 'Authentication credentials were not provided.');
       }

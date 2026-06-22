@@ -3,7 +3,13 @@ import { ref, onMounted } from 'vue';
 import { api, ApiError, type Obj } from '../api/client.js';
 import { formFields, modelEndpoints, type FieldDef } from '../api/schema.js';
 
-const props = defineProps<{ model: string; endpoint: string; object?: Obj | null }>();
+const props = defineProps<{
+  model: string;
+  endpoint: string;
+  object?: Obj | null;
+  /** Create-mode initial field values (e.g. { host: 14 } when adding from a host page). */
+  defaults?: Obj | null;
+}>();
 const emit = defineEmits<{ (e: 'saved'): void; (e: 'cancel'): void }>();
 
 const fields = ref<FieldDef[]>([]);
@@ -16,10 +22,18 @@ const isEdit = !!props.object;
 
 function initValue(f: FieldDef): unknown {
   const v = props.object?.[f.name];
-  // On create, prefill an origin-defaulted field (e.g. a host's netbox_base_url) with
-  // the current browser origin; the user can still override it before saving.
-  if (!isEdit && f.defaultOrigin && (v === undefined || v === null || v === '')) {
-    return window.location.origin;
+  // On create, seed caller-provided defaults (e.g. host=<id> when adding from a host
+  // page). For an FK field the default is the related id; the user can still change it.
+  if (!isEdit) {
+    const dv = props.defaults?.[f.name];
+    if (dv !== undefined && dv !== null && dv !== '') {
+      return f.kind === 'multiselect' ? (Array.isArray(dv) ? [...dv] : []) : dv;
+    }
+    // prefill an origin-defaulted field (e.g. a host's netbox_base_url) with the current
+    // browser origin; the user can still override it before saving.
+    if (f.defaultOrigin && (v === undefined || v === null || v === '')) {
+      return window.location.origin;
+    }
   }
   if (f.kind === 'multiselect') return Array.isArray(v) ? [...v] : [];
   if (v === undefined || v === null) return f.kind === 'boolean' ? false : '';

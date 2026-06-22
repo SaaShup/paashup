@@ -15,11 +15,14 @@ const props = defineProps<{
   filters?: Record<string, string>;
   /** Selectable values per column; a column gets a header dropdown when present. */
   filterOptions?: FilterOptions;
+  /** Render the name (`display`) cell as a link that emits `open` (e.g. host → detail). */
+  linkable?: boolean;
 }>();
 const emit = defineEmits<{
   (e: 'delete', id: number): void;
   (e: 'edit', row: Obj): void;
   (e: 'action', row: Obj): void;
+  (e: 'open', row: Obj): void;
   (e: 'toggle', payload: { id: number; checked: boolean }): void;
   (e: 'toggle-all', checked: boolean): void;
   (e: 'filter', payload: { field: string; value: string }): void;
@@ -113,7 +116,16 @@ function cell(value: unknown): string {
             @change="onToggle(row, $event)"
           />
         </td>
-        <td v-for="c in columns" :key="c">{{ cell(row[c]) }}</td>
+        <td v-for="c in columns" :key="c">
+          <button
+            v-if="linkable && (c === 'display' || c === 'id')"
+            class="rowlink"
+            @click="emit('open', row)"
+          >
+            {{ cell(row[c]) }}
+          </button>
+          <template v-else>{{ cell(row[c]) }}</template>
+        </td>
         <td class="ops">
           <button v-if="extraAction" class="extra" @click="emit('action', row)">
             {{ extraAction }}
@@ -148,6 +160,20 @@ table {
   border-collapse: collapse;
   width: 100%;
   font-size: 0.9rem;
+}
+.rowlink {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: underline;
+}
+.rowlink:hover {
+  color: var(--primary-d);
 }
 th,
 td {

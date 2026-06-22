@@ -146,7 +146,26 @@ export async function ensureValidToken(): Promise<boolean> {
   return isAuthenticated();
 }
 
-/** Sign out: revoke the paas2box token server-side (best-effort) and clear local state. */
+/**
+ * Establish the HttpOnly browser-session cookie from the stored token, so a logged-in
+ * user can open API URLs directly in the browser (links/address bar) without a 403
+ * (issue #36). SSO login already sets it server-side on exchange; this also covers
+ * sessions that predate the cookie. Best-effort.
+ */
+export async function establishSession(): Promise<void> {
+  const token = getToken();
+  if (!token) return;
+  try {
+    await fetch('/api/auth/session/', {
+      method: 'POST',
+      headers: { Authorization: `Token ${token}` },
+    });
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** Sign out: revoke the paas2box token + clear the session cookie (best-effort), then local state. */
 export async function logout(): Promise<void> {
   const id = localStorage.getItem(LS.tokenId);
   const token = getToken();
@@ -160,11 +179,17 @@ export async function logout(): Promise<void> {
       /* best-effort */
     }
   }
+  try {
+    await fetch('/api/auth/logout/', { method: 'POST' }); // clear the browser-session cookie
+  } catch {
+    /* best-effort */
+  }
   clearTokens();
   location.assign('/');
 }
 
 /** Periodically drop the session once it expires, so the UI returns to the login gate. */
 export function startAutoRefresh(): void {
+  void establishSession(); // ensure the browser-session cookie exists for direct API URLs
   setInterval(() => void isAuthenticated(), 60_000);
 }

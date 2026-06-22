@@ -120,3 +120,48 @@ test('auth disabled by default (no auth option) allows anonymous', async () => {
   assert.equal(r, 200);
   await new Promise((r) => open.close(r));
 });
+
+// ---- browser session cookie (issue #36): a logged-in user can open API URLs
+// directly in the browser, where no Authorization header is sent ----
+
+/** Raw fetch returning status + the Set-Cookie header (the api() helper hides headers). */
+const raw = (m, p, headers = {}) =>
+  fetch(`${base}${p}`, { method: m, headers }).then((r) => ({
+    status: r.status,
+    setCookie: r.headers.get('set-cookie'),
+  }));
+
+test('no Authorization header and no cookie → 403', async () => {
+  const r = await raw('GET', '/api/dcim/manufacturers/');
+  assert.equal(r.status, 403);
+});
+
+test('POST /api/auth/session/ sets an HttpOnly session cookie from a valid token', async () => {
+  const r = await raw('POST', '/api/auth/session/', { Authorization: `Token ${rwKey}` });
+  assert.equal(r.status, 204);
+  assert.match(r.setCookie, /pb_session=/);
+  assert.match(r.setCookie, /HttpOnly/i);
+  assert.match(r.setCookie, /SameSite=Lax/i);
+  // establishing a session needs a valid token
+  assert.equal((await raw('POST', '/api/auth/session/')).status, 403);
+});
+
+test('the session cookie authenticates a header-less browser request', async () => {
+  // simulates the browser opening /api/.../ directly: Cookie, no Authorization
+  const ok = await raw('GET', '/api/dcim/manufacturers/', { Cookie: `pb_session=${rwKey}` });
+  assert.equal(ok.status, 200);
+  // a bogus cookie is still rejected
+  const bad = await raw('GET', '/api/dcim/manufacturers/', { Cookie: 'pb_session=deadbeef' });
+  assert.equal(bad.status, 403);
+});
+
+test('header auth still works unchanged (no cookie involved)', async () => {
+  assert.equal((await api('GET', '/api/dcim/manufacturers/', null, rwKey)).status, 200);
+});
+
+test('logout clears the session cookie', async () => {
+  const r = await raw('POST', '/api/auth/logout/');
+  assert.equal(r.status, 204);
+  assert.match(r.setCookie, /pb_session=;/);
+  assert.match(r.setCookie, /Max-Age=0/i);
+});

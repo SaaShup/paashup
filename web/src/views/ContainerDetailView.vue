@@ -21,6 +21,52 @@ const scalars = computed(() =>
   CONTAINER_SCALARS.map((s) => ({ label: s.label, value: scalarText(get(s.key)) })),
 );
 const rows = (field: string): Obj[] => (container.value ? rowsOf(container.value, field) : []);
+const writable = computed(() => !!resource.value?.writable);
+
+// Editable Environment variables. They're the container's `env` child collection: a
+// PATCH with the full `env` array replaces it (see routes/containers.ts), so add/edit/
+// delete all work by sending the edited array.
+interface EnvRow {
+  var_name: string;
+  value: string;
+}
+const envDraft = ref<EnvRow[]>([]);
+const envDirty = ref(false);
+const envSaving = ref(false);
+
+function initEnv() {
+  envDraft.value = rows('env').map((r) => ({
+    var_name: String((r as Record<string, unknown>).var_name ?? ''),
+    value: String((r as Record<string, unknown>).value ?? ''),
+  }));
+  envDirty.value = false;
+}
+function addEnv() {
+  envDraft.value.push({ var_name: '', value: '' });
+  envDirty.value = true;
+}
+function removeEnv(i: number) {
+  envDraft.value.splice(i, 1);
+  envDirty.value = true;
+}
+async function saveEnv() {
+  const r = resource.value;
+  const id = ui.detailId;
+  if (!r || id == null) return;
+  const env = envDraft.value
+    .map((e) => ({ var_name: e.var_name.trim(), value: e.value }))
+    .filter((e) => e.var_name);
+  envSaving.value = true;
+  error.value = '';
+  try {
+    await api.update(r.endpoint, id, { env }); // replaces the env collection
+    await load(); // re-fetch (re-inits the draft)
+  } catch (e) {
+    error.value = String(e);
+  } finally {
+    envSaving.value = false;
+  }
+}
 
 async function load() {
   const r = resource.value;
@@ -30,6 +76,7 @@ async function load() {
   error.value = '';
   try {
     container.value = await api.retrieve<Obj>(r.endpoint, id);
+    initEnv();
   } catch (e) {
     error.value = String(e);
   } finally {
@@ -92,15 +139,53 @@ async function onSaved() {
         </div>
       </section>
 
-      <!-- attached collections -->
-      <CollectionTable
-        v-for="c in CONTAINER_COLLECTIONS"
-        :key="c.field"
-        :title="c.title"
-        :empty="c.empty"
-        :rows="rows(c.field)"
-        :columns="c.columns"
-      />
+      <!-- attached collections (env is editable when the container is writable) -->
+      <template v-for="c in CONTAINER_COLLECTIONS" :key="c.field">
+        <section v-if="c.field === 'env' && writable" class="collection env-editor">
+          <h4>
+            {{ c.title }}
+            <span class="n">{{ envDraft.length }}</span>
+            <span class="spacer" />
+            <button class="btn btn-ghost sm" @click="addEnv">+ Add</button>
+            <button class="btn btn-ok sm" :disabled="!envDirty || envSaving" @click="saveEnv">
+              {{ envSaving ? 'Saving…' : 'Save' }}
+            </button>
+            <button class="btn btn-ghost sm" :disabled="!envDirty || envSaving" @click="initEnv">
+              Discard
+            </button>
+          </h4>
+          <p v-if="!envDraft.length" class="empty">{{ c.empty }}</p>
+          <table v-else class="env-table">
+            <thead>
+              <tr>
+                <th>Variable</th>
+                <th>Value</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, i) in envDraft" :key="i">
+                <td>
+                  <input v-model="row.var_name" placeholder="VAR_NAME" @input="envDirty = true" />
+                </td>
+                <td><input v-model="row.value" placeholder="value" @input="envDirty = true" /></td>
+                <td>
+                  <button class="btn btn-ghost sm danger" title="Remove" @click="removeEnv(i)">
+                    ✕
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+        <CollectionTable
+          v-else
+          :title="c.title"
+          :empty="c.empty"
+          :rows="rows(c.field)"
+          :columns="c.columns"
+        />
+      </template>
     </template>
 
     <ObjectForm
@@ -169,5 +254,59 @@ async function onSaved() {
 }
 .link:hover {
   text-decoration: underline;
+}
+/* editable Environment variables section */
+.env-editor {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.env-editor h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.env-editor .n {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.env-editor .spacer {
+  flex: 1;
+}
+.env-editor .empty {
+  color: var(--muted);
+  margin: 4px 0 0;
+}
+.btn.sm {
+  padding: 3px 9px;
+  font-size: 0.8rem;
+}
+.btn.danger {
+  color: var(--danger);
+}
+.env-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.env-table th,
+.env-table td {
+  text-align: left;
+  padding: 4px 8px 4px 0;
+}
+.env-table input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font: inherit;
+}
+.env-table td:last-child {
+  width: 1%;
+  white-space: nowrap;
 }
 </style>

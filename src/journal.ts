@@ -35,7 +35,19 @@ const journalMeta: TableMeta = {
   columns: [
     col('assigned_object_type', 'string'),
     col('assigned_object_id', 'number'),
-    col('kind', 'string'),
+    // `kind` is a NetBox choice: clients (and the Docker agent) send a plain string, but
+    // NetBox's own API returns `{value, label}`. Modelling it as an enum lets both shapes
+    // validate (the migration's transform extracts `.value`) and serializes it as a choice.
+    {
+      name: 'kind',
+      column: 'kind',
+      tsKind: 'string',
+      nullable: true,
+      writable: true,
+      required: false,
+      enum: ['info', 'success', 'warning', 'danger'],
+      enumLabels: { info: 'Info', success: 'Success', warning: 'Warning', danger: 'Danger' },
+    },
     col('comments', 'string'),
     col('created', 'string', false),
     col('last_updated', 'string', false),

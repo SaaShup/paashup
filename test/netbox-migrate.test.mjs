@@ -167,3 +167,24 @@ test('missing url/token is a 400; bad NetBox host is a 502', async () => {
   });
   assert.equal(bad.status, 502);
 });
+
+// Regression: a required FK (e.g. VMInterface.virtual_machine) must be created before
+// its dependent, even across NetBox's full-core FK cycles (issue: vminterface failed
+// "Validation failed" because it was ordered before virtual_machine).
+test('orderedEntities places required-FK targets before dependents', async () => {
+  const { orderedEntities } = await import('../dist/plugins/netbox-migrate/migrate.js');
+  const order = orderedEntities().map((m) => m.table);
+  const idx = (t) => order.indexOf(t);
+  for (const t of [
+    'virtualization_cluster',
+    'virtualization_virtual_machine',
+    'virtualization_vminterface',
+  ]) {
+    assert.ok(idx(t) >= 0, `${t} missing from order`);
+  }
+  assert.ok(
+    idx('virtualization_virtual_machine') < idx('virtualization_vminterface'),
+    'virtual_machine must come before vminterface (required FK)',
+  );
+  assert.ok(idx('virtualization_cluster') < idx('virtualization_virtual_machine'));
+});

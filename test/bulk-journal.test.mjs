@@ -83,7 +83,31 @@ test('journal entries can be created and listed', async () => {
   });
   assert.equal(r.status, 201, JSON.stringify(r.body));
   assert.equal(r.body.comments, 'created by agent');
+  // `kind` is a choice: a plain-string write serializes back as a {value,label} object.
+  assert.deepEqual(r.body.kind, { value: 'info', label: 'Info' });
   const list = await api('GET', '/api/extras/journal-entries/');
   assert.equal(list.status, 200);
   assert.ok(list.body.count >= 1);
+});
+
+test('journal kind accepts the choice values NetBox migration produces', async () => {
+  // The netbox-migrate transform extracts {value,label}.value, so the create payload
+  // carries a bare choice string; all four NetBox journal kinds must validate.
+  for (const kind of ['info', 'success', 'warning', 'danger']) {
+    const r = await api('POST', '/api/extras/journal-entries/', {
+      assigned_object_type: 'dcim.device',
+      assigned_object_id: 1,
+      kind,
+      comments: `kind ${kind}`,
+    });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    assert.equal(r.body.kind.value, kind);
+  }
+  // an unknown kind is rejected rather than silently stored
+  const bad = await api('POST', '/api/extras/journal-entries/', {
+    assigned_object_type: 'dcim.device',
+    assigned_object_id: 1,
+    kind: 'bogus',
+  });
+  assert.equal(bad.status, 400);
 });

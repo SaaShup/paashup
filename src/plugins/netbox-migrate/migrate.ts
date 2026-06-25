@@ -66,11 +66,20 @@ export function newProgress(): Progress {
   };
 }
 
-const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+const msg = (e: unknown): string => {
+  if (e instanceof Error) {
+    // Surface a ValidationError's field detail (e.g. {"virtual_machine":["…"]}) instead
+    // of the bare "Validation failed", so migration errors are actionable.
+    const detail = (e as { detail?: unknown }).detail;
+    if (detail && typeof detail === 'object') return `${e.message}: ${JSON.stringify(detail)}`;
+    return e.message;
+  }
+  return String(e);
+};
 const modelMap = (): Map<string, TableMeta> => new Map(allTables().map((m) => [m.model, m]));
 
-/** Topologically order the selected core entities so FK targets come first. */
-function orderedEntities(only?: Set<string>): TableMeta[] {
+/** Topologically order the selected core entities so REQUIRED FK targets come first. */
+export function orderedEntities(only?: Set<string>): TableMeta[] {
   // Default scope is core entities; an explicit `only` may also target plugin entities
   // (e.g. plugin_docker_host) when the source NetBox has that plugin installed.
   const all = only
@@ -83,7 +92,13 @@ function orderedEntities(only?: Set<string>): TableMeta[] {
   for (const m of selected) {
     const s = new Set<string>();
     for (const c of m.columns) {
-      if (!c.references) continue;
+      // Only REQUIRED FKs constrain create order: they must exist when the row is
+      // created (e.g. a VMInterface's virtual_machine). Nullable/optional FKs are left
+      // unset at create and resolved in the link phase, so they don't constrain order —
+      // and excluding them breaks NetBox's FK cycles (most run through nullable refs like
+      // primary_ip / parent), which otherwise dump entities in registry order and can put
+      // a dependent before its required target.
+      if (!c.references || !c.required) continue;
       const t = byModel.get(c.references);
       if (t && t.table !== m.table && inSet.has(t.table)) s.add(t.table); // ignore self-refs
     }

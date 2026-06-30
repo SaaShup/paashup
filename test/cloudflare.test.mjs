@@ -143,6 +143,20 @@ test('creating a ZoneAccount imports existing A/CNAME records (MX filtered out)'
   assert.equal(cname.zone.id, zoneId); // FK brief
 });
 
+test('a ZoneAccount is filterable by ?name= (alias of zone_name) — issue #51', async () => {
+  const hit = await api('GET', '/api/plugins/cloudflare/dns/accounts/?name=example.com');
+  assert.equal(hit.status, 200, JSON.stringify(hit.body));
+  assert.equal(hit.body.count, 1);
+  assert.equal(hit.body.results[0].id, zoneId);
+  // still works via the real field name
+  const byField = await api('GET', '/api/plugins/cloudflare/dns/accounts/?zone_name=example.com');
+  assert.equal(byField.body.count, 1);
+  // and a non-match returns nothing (not a 400)
+  const miss = await api('GET', '/api/plugins/cloudflare/dns/accounts/?name=nope.example');
+  assert.equal(miss.status, 200);
+  assert.equal(miss.body.count, 0);
+});
+
 test('creating a DnsRecord suffixes the zone, calls Cloudflare, stores record_id', async () => {
   const before = cfCreated.length;
   const r = await api('POST', '/api/plugins/cloudflare/dns/records/', {

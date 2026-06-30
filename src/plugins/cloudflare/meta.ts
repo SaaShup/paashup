@@ -65,6 +65,7 @@ const zoneAccountMeta: TableMeta = {
       writable: true,
       required: true,
       maxLength: 255,
+      filterAliases: ['name'], // external integrations look the zone up by ?name= (issue #51)
     },
     {
       name: 'zone_id',

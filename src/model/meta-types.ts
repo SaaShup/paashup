@@ -62,6 +62,12 @@ export interface ColumnMeta {
   readonly arrayEnum?: readonly (string | number)[];
   /** Server-generated read-only value, e.g. "uuid" (set on create). */
   readonly auto?: string;
+  /**
+   * Extra query-param names that filter this column, in addition to its field name and
+   * the NetBox `<fk>_id` alias. E.g. a `zone_name` column with `filterAliases: ['name']`
+   * also accepts `?name=…`. Affects filtering only — not serialization or the schema.
+   */
+  readonly filterAliases?: readonly string[];
 }
 
 /** A many-to-many relation (NetBox `tags` or an explicit join-table M2M). */

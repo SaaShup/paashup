@@ -77,6 +77,9 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
       if (c.references && !this.byFilterName.has(`${c.name}_id`)) {
         this.byFilterName.set(`${c.name}_id`, c);
       }
+      for (const alias of c.filterAliases ?? []) {
+        if (!this.byFilterName.has(alias)) this.byFilterName.set(alias, c);
+      }
     }
     const exprs = [`${ident(meta.pk)} AS ${ident(meta.pk)}`];
     for (const c of meta.columns) {

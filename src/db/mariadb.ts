@@ -93,4 +93,14 @@ export class MariaDb extends MariaDbConn {
   override async close(): Promise<void> {
     await this.pool.end();
   }
+
+  /** Best-effort connection-pool stats for the metrics gauge (mysql2 internals). */
+  poolStats(): { total: number; idle: number } {
+    const core = (this.pool as unknown as { pool?: Record<string, unknown> }).pool;
+    const len = (v: unknown): number => {
+      const o = v as { length?: number; toArray?: () => unknown[] } | undefined;
+      return o?.length ?? o?.toArray?.().length ?? 0;
+    };
+    return { total: len(core?._allConnections), idle: len(core?._freeConnections) };
+  }
 }

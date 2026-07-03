@@ -16,6 +16,13 @@ import {
 } from '../auth.js';
 import { listProviders, discover } from '../oidc.js';
 import { appVersion } from '../version.js';
+import {
+  metricsEnabled,
+  metricsAuthorized,
+  metricsText,
+  metricsContentType,
+  recordHttp,
+} from '../metrics.js';
 import { matchRoute, matchAsset, fireHooks, loadedPlugins } from '../plugins/runtime.js';
 import { attachRealtime, broadcast } from '../realtime.js';
 import { dispatchWebhooks, type WebhookEventContext } from '../webhooks.js';
@@ -265,6 +272,37 @@ function pageLink(
   return `${base}${endpoint}?${q.toString()}`;
 }
 
+// Non-collection paths that are their own metric `route` label.
+const METRIC_ROUTE_EXACT = new Set([
+  '/api/schema/',
+  '/api/schema/swagger-ui/',
+  '/api/status/',
+  '/api/plugins/',
+  '/api/auth/oidc-config/',
+  '/api/auth/providers/',
+  '/api/auth/oidc/exchange/',
+  '/api/auth/session/',
+  '/api/auth/logout/',
+  '/api/users/tokens/',
+]);
+
+/**
+ * Map a request path to a low-cardinality metric `route` label — a known collection
+ * endpoint (list `/…/` or detail `/…/{id}/`), a fixed non-collection path, `static`, or
+ * `other`. Never the raw path, so ids/emails/etc. can't explode label cardinality.
+ */
+function metricRoute(rawPath: string, collections: Map<string, string>): string {
+  const p = rawPath.replace(/\/?$/, '/');
+  if (p === '/metrics/') return '/metrics';
+  if (METRIC_ROUTE_EXACT.has(p)) return p;
+  if (!rawPath.startsWith('/api/')) return 'static';
+  if (collections.has(p)) return p; // collection list
+  const coll = p.replace(/[^/]+\/$/, ''); // strip the trailing segment (an id)
+  if (collections.has(coll)) return `${coll}{id}/`; // detail
+  if (p.startsWith('/api/users/tokens/')) return '/api/users/tokens/{id}/';
+  return 'other';
+}
+
 export function createApiServer(opts: ServerOptions): http.Server {
   const { db } = opts;
   const fixedBase = opts.baseUrl?.replace(/\/$/, '');
@@ -273,8 +311,19 @@ export function createApiServer(opts: ServerOptions): http.Server {
   let schemaDoc: Record<string, unknown> | undefined;
 
   const server = http.createServer(async (req, res) => {
-    const baseUrl = fixedBase ?? `http://${req.headers.host ?? 'localhost:8000'}`;
     const method = req.method ?? 'GET';
+    // HTTP metrics: record method / normalized-route / status + duration on completion.
+    const startNs = process.hrtime.bigint();
+    res.on('finish', () => {
+      const raw = (req.url ?? '/').split('?')[0]!;
+      recordHttp(
+        method,
+        metricRoute(raw, collections),
+        res.statusCode,
+        Number(process.hrtime.bigint() - startNs) / 1e9,
+      );
+    });
+    const baseUrl = fixedBase ?? `http://${req.headers.host ?? 'localhost:8000'}`;
     try {
       const path = (req.url ?? '/').split('?')[0]!.replace(/\/?$/, '/');
 
@@ -303,6 +352,20 @@ export function createApiServer(opts: ServerOptions): http.Server {
           'node-version': process.version,
           plugins: Object.fromEntries(loadedPlugins().map((p) => [p.name, p.version])),
         });
+      }
+      // Prometheus metrics (issue #49). Default on (PB_METRICS=0 disables → 404). Exempt
+      // from the API auth gate so scrapers work; optional HTTP Basic Auth via
+      // PB_METRICS_USER / PB_METRICS_PASSWORD.
+      if (method === 'GET' && path === '/metrics/') {
+        if (!metricsEnabled()) return send(res, 404, { detail: 'Not found' });
+        if (!metricsAuthorized(req.headers.authorization)) {
+          res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="metrics"' });
+          res.end();
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': metricsContentType });
+        res.end(await metricsText());
+        return;
       }
       // Public OIDC discovery for the SPA login flow (no secrets). Back-compat shape,
       // derived from the first configured provider; the SPA prefers /api/auth/providers/.

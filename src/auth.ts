@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type { Db } from './db/types.js';
 import { oidcEnabled, verifyBearer, authorizeIdentity, exchangeCode, getProvider } from './oidc.js';
+import { recordAuth, recordLogin } from './metrics.js';
 
 export interface AuthContext {
   tokenId: number;
@@ -173,7 +174,11 @@ export async function authenticate(
   const trimmed = header?.trim();
   if (trimmed) {
     const tok = /^Token\s+(.+)$/i.exec(trimmed);
-    if (tok) return authByToken(db, tok[1]!.trim());
+    if (tok) {
+      const ctx = await authByToken(db, tok[1]!.trim());
+      recordAuth('token', !!ctx);
+      return ctx;
+    }
 
     // Machine-to-machine: a Keycloak (or other) service-account JWT presented directly.
     // The provider is selected by the token's issuer; opaque tokens (e.g. Google access
@@ -182,17 +187,28 @@ export async function authenticate(
     const bearer = /^Bearer\s+(.+)$/i.exec(trimmed);
     if (bearer && oidcEnabled()) {
       const v = await verifyBearer(bearer[1]!.trim());
-      if (!v) return null;
+      if (!v) {
+        recordAuth('oidc', false);
+        return null;
+      }
       const id = authorizeIdentity(v.provider, v.claims);
-      if ('error' in id) return null;
+      if ('error' in id) {
+        recordAuth('oidc', false);
+        return null;
+      }
       const userId = await findOrCreateUser(db, id.username, id);
+      recordAuth('oidc', true);
       return { tokenId: 0, userId, writeEnabled: id.writeEnabled };
     }
     return null; // a malformed Authorization header is not a cookie fallback case
   }
 
   const cookieKey = tokenFromCookie(cookieHeader);
-  if (cookieKey) return authByToken(db, cookieKey);
+  if (cookieKey) {
+    const ctx = await authByToken(db, cookieKey);
+    recordAuth('token', !!ctx); // session cookie carries a token key
+    return ctx;
+  }
   return null;
 }
 
@@ -235,10 +251,17 @@ export async function ssoExchange(
   args: { code: string; codeVerifier?: string; redirectUri: string },
 ): Promise<SsoSession | { error: string; status: number }> {
   const provider = getProvider(providerId);
-  if (!provider) return { error: `unknown provider "${providerId}"`, status: 400 };
+  if (!provider) {
+    recordLogin('unknown', false);
+    return { error: `unknown provider "${providerId}"`, status: 400 };
+  }
   const r = await exchangeCode(provider, args);
-  if ('error' in r) return r;
+  if ('error' in r) {
+    recordLogin(provider.id, false);
+    return r;
+  }
   const { identity } = r;
+  recordLogin(provider.id, true);
   const userId = await findOrCreateUser(db, identity.username, identity);
   const ttlHours = Number(process.env.PB_OIDC_SESSION_TTL_HOURS ?? 12);
   const expires = new Date(Date.now() + ttlHours * 3600_000).toISOString();

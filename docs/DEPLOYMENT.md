@@ -49,6 +49,31 @@ For MariaDB, run migrations separately (they are not auto-applied):
 | `PB_WEB_ROOT` | `/app/web` (image) | Directory of the built SPA to serve; unset = API only |
 | `PB_REALTIME` | on | `0` disables the `/api/ws/` change-feed |
 
+### Metrics (Prometheus)
+
+`GET /metrics` exposes Prometheus metrics (`text/plain; version=0.0.4`): default Node
+runtime metrics plus HTTP (`paas2box_http_requests_total`, `…_request_duration_seconds`),
+auth (`…_auth_attempts_total`, `…_logins_total`), and database
+(`…_db_query_duration_seconds`, `…_db_query_failures_total`, and — on MariaDB —
+`…_db_pool_connections`). The endpoint is **exempt from the API auth gate** so scrapers work.
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `PB_METRICS` | on | `0` disables the `/metrics` endpoint (returns `404`) |
+| `PB_METRICS_USER` | — | Set with `PB_METRICS_PASSWORD` to require HTTP Basic Auth on `/metrics` |
+| `PB_METRICS_PASSWORD` | — | Basic Auth password for `/metrics` (both must be set to enable the guard) |
+
+Example scrape config:
+
+```yaml
+scrape_configs:
+  - job_name: paas2box
+    static_configs:
+      - targets: ['paas2box:8000']
+    # if PB_METRICS_USER/PASSWORD are set:
+    # basic_auth: { username: prom, password: s3cret }
+```
+
 ### Authentication & bootstrap
 
 | Var | Default | Notes |

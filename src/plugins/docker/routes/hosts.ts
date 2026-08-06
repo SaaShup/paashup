@@ -108,33 +108,31 @@ const createRoute: PluginRoute = {
   },
 };
 
-const updateRoutes: PluginRoute[] = (['PUT', 'PATCH'] as const).map(
-  (method): PluginRoute => ({
-    method,
-    path: `${META.host.endpoint}{id}/`,
-    handler: async ({ db, params, body }) => {
-      const id = Number(params.id);
-      const repo = new Repository<Row>(db, getTable(T.host)!);
-      if (!(await repo.retrieve(id))) return { status: 404, body: { detail: 'Not found' } };
+const updateRoutes: PluginRoute[] = (['PUT', 'PATCH'] as const).map((method): PluginRoute => ({
+  method,
+  path: `${META.host.endpoint}{id}/`,
+  handler: async ({ db, params, body }) => {
+    const id = Number(params.id);
+    const repo = new Repository<Row>(db, getTable(T.host)!);
+    if (!(await repo.retrieve(id))) return { status: 404, body: { detail: 'Not found' } };
 
-      const data: Row = { ...((body ?? {}) as Row) };
-      // Asking the host to refresh resets its view: mark it "refreshing" and clear
-      // the resources it discovered, both before storing the change.
-      const refreshing = data.operation === 'refresh';
-      await db.transaction(async (tx) => {
-        if (refreshing) {
-          data.state = 'refreshing';
-          await purgeHostResources(tx, id);
-        }
-        await new Repository<Row>(tx, getTable(T.host)!).update(id, data);
-      });
+    const data: Row = { ...((body ?? {}) as Row) };
+    // Asking the host to refresh resets its view: mark it "refreshing" and clear
+    // the resources it discovered, both before storing the change.
+    const refreshing = data.operation === 'refresh';
+    await db.transaction(async (tx) => {
+      if (refreshing) {
+        data.state = 'refreshing';
+        await purgeHostResources(tx, id);
+      }
+      await new Repository<Row>(tx, getTable(T.host)!).update(id, data);
+    });
 
-      const out = await serializeHost(db, (await repo.retrieve(id))!);
-      emitHost(db, 'updated', id, out);
-      return { status: 200, body: out };
-    },
-  }),
-);
+    const out = await serializeHost(db, (await repo.retrieve(id))!);
+    emitHost(db, 'updated', id, out);
+    return { status: 200, body: out };
+  },
+}));
 
 const deleteRoute: PluginRoute = {
   method: 'DELETE',

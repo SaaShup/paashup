@@ -8,8 +8,7 @@ export { SqliteDb } from './sqlite.js';
 export { MariaDb, type MariaDbConfig } from './mariadb.js';
 
 export type DbConfig =
-  | { dialect: 'sqlite'; filename: string }
-  | ({ dialect: 'mariadb' } & MariaDbConfig);
+  { dialect: 'sqlite'; filename: string } | ({ dialect: 'mariadb' } & MariaDbConfig);
 
 /**
  * Wrap a Db so query/get/execute (and transaction-scoped ops) record duration + failures

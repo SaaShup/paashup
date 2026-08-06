@@ -99,85 +99,81 @@ export const recordWriteRoutes: PluginRoute[] = [
   },
   // Update (PATCH/PUT): merge the change over the current record, sync to Cloudflare,
   // then persist locally. Without this, edits would only touch the local DB.
-  ...(['PATCH', 'PUT'] as const).map(
-    (method): PluginRoute => ({
-      method,
-      path: `${META.dnsRecord.endpoint}{id}/`,
-      handler: async ({ db, params, body }) => {
-        const id = Number(params.id);
-        const cur = await db.get<{
-          record_id: string | null;
-          name: string;
-          type: string;
-          content: string;
-          ttl: number;
-          proxied: number;
-          zone_pk: number;
-          zone_name: string;
-          cf_zone_id: string;
-          token: string;
-        }>(
-          `SELECT r.record_id AS record_id, r.name AS name, r.type AS type, r.content AS content,
+  ...(['PATCH', 'PUT'] as const).map((method): PluginRoute => ({
+    method,
+    path: `${META.dnsRecord.endpoint}{id}/`,
+    handler: async ({ db, params, body }) => {
+      const id = Number(params.id);
+      const cur = await db.get<{
+        record_id: string | null;
+        name: string;
+        type: string;
+        content: string;
+        ttl: number;
+        proxied: number;
+        zone_pk: number;
+        zone_name: string;
+        cf_zone_id: string;
+        token: string;
+      }>(
+        `SELECT r.record_id AS record_id, r.name AS name, r.type AS type, r.content AS content,
                   r.ttl AS ttl, r.proxied AS proxied, r.zone_id AS zone_pk,
                   z.zone_name AS zone_name, z.zone_id AS cf_zone_id, z.token AS token
              FROM plugin_cloudflare_dnsrecord r
              JOIN plugin_cloudflare_zoneaccount z ON z.id = r.zone_id
             WHERE r.id = ?`,
-          [id],
-        );
-        if (!cur) return { status: 404, body: { detail: 'Not found' } };
+        [id],
+      );
+      if (!cur) return { status: 404, body: { detail: 'Not found' } };
 
-        const b = (body ?? {}) as Obj;
-        let name = cur.name;
-        if (b.name !== undefined) {
-          name = String(b.name);
-          if (!name.endsWith(`.${cur.zone_name}`)) name = `${name}.${cur.zone_name}`;
-        }
-        const type = b.type !== undefined ? String(b.type) : cur.type;
-        const content = b.content !== undefined ? String(b.content) : cur.content;
-        const ttl = b.ttl !== undefined ? Number(b.ttl) : Number(cur.ttl);
-        const proxied = b.proxied !== undefined ? !!b.proxied : !!cur.proxied;
+      const b = (body ?? {}) as Obj;
+      let name = cur.name;
+      if (b.name !== undefined) {
+        name = String(b.name);
+        if (!name.endsWith(`.${cur.zone_name}`)) name = `${name}.${cur.zone_name}`;
+      }
+      const type = b.type !== undefined ? String(b.type) : cur.type;
+      const content = b.content !== undefined ? String(b.content) : cur.content;
+      const ttl = b.ttl !== undefined ? Number(b.ttl) : Number(cur.ttl);
+      const proxied = b.proxied !== undefined ? !!b.proxied : !!cur.proxied;
 
-        const conflict = await db.get<{ id: number }>(
-          `SELECT id FROM plugin_cloudflare_dnsrecord
+      const conflict = await db.get<{ id: number }>(
+        `SELECT id FROM plugin_cloudflare_dnsrecord
             WHERE zone_id = ? AND name = ? AND type = ? AND proxied = ? AND id != ?`,
-          [cur.zone_pk, name, type, proxied ? 0 : 1, id],
-        );
-        if (conflict) {
-          throw new ValidationError('conflict', {
-            proxied: [
-              'A record with this name and type but the opposite "proxied" setting exists.',
-            ],
-          });
-        }
-
-        if (cur.record_id) {
-          try {
-            await updateDnsRecord({ zone_id: cur.cf_zone_id, token: cur.token }, cur.record_id, {
-              name,
-              type,
-              content,
-              ttl,
-              proxied,
-            });
-          } catch {
-            throw new ApiError(502, 'Unable to update DNS Record on Cloudflare');
-          }
-        }
-
-        const updated = await new Repository<Obj>(db, getTable(T.dnsRecord)!).update(id, {
-          name,
-          type,
-          content,
-          ttl,
-          proxied,
+        [cur.zone_pk, name, type, proxied ? 0 : 1, id],
+      );
+      if (conflict) {
+        throw new ValidationError('conflict', {
+          proxied: ['A record with this name and type but the opposite "proxied" setting exists.'],
         });
-        const out = await new Serializer(db, base()).object(T.dnsRecord, updated as Obj);
-        emit(db, 'updated', id, out);
-        return { status: 200, body: out };
-      },
-    }),
-  ),
+      }
+
+      if (cur.record_id) {
+        try {
+          await updateDnsRecord({ zone_id: cur.cf_zone_id, token: cur.token }, cur.record_id, {
+            name,
+            type,
+            content,
+            ttl,
+            proxied,
+          });
+        } catch {
+          throw new ApiError(502, 'Unable to update DNS Record on Cloudflare');
+        }
+      }
+
+      const updated = await new Repository<Obj>(db, getTable(T.dnsRecord)!).update(id, {
+        name,
+        type,
+        content,
+        ttl,
+        proxied,
+      });
+      const out = await new Serializer(db, base()).object(T.dnsRecord, updated as Obj);
+      emit(db, 'updated', id, out);
+      return { status: 200, body: out };
+    },
+  })),
   {
     method: 'DELETE',
     path: `${META.dnsRecord.endpoint}{id}/`,

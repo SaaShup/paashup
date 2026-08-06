@@ -623,3 +623,97 @@ test('host operation=refresh marks state refreshing and purges resources', async
   assert.equal(ren.body.name, 'rh2');
   assert.equal((await api('GET', `/api/plugins/docker/images/?host_id=${h.id}`)).body.count, 1);
 });
+
+test('search images/containers across multiple hosts with same tag', async () => {
+  // Create a shared tag
+  const tag = (await api('POST', '/api/extras/tags/', { name: 'SHARED', slug: 'shared' })).body;
+
+  // Create 2 hosts with the same tag
+  const host1 = (
+    await api('POST', '/api/plugins/docker/hosts/', {
+      endpoint: 'http://host1',
+      name: 'host1',
+      tags: [{ id: tag.id }],
+    })
+  ).body;
+  const host2 = (
+    await api('POST', '/api/plugins/docker/hosts/', {
+      endpoint: 'http://host2',
+      name: 'host2',
+      tags: [{ id: tag.id }],
+    })
+  ).body;
+
+  // Get registries for each host
+  const reg1 = (await api('GET', `/api/plugins/docker/hosts/${host1.id}/`)).body.registries[0].id;
+  const reg2 = (await api('GET', `/api/plugins/docker/hosts/${host2.id}/`)).body.registries[0].id;
+
+  // Create images on each host
+  const img1 = (
+    await api('POST', '/api/plugins/docker/images/', {
+      host: host1.id,
+      registry: reg1,
+      name: 'nginx',
+      version: 'v1.0.0',
+    })
+  ).body;
+  const img2 = (
+    await api('POST', '/api/plugins/docker/images/', {
+      host: host2.id,
+      registry: reg2,
+      name: 'redis',
+      version: 'v2.0.0',
+    })
+  ).body;
+
+  // Search images with multiple host_id parameters (this was causing 500 before the fix)
+  const multiHostSearch = await api(
+    'GET',
+    `/api/plugins/docker/images/?host_id=${host1.id}&host_id=${host2.id}`,
+  );
+  assert.equal(multiHostSearch.status, 200, `Expected 200 but got ${multiHostSearch.status}`);
+  assert.equal(
+    multiHostSearch.body.count,
+    2,
+    `Expected 2 images but got ${multiHostSearch.body.count}`,
+  );
+
+  // Create containers on each host
+  const cont1 = (
+    await api('POST', '/api/plugins/docker/containers/', {
+      host: host1.id,
+      image: img1.id,
+      name: 'web',
+    })
+  ).body;
+  const cont2 = (
+    await api('POST', '/api/plugins/docker/containers/', {
+      host: host2.id,
+      image: img2.id,
+      name: 'cache',
+    })
+  ).body;
+
+  // Search containers with multiple host_id parameters
+  const multiHostContainers = await api(
+    'GET',
+    `/api/plugins/docker/containers/?host_id=${host1.id}&host_id=${host2.id}`,
+  );
+  assert.equal(
+    multiHostContainers.status,
+    200,
+    `Expected 200 but got ${multiHostContainers.status}`,
+  );
+  assert.equal(
+    multiHostContainers.body.count,
+    2,
+    `Expected 2 containers but got ${multiHostContainers.body.count}`,
+  );
+
+  // Verify the results contain the correct hosts
+  const imageIds = multiHostSearch.body.results.map((img) => img.id).sort();
+  assert.deepEqual(imageIds, [img1.id, img2.id].sort());
+
+  const containerIds = multiHostContainers.body.results.map((c) => c.id).sort();
+  assert.deepEqual(containerIds, [cont1.id, cont2.id].sort());
+});

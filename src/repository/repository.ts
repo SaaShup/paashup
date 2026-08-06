@@ -265,7 +265,8 @@ export class Repository<TRow, TCreate = Partial<TRow>, TUpdate = Partial<TCreate
           : this.byFilterName.get(name);
       if (!col) throw new ApiError(400, `Unknown filter field "${name}" for ${this.meta.model}`);
       const c = ident(col.column);
-      switch (lookup) {
+      const effectiveLookup = lookup === '' && Array.isArray(value) ? 'in' : lookup;
+      switch (effectiveLookup) {
         case '':
           if (value === null) clauses.push(`${c} IS NULL`);
           else {

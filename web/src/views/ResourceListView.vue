@@ -44,6 +44,10 @@ const resource = computed(() => ui.selected!);
 const slot = computed(() => (resource.value ? objects.byTable[resource.value.table] : undefined));
 const isContainer = computed(() => resource.value?.table === 'plugin_docker_container');
 const isHost = computed(() => resource.value?.table === 'plugin_docker_host');
+// Keycloak hierarchy: Server → Realms → Clients → Redirect URLs (same UX as Host → Containers)
+const isKcServer = computed(() => resource.value?.table === 'plugin_keycloak_server');
+const isKcRealm = computed(() => resource.value?.table === 'plugin_keycloak_realm');
+const isKcClient = computed(() => resource.value?.table === 'plugin_keycloak_client');
 // Tables that expose row selection + a bulk-operation toolbar (containers / hosts).
 const opButtons = computed(() =>
   isContainer.value ? CONTAINER_OP_BTNS : isHost.value ? HOST_OP_BTNS : [],
@@ -188,6 +192,18 @@ function onAction(row: Obj) {
     // jump to the Containers list, pre-filtered to this host
     const containers = ui.resources.find((r) => r.table === 'plugin_docker_container');
     if (containers) ui.openResourceFiltered(containers, { host: String(id) });
+  } else if (isKcServer.value) {
+    // jump to the Realms list, pre-filtered to this Keycloak server
+    const realms = ui.resources.find((r) => r.table === 'plugin_keycloak_realm');
+    if (realms) ui.openResourceFiltered(realms, { server: String(id) });
+  } else if (isKcRealm.value) {
+    // jump to the Clients list, pre-filtered to this realm
+    const clients = ui.resources.find((r) => r.table === 'plugin_keycloak_client');
+    if (clients) ui.openResourceFiltered(clients, { realm: String(id) });
+  } else if (isKcClient.value) {
+    // jump to the Redirect URLs list, pre-filtered to this client
+    const urls = ui.resources.find((r) => r.table === 'plugin_keycloak_redirect_url');
+    if (urls) ui.openResourceFiltered(urls, { client: String(id) });
   } else {
     addrRange.value = row; // IP range → addresses
   }
@@ -267,9 +283,15 @@ function onAction(row: Obj) {
             ? 'View'
             : isHost
               ? 'Containers'
-              : resource.table === 'ipam_iprange'
-                ? 'IPs'
-                : undefined
+              : isKcServer
+                ? 'Realms'
+                : isKcRealm
+                  ? 'Clients'
+                  : isKcClient
+                    ? 'Redirect URLs'
+                    : resource.table === 'ipam_iprange'
+                      ? 'IPs'
+                      : undefined
         "
         :selectable="selectable"
         :selected="selectedIds"

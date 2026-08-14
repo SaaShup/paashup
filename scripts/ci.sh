@@ -70,15 +70,20 @@ if wants build; then
     banner "docker image"
     if run docker build -t paas2box:ci-local .; then
       docker rm -f paas2box-ci-app >/dev/null 2>&1 || true
-      docker run -d --name paas2box-ci-app -e PB_MIGRATE=1 -p 18000:8000 paas2box:ci-local >/dev/null
+      # The image is secure by default (PB_AUTH_REQUIRED=1): seed a token on boot
+      # and authenticate the smoke calls — same approach as the GitHub workflow.
+      CI_TOKEN=$(head -c 20 /dev/urandom | od -An -tx1 | tr -d ' \n')
+      docker run -d --name paas2box-ci-app -e PB_MIGRATE=1 -e PB_SEED_TOKEN="$CI_TOKEN" \
+        -p 18000:8000 paas2box:ci-local >/dev/null
+      auth="Authorization: Token $CI_TOKEN"
       ok=""
       for _ in $(seq 1 30); do
-        [ "$(curl -s -o /dev/null -w '%{http_code}' localhost:18000/api/dcim/manufacturers/ 2>/dev/null)" = "200" ] && { ok=1; break; }
+        [ "$(curl -s -o /dev/null -w '%{http_code}' -H "$auth" localhost:18000/api/dcim/manufacturers/ 2>/dev/null)" = "200" ] && { ok=1; break; }
         sleep 1
       done
       if [ -n "$ok" ] \
-        && curl -sf -X POST localhost:18000/api/dcim/manufacturers/ -H 'Content-Type: application/json' -d '{"name":"Acme","slug":"acme"}' >/dev/null \
-        && curl -sf 'localhost:18000/api/dcim/manufacturers/?limit=1' | grep -q '"count":1'; then
+        && curl -sf -X POST localhost:18000/api/dcim/manufacturers/ -H "$auth" -H 'Content-Type: application/json' -d '{"name":"Acme","slug":"acme"}' >/dev/null \
+        && curl -sf -H "$auth" 'localhost:18000/api/dcim/manufacturers/?limit=1' | grep -q '"count":1'; then
         pass "docker-image"
       else
         docker logs paas2box-ci-app 2>&1 | tail -20; fail "docker-image"

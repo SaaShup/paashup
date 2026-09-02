@@ -2,7 +2,17 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { useUiStore } from '../stores/ui.js';
 import { api, type Obj } from '../api/client.js';
-import { CONTAINER_COLLECTIONS, CONTAINER_SCALARS, scalarText, rowsOf } from './containerDetail.js';
+import {
+  CONTAINER_COLLECTIONS,
+  CONTAINER_SCALARS,
+  scalarText,
+  rowsOf,
+  draftRows,
+  blankRow,
+  collectionPayload,
+  type CollectionDef,
+  type DraftRow,
+} from './containerDetail.js';
 import CollectionTable from '../components/CollectionTable.vue';
 import ObjectForm from '../components/ObjectForm.vue';
 
@@ -23,48 +33,85 @@ const scalars = computed(() =>
 const rows = (field: string): Obj[] => (container.value ? rowsOf(container.value, field) : []);
 const writable = computed(() => !!resource.value?.writable);
 
-// Editable Environment variables. They're the container's `env` child collection: a
-// PATCH with the full `env` array replaces it (see routes/containers.ts), so add/edit/
-// delete all work by sending the edited array.
-interface EnvRow {
-  var_name: string;
-  value: string;
-}
-const envDraft = ref<EnvRow[]>([]);
-const envDirty = ref(false);
-const envSaving = ref(false);
+// Editable collections. Each is a child collection of the container: a PATCH with the
+// full array replaces it (see routes/containers.ts), so add/edit/delete all work by
+// sending the edited array.
+const drafts = ref<Record<string, DraftRow[]>>({});
+const dirty = ref<Record<string, boolean>>({});
+const savingField = ref<string | null>(null);
+/** FK picker options per target table (volumes / networks of this host). */
+const fkOptions = ref<Record<string, { id: number; display: string }[]>>({});
 
-function initEnv() {
-  envDraft.value = rows('env').map((r) => ({
-    var_name: String((r as Record<string, unknown>).var_name ?? ''),
-    value: String((r as Record<string, unknown>).value ?? ''),
-  }));
-  envDirty.value = false;
+function addFkOption(table: string, opt: { id: number; display: string }) {
+  const list = (fkOptions.value[table] ??= []);
+  if (!list.some((o) => o.id === opt.id)) list.push(opt);
 }
-function addEnv() {
-  envDraft.value.push({ var_name: '', value: '' });
-  envDirty.value = true;
+
+function initDraft(c: CollectionDef) {
+  drafts.value[c.field] = container.value ? draftRows(container.value, c) : [];
+  dirty.value[c.field] = false;
 }
-function removeEnv(i: number) {
-  envDraft.value.splice(i, 1);
-  envDirty.value = true;
+
+function initDrafts() {
+  fkOptions.value = {};
+  for (const c of CONTAINER_COLLECTIONS) {
+    initDraft(c);
+    for (const col of c.columns) {
+      if (!col.fkTable) continue;
+      for (const r of rows(c.field)) {
+        const v = (r as Record<string, unknown>)[col.key];
+        if (v && typeof v === 'object' && (v as { id?: number }).id != null) {
+          addFkOption(col.fkTable, { id: (v as { id: number }).id, display: scalarText(v) });
+        }
+      }
+    }
+  }
 }
-async function saveEnv() {
+
+/** Load the host's volumes/networks. */
+async function loadFkOptions() {
+  const hostId = (host.value as { id?: number } | null)?.id;
+  if (hostId == null) return;
+  const tables = new Set<string>();
+  for (const c of CONTAINER_COLLECTIONS)
+    for (const col of c.columns) if (col.fkTable) tables.add(col.fkTable);
+  for (const table of tables) {
+    const r = ui.resources.find((x) => x.table === table);
+    if (!r) continue;
+    try {
+      const page = await api.list(r.endpoint, { host: String(hostId), limit: 200 });
+      for (const o of page.results) {
+        const row = o as { id: number; display?: unknown; name?: unknown };
+        addFkOption(table, { id: row.id, display: String(row.display ?? row.name ?? row.id) });
+      }
+    } catch {
+      /* picker keeps only the seeded current values */
+    }
+  }
+}
+
+function addRow(c: CollectionDef) {
+  (drafts.value[c.field] ??= []).push(blankRow(c));
+  dirty.value[c.field] = true;
+}
+function removeRow(c: CollectionDef, i: number) {
+  drafts.value[c.field]?.splice(i, 1);
+  dirty.value[c.field] = true;
+}
+async function saveCollection(c: CollectionDef) {
   const r = resource.value;
   const id = ui.detailId;
   if (!r || id == null) return;
-  const env = envDraft.value
-    .map((e) => ({ var_name: e.var_name.trim(), value: e.value }))
-    .filter((e) => e.var_name);
-  envSaving.value = true;
+  savingField.value = c.field;
   error.value = '';
   try {
-    await api.update(r.endpoint, id, { env }); // replaces the env collection
-    await load(); // re-fetch (re-inits the draft)
+    // replaces this one child collection
+    await api.update(r.endpoint, id, { [c.field]: collectionPayload(c, drafts.value[c.field] ?? []) });
+    await load(); // re-fetch (re-inits the drafts)
   } catch (e) {
     error.value = String(e);
   } finally {
-    envSaving.value = false;
+    savingField.value = null;
   }
 }
 
@@ -76,7 +123,8 @@ async function load() {
   error.value = '';
   try {
     container.value = await api.retrieve<Obj>(r.endpoint, id);
-    initEnv();
+    initDrafts();
+    void loadFkOptions();
   } catch (e) {
     error.value = String(e);
   } finally {
@@ -139,38 +187,76 @@ async function onSaved() {
         </div>
       </section>
 
-      <!-- attached collections (env is editable when the container is writable) -->
+      <!-- attached collections (all editable in place when the container is writable) -->
       <template v-for="c in CONTAINER_COLLECTIONS" :key="c.field">
-        <section v-if="c.field === 'env' && writable" class="collection env-editor">
+        <section v-if="writable" class="collection editor">
           <h4>
             {{ c.title }}
-            <span class="n">{{ envDraft.length }}</span>
+            <span class="n">{{ (drafts[c.field] ?? []).length }}</span>
             <span class="spacer" />
-            <button class="btn btn-ghost sm" @click="addEnv">+ Add</button>
-            <button class="btn btn-ok sm" :disabled="!envDirty || envSaving" @click="saveEnv">
-              {{ envSaving ? 'Saving…' : 'Save' }}
+            <button class="btn btn-ghost sm" @click="addRow(c)">+ Add</button>
+            <button
+              class="btn btn-ok sm"
+              :disabled="!dirty[c.field] || savingField === c.field"
+              @click="saveCollection(c)"
+            >
+              {{ savingField === c.field ? 'Saving…' : 'Save' }}
             </button>
-            <button class="btn btn-ghost sm" :disabled="!envDirty || envSaving" @click="initEnv">
+            <button
+              class="btn btn-ghost sm"
+              :disabled="!dirty[c.field] || savingField === c.field"
+              @click="initDraft(c)"
+            >
               Discard
             </button>
           </h4>
-          <p v-if="!envDraft.length" class="empty">{{ c.empty }}</p>
-          <table v-else class="env-table">
+          <p v-if="!(drafts[c.field] ?? []).length" class="empty">{{ c.empty }}</p>
+          <table v-else class="edit-table">
             <thead>
               <tr>
-                <th>Variable</th>
-                <th>Value</th>
+                <th v-for="col in c.columns" :key="col.key" :class="{ req: col.required }">
+                  {{ col.label }}
+                </th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(row, i) in envDraft" :key="i">
-                <td>
-                  <input v-model="row.var_name" placeholder="VAR_NAME" @input="envDirty = true" />
+              <tr v-for="(row, i) in drafts[c.field]" :key="i">
+                <td v-for="col in c.columns" :key="col.key" :class="{ tight: col.bool }">
+                  <select
+                    v-if="col.fkTable"
+                    v-model="row[col.key]"
+                    @change="dirty[c.field] = true"
+                  >
+                    <option value="">—</option>
+                    <option v-for="o in fkOptions[col.fkTable] ?? []" :key="o.id" :value="o.id">
+                      {{ o.display }}
+                    </option>
+                  </select>
+                  <select
+                    v-else-if="col.choices"
+                    v-model="row[col.key]"
+                    @change="dirty[c.field] = true"
+                  >
+                    <option value="">—</option>
+                    <option v-for="ch in col.choices" :key="ch" :value="ch">{{ ch }}</option>
+                  </select>
+                  <input
+                    v-else-if="col.bool"
+                    type="checkbox"
+                    v-model="row[col.key]"
+                    @change="dirty[c.field] = true"
+                  />
+                  <input
+                    v-else
+                    :type="col.num ? 'number' : 'text'"
+                    v-model="row[col.key]"
+                    :placeholder="col.label"
+                    @input="dirty[c.field] = true"
+                  />
                 </td>
-                <td><input v-model="row.value" placeholder="value" @input="envDirty = true" /></td>
                 <td>
-                  <button class="btn btn-ghost sm danger" title="Remove" @click="removeEnv(i)">
+                  <button class="btn btn-ghost sm danger" title="Remove" @click="removeRow(c, i)">
                     ✕
                   </button>
                 </td>
@@ -255,28 +341,28 @@ async function onSaved() {
 .link:hover {
   text-decoration: underline;
 }
-/* editable Environment variables section */
-.env-editor {
+/* inline collection editors (env, labels, mounts, networks, binds, ports, …) */
+.editor {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px 14px;
   margin-bottom: 14px;
 }
-.env-editor h4 {
+.editor h4 {
   display: flex;
   align-items: center;
   gap: 8px;
   margin: 0 0 10px;
 }
-.env-editor .n {
+.editor .n {
   font-size: 0.8rem;
   color: var(--muted);
 }
-.env-editor .spacer {
+.editor .spacer {
   flex: 1;
 }
-.env-editor .empty {
+.editor .empty {
   color: var(--muted);
   margin: 4px 0 0;
 }
@@ -287,25 +373,32 @@ async function onSaved() {
 .btn.danger {
   color: var(--danger);
 }
-.env-table {
+.edit-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.9rem;
 }
-.env-table th,
-.env-table td {
+.edit-table th,
+.edit-table td {
   text-align: left;
   padding: 4px 8px 4px 0;
 }
-.env-table input {
+.edit-table th.req::after {
+  content: ' *';
+  color: var(--danger);
+}
+.edit-table input:not([type='checkbox']),
+.edit-table select {
   width: 100%;
   box-sizing: border-box;
   padding: 5px 7px;
   border: 1px solid var(--border);
   border-radius: 5px;
   font: inherit;
+  background: #fff;
 }
-.env-table td:last-child {
+.edit-table td.tight,
+.edit-table td:last-child {
   width: 1%;
   white-space: nowrap;
 }

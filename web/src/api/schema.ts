@@ -14,7 +14,8 @@ export type FieldKind =
   | 'multiselect'
   | 'fk'
   | 'json'
-  | 'iplist';
+  | 'iplist'
+  | 'tags';
 
 export interface FieldDef {
   name: string;
@@ -49,12 +50,15 @@ export async function formFields(model: string): Promise<FieldDef[]> {
     if (raw['x-form-hidden']) continue; // writable via API but not a user input (e.g. agent-set ImageID)
     const p = raw.allOf ? { ...raw.allOf[0], nullable: raw.nullable } : raw;
     const briefRef = refName(read?.properties?.[name]);
+    const itemsRef = refName(read?.properties?.[name]?.items);
     let kind: FieldKind = 'text';
     let choices: (string | number)[] | undefined;
     let targetModel: string | undefined;
     if (briefRef?.endsWith('Brief')) {
       kind = 'fk';
       targetModel = briefRef.slice(0, -'Brief'.length);
+    } else if (itemsRef === 'TagBrief') {
+      kind = 'tags';
     } else if (p.enum) {
       kind = 'select';
       choices = p.enum;

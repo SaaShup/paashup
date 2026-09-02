@@ -9,6 +9,8 @@ import ObjectForm from '../components/ObjectForm.vue';
 import IpRangeAddresses from '../components/IpRangeAddresses.vue';
 
 const PAGE = 50;
+// Log-like tables (journal entries, event/log feeds) read newest-first.
+const NEWEST_FIRST = /journal|log/;
 // Docker container lifecycle ops — PATCH each *selected* container's `operation`, which
 // fires the agent webhook (the agent performs the real action). The toolbar buttons act
 // on the rows checked in the table. Colour-coded by intent: start=green, restart=amber,
@@ -82,6 +84,7 @@ async function load() {
     await objects.load(resource.value.table, resource.value.endpoint, {
       limit: PAGE,
       offset: offset.value,
+      ...(NEWEST_FIRST.test(resource.value.table) ? { ordering: '-id' } : {}),
       ...(search.value ? { q: search.value } : {}),
       ...filters.value, // active per-column filters (empty selections are removed)
     });

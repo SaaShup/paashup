@@ -23,6 +23,7 @@ socket.on((event) => {
     connection.record(event);
     objects.applyChange(event);
     ui.bumpCount(event); // keep sidebar item counts live
+    void ui.resyncCountsAfterBulkChange(event); // resync counts on refresh host
   }
 });
 socket.connect();

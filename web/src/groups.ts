@@ -69,6 +69,7 @@ const SECTION_GROUPS: Record<string, SubGroup[]> = {
   extras: [
     { label: 'Tags', match: ['tag'] },
     { label: 'Webhooks', match: ['webhook'] },
+    { label: 'Logs', match: ['journal'] },
     { label: 'Config', match: ['config'] },
   ],
 };
@@ -80,7 +81,7 @@ const HIDDEN_SECTIONS = new Set(['vpn', 'wireless']);
 export const isHiddenSection = (section: string): boolean => HIDDEN_SECTIONS.has(section);
 
 // Plugins promoted to their own top-level menu section (instead of nesting under PLUGINS).
-const PROMOTED_PLUGINS = new Set(['docker']);
+const PROMOTED_PLUGINS = new Set(['docker', 'keycloak', 'cloudflare']);
 
 /** Plugin name from a /api/plugins/<name>/… endpoint. */
 export function pluginNameOf(endpoint: string): string {
@@ -93,7 +94,7 @@ export function effectiveSection(section: string, pluginName: string): string {
 }
 
 // Section display order (listed sections come first, in this order) + label overrides.
-const SECTION_ORDER = ['extras', 'docker', 'plugins'];
+const SECTION_ORDER = ['extras', 'docker', 'cloudflare', 'keycloak', 'plugins'];
 const SECTION_LABELS: Record<string, string> = { extras: 'OPERATIONS' };
 
 export function sectionLabel(section: string): string {

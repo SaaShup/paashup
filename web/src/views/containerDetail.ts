@@ -12,6 +12,14 @@ export interface CollectionColumn {
   fk?: boolean;
   /** Boolean column (rendered as ✓ / ✗). */
   bool?: boolean;
+  /** Required on write. */
+  required?: boolean;
+  /** Numeric input (sent as a number). */
+  num?: boolean;
+  /** FK picker: options are this table's rows, scoped to the container's host. */
+  fkTable?: string;
+  /** Fixed-choice select. */
+  choices?: string[];
 }
 
 export interface CollectionDef {
@@ -30,7 +38,7 @@ export const CONTAINER_COLLECTIONS: CollectionDef[] = [
     title: 'Environment variables',
     empty: 'No environment variables',
     columns: [
-      { key: 'var_name', label: 'Variable' },
+      { key: 'var_name', label: 'Variable', required: true },
       { key: 'value', label: 'Value' },
     ],
   },
@@ -39,7 +47,7 @@ export const CONTAINER_COLLECTIONS: CollectionDef[] = [
     title: 'Labels',
     empty: 'No labels',
     columns: [
-      { key: 'key', label: 'Key' },
+      { key: 'key', label: 'Key', required: true },
       { key: 'value', label: 'Value' },
     ],
   },
@@ -48,8 +56,8 @@ export const CONTAINER_COLLECTIONS: CollectionDef[] = [
     title: 'Mount volumes',
     empty: 'No mount volumes',
     columns: [
-      { key: 'source', label: 'Source' },
-      { key: 'volume', label: 'Volume', fk: true },
+      { key: 'source', label: 'Source', required: true },
+      { key: 'volume', label: 'Volume', fk: true, fkTable: 'plugin_docker_volume', required: true },
       { key: 'read_only', label: 'Read-only', bool: true },
     ],
   },
@@ -57,15 +65,23 @@ export const CONTAINER_COLLECTIONS: CollectionDef[] = [
     field: 'network_settings',
     title: 'Network settings',
     empty: 'No network settings',
-    columns: [{ key: 'network', label: 'Network', fk: true }],
+    columns: [
+      {
+        key: 'network',
+        label: 'Network',
+        fk: true,
+        fkTable: 'plugin_docker_network',
+        required: true,
+      },
+    ],
   },
   {
     field: 'binds',
     title: 'Binds',
     empty: 'No binds',
     columns: [
-      { key: 'host_path', label: 'Host path' },
-      { key: 'container_path', label: 'Container path' },
+      { key: 'host_path', label: 'Host path', required: true },
+      { key: 'container_path', label: 'Container path', required: true },
       { key: 'read_only', label: 'Read-only', bool: true },
     ],
   },
@@ -74,7 +90,7 @@ export const CONTAINER_COLLECTIONS: CollectionDef[] = [
     title: 'Log driver options',
     empty: 'No log driver options',
     columns: [
-      { key: 'option_name', label: 'Option' },
+      { key: 'option_name', label: 'Option', required: true },
       { key: 'value', label: 'Value' },
     ],
   },
@@ -83,7 +99,7 @@ export const CONTAINER_COLLECTIONS: CollectionDef[] = [
     title: 'Sysctls',
     empty: 'No sysctls',
     columns: [
-      { key: 'key', label: 'Key' },
+      { key: 'key', label: 'Key', required: true },
       { key: 'value', label: 'Value' },
     ],
   },
@@ -92,8 +108,8 @@ export const CONTAINER_COLLECTIONS: CollectionDef[] = [
     title: 'Devices',
     empty: 'No devices',
     columns: [
-      { key: 'host_path', label: 'Host path' },
-      { key: 'container_path', label: 'Container path' },
+      { key: 'host_path', label: 'Host path', required: true },
+      { key: 'container_path', label: 'Container path', required: true },
     ],
   },
   {
@@ -101,9 +117,9 @@ export const CONTAINER_COLLECTIONS: CollectionDef[] = [
     title: 'Port mappings',
     empty: 'No port mappings',
     columns: [
-      { key: 'public_port', label: 'Public' },
-      { key: 'private_port', label: 'Private' },
-      { key: 'type', label: 'Type' },
+      { key: 'public_port', label: 'Public', num: true, required: true },
+      { key: 'private_port', label: 'Private', num: true, required: true },
+      { key: 'type', label: 'Type', choices: ['tcp', 'udp', 'sctp'] },
     ],
   },
 ];
@@ -151,4 +167,57 @@ export function cellText(value: unknown, col: CollectionColumn): string {
 export function rowsOf(container: Obj, field: string): Obj[] {
   const v = (container as Record<string, unknown>)[field];
   return Array.isArray(v) ? (v as Obj[]) : [];
+}
+
+export type DraftRow = Record<string, unknown>;
+
+/** Editable draft rows for one collection. */
+export function draftRows(container: Obj, c: CollectionDef): DraftRow[] {
+  return rowsOf(container, c.field).map((r) => {
+    const row: DraftRow = {};
+    for (const col of c.columns) {
+      const v = (r as Record<string, unknown>)[col.key];
+      if (col.bool) row[col.key] = !!v;
+      else if (col.fk) row[col.key] = v && typeof v === 'object' ? ((v as { id?: number }).id ?? '') : (v ?? '');
+      else row[col.key] = v ?? '';
+    }
+    return row;
+  });
+}
+
+/** A fresh, empty draft row for the "+ Add" button. */
+export function blankRow(c: CollectionDef): DraftRow {
+  const row: DraftRow = {};
+  for (const col of c.columns) row[col.key] = col.bool ? false : '';
+  return row;
+}
+
+/**
+ * The PATCH payload for one collection.
+ */
+export function collectionPayload(c: CollectionDef, drafts: DraftRow[]): Obj[] {
+  const out: Obj[] = [];
+  for (const r of drafts) {
+    const o: Obj = {};
+    let hasData = false;
+    for (const col of c.columns) {
+      const v = r[col.key];
+      if (col.bool) {
+        o[col.key] = !!v;
+        continue;
+      }
+      if (v === '' || v === null || v === undefined) continue;
+      if (col.fk || col.num) {
+        o[col.key] = Number(v);
+        hasData = true;
+      } else {
+        const s = String(v).trim();
+        if (!s) continue;
+        o[col.key] = s;
+        hasData = true;
+      }
+    }
+    if (hasData) out.push(o);
+  }
+  return out;
 }

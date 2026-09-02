@@ -4,7 +4,17 @@ import { setActivePinia, createPinia } from 'pinia';
 import { api } from '../src/api/client';
 import { useUiStore } from '../src/stores/ui';
 import ContainerDetailView from '../src/views/ContainerDetailView.vue';
-import { scalarText, cellText, rowsOf, CONTAINER_COLLECTIONS } from '../src/views/containerDetail';
+import {
+  scalarText,
+  cellText,
+  rowsOf,
+  CONTAINER_COLLECTIONS,
+  draftRows,
+  blankRow,
+  collectionPayload,
+} from '../src/views/containerDetail';
+
+const collection = (field: string) => CONTAINER_COLLECTIONS.find((c) => c.field === field)!;
 
 // A representative GET /containers/{id}/ payload (host/image briefs + the nine child arrays;
 // some collections deliberately empty). Mirrors serialize.ts output.
@@ -73,6 +83,28 @@ describe('containerDetail helpers', () => {
       'sysctls',
     ]);
   });
+
+  it('draftRows flattens FK briefs to ids and coerces booleans', () => {
+    expect(draftRows(fixture, collection('mounts'))).toEqual([
+      { source: '/data', volume: 5, read_only: true },
+    ]);
+    expect(draftRows(fixture, collection('ports'))).toEqual([
+      { public_port: 8080, private_port: 80, type: 'tcp' },
+    ]);
+  });
+
+  it('collectionPayload converts numbers/FKs, trims, and drops empty rows', () => {
+    const ports = collection('ports');
+    expect(collectionPayload(ports, [{ public_port: '8081', private_port: '81', type: '' }])).toEqual(
+      [{ public_port: 8081, private_port: 81 }], 
+    );
+    expect(collectionPayload(ports, [blankRow(ports)])).toEqual([]);
+    const mounts = collection('mounts');
+    expect(
+      collectionPayload(mounts, [{ source: ' /data ', volume: 5, read_only: false }]),
+    ).toEqual([{ source: '/data', volume: 5, read_only: false }]);
+    expect(collectionPayload(mounts, [blankRow(mounts)])).toEqual([]); 
+  });
 });
 
 function mountDetail() {
@@ -139,17 +171,26 @@ describe('ContainerDetailView', () => {
     expect(t).toContain('net1'); // network FK
   });
 
-  it('renders each non-empty collection row', async () => {
+  const editorOf = (w: ReturnType<typeof mountDetail>, field: string) =>
+    w.findAll('section.editor')[CONTAINER_COLLECTIONS.findIndex((c) => c.field === field)]!;
+
+  it('renders every collection as an inline editor with the row values', async () => {
     const w = mountDetail();
     await flushPromises();
-    const t = w.text();
-    // env is an inline editor for writable containers → values live in inputs, not text
-    const inputs = w.findAll('.env-table input').map((i) => (i.element as HTMLInputElement).value);
-    expect(inputs).toContain('FOO'); // env var_name
-    expect(inputs).toContain('bar'); // env value
-    expect(t).toContain('8080'); // port public
-    expect(t).toContain('tcp'); // port type
-    expect(t).toContain('✓'); // mount read_only = true
+    expect(w.findAll('section.editor')).toHaveLength(CONTAINER_COLLECTIONS.length);
+    const inputVals = (field: string) =>
+      editorOf(w, field)
+        .findAll('input')
+        .map((i) => (i.element as HTMLInputElement).value);
+    expect(inputVals('env')).toEqual(['FOO', 'bar']);
+    expect(inputVals('ports')).toEqual(['8080', '80']);
+    const typeSel = editorOf(w, 'ports').find('select');
+    expect((typeSel.element as HTMLSelectElement).value).toBe('tcp');
+    const volSel = editorOf(w, 'mounts').find('select');
+    expect((volSel.element as HTMLSelectElement).value).toBe('5');
+    expect(volSel.text()).toContain('vol1');
+    const ro = editorOf(w, 'mounts').find('input[type="checkbox"]');
+    expect((ro.element as HTMLInputElement).checked).toBe(true);
   });
 
   it('env editor: Save PATCHes the container with the edited env array', async () => {
@@ -157,14 +198,68 @@ describe('ContainerDetailView', () => {
     const w = mountDetail();
     await flushPromises();
     // edit the value of the one existing env row, then Save
-    const inputs = w.findAll('.env-table input');
-    await inputs[1]!.setValue('baz');
-    const save = w.findAll('button').find((b) => b.text() === 'Save')!;
+    const env = editorOf(w, 'env');
+    await env.findAll('input')[1]!.setValue('baz');
+    const save = env.findAll('button').find((b) => b.text() === 'Save')!;
     await save.trigger('click');
     await flushPromises();
     expect(update).toHaveBeenCalledWith('/api/plugins/docker/containers/', 1, {
       env: [{ var_name: 'FOO', value: 'baz' }],
     });
+  });
+
+  it('ports editor: added row is sent with numeric ports', async () => {
+    const update = vi.spyOn(api, 'update').mockResolvedValue(fixture as never);
+    const w = mountDetail();
+    await flushPromises();
+    const ports = editorOf(w, 'ports');
+    await ports.findAll('button').find((b) => b.text() === '+ Add')!.trigger('click');
+    const inputs = ports.findAll('input');
+    await inputs[2]!.setValue('9090'); 
+    await inputs[3]!.setValue('90'); 
+    await ports.findAll('button').find((b) => b.text() === 'Save')!.trigger('click');
+    await flushPromises();
+    expect(update).toHaveBeenCalledWith('/api/plugins/docker/containers/', 1, {
+      ports: [
+        { public_port: 8080, private_port: 80, type: 'tcp' },
+        { public_port: 9090, private_port: 90 },
+      ],
+    });
+  });
+
+  it('mounts editor: FK id and toggled checkbox are sent typed', async () => {
+    const update = vi.spyOn(api, 'update').mockResolvedValue(fixture as never);
+    const w = mountDetail();
+    await flushPromises();
+    const mounts = editorOf(w, 'mounts');
+    await mounts.find('input[type="checkbox"]').setValue(false); // read_only: true → false
+    await mounts.findAll('button').find((b) => b.text() === 'Save')!.trigger('click');
+    await flushPromises();
+    expect(update).toHaveBeenCalledWith('/api/plugins/docker/containers/', 1, {
+      mounts: [{ source: '/data', volume: 5, read_only: false }], // volume = number, not brief
+    });
+  });
+
+  it('removing a row saves the shortened array', async () => {
+    const update = vi.spyOn(api, 'update').mockResolvedValue(fixture as never);
+    const w = mountDetail();
+    await flushPromises();
+    const env = editorOf(w, 'env');
+    await env.findAll('button').find((b) => b.text() === '✕')!.trigger('click');
+    await env.findAll('button').find((b) => b.text() === 'Save')!.trigger('click');
+    await flushPromises();
+    expect(update).toHaveBeenCalledWith('/api/plugins/docker/containers/', 1, { env: [] });
+  });
+
+  it('Discard resets the draft and disables Save again', async () => {
+    const w = mountDetail();
+    await flushPromises();
+    const env = editorOf(w, 'env');
+    await env.findAll('input')[1]!.setValue('changed');
+    await env.findAll('button').find((b) => b.text() === 'Discard')!.trigger('click');
+    expect((env.findAll('input')[1]!.element as HTMLInputElement).value).toBe('bar');
+    const save = env.findAll('button').find((b) => b.text() === 'Save')!;
+    expect(save.attributes('disabled')).toBeDefined();
   });
 
   it('shows an empty state for empty collections', async () => {

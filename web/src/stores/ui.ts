@@ -138,5 +138,19 @@ export const useUiStore = defineStore('ui', {
       if (e.event === 'created') this.counts[e.table] += 1;
       else if (e.event === 'deleted') this.counts[e.table] = Math.max(0, this.counts[e.table] - 1);
     },
+    /**
+     * A Docker host change state re-fetch the real counts
+     */
+    resyncCountsAfterBulkChange(e: ChangeEvent): Promise<void> | undefined {
+      if (e.table !== 'plugin_docker_host') return;
+      const refreshing =
+        e.event === 'updated' &&
+        (e.data as { state?: unknown } | undefined)?.state === 'refreshing';
+      if (!refreshing && e.event !== 'deleted') return;
+      const affected = this.resources.filter(
+        (r) => r.table.startsWith('plugin_docker_') && r.table !== 'plugin_docker_host',
+      );
+      return this.loadCounts(affected, true);
+    },
   },
 });

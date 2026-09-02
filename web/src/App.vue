@@ -3,6 +3,7 @@ import { onMounted, ref, computed, watch } from 'vue';
 import { loadResources } from './api/resources.js';
 import { discoverPluginMenus } from './api/pluginMenus.js';
 import { useUiStore } from './stores/ui.js';
+import { startRouteSync } from './router.js';
 import {
   loadOidcConfig,
   handleRedirectCallback,
@@ -65,6 +66,8 @@ onMounted(async () => {
   } catch {
     /* backend not up yet */
   }
+  // URL routing
+  startRouteSync(ui, watch);
 });
 </script>
 

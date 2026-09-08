@@ -221,3 +221,37 @@ export function collectionPayload(c: CollectionDef, drafts: DraftRow[]): Obj[] {
   }
   return out;
 }
+
+// ---- agent proxies: logs & exec ---------------------------------------------------------
+
+export function failureText(e: unknown): string {
+  const detail = (e as { detail?: unknown } | null)?.detail;
+  if (typeof detail === 'string' && detail) return detail;
+  if (detail && typeof detail === 'object') {
+    const d = (detail as { detail?: unknown }).detail;
+    if (typeof d === 'string' && d) return d;
+    return JSON.stringify(detail);
+  }
+  return String(e);
+}
+
+/**
+ * Readable text for whatever the agent returns from an exec: a bare string, an object
+ * with output-ish fields (`stdout`/`stderr`/`output`/`result`, joined), or anything
+ * else pretty-printed as JSON.
+ */
+export function execOutputText(payload: unknown): string {
+  if (payload === null || payload === undefined) return '';
+  if (typeof payload === 'string') return payload;
+  if (typeof payload === 'object' && !Array.isArray(payload)) {
+    const o = payload as Record<string, unknown>;
+    const parts: string[] = [];
+    for (const k of ['stdout', 'output', 'result', 'stderr']) {
+      const v = o[k];
+      if (typeof v === 'string' && v !== '') parts.push(v);
+      else if (Array.isArray(v) && v.length) parts.push(v.map(String).join('\n'));
+    }
+    if (parts.length) return parts.join('\n');
+  }
+  return JSON.stringify(payload, null, 2);
+}

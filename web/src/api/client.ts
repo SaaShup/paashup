@@ -53,6 +53,7 @@ function qs(params?: Record<string, string | number | undefined>): string {
 
 export const api = {
   get: <T = Obj>(path: string) => request<T>('GET', path),
+  post: <T = Obj>(path: string, data?: Obj) => request<T>('POST', path, data),
   list: <T = Obj>(endpoint: string, params?: Record<string, string | number | undefined>) =>
     request<Page<T>>('GET', endpoint + qs(params)),
   retrieve: <T = Obj>(endpoint: string, id: number) => request<T>('GET', `${endpoint}${id}/`),

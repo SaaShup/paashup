@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mount, flushPromises } from '@vue/test-utils';
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils';
 import { setActivePinia, createPinia } from 'pinia';
 import { api } from '../src/api/client';
 import { useUiStore } from '../src/stores/ui';
@@ -12,7 +12,10 @@ import {
   draftRows,
   blankRow,
   collectionPayload,
+  execOutputText,
+  failureText,
 } from '../src/views/containerDetail';
+import { ApiError } from '../src/api/client';
 
 const collection = (field: string) => CONTAINER_COLLECTIONS.find((c) => c.field === field)!;
 
@@ -104,6 +107,47 @@ describe('containerDetail helpers', () => {
       collectionPayload(mounts, [{ source: ' /data ', volume: 5, read_only: false }]),
     ).toEqual([{ source: '/data', volume: 5, read_only: false }]);
     expect(collectionPayload(mounts, [blankRow(mounts)])).toEqual([]); 
+  });
+
+  it('execOutputText passes a bare string through unchanged', () => {
+    expect(execOutputText('bin\netc\n')).toBe('bin\netc\n');
+  });
+
+  it('execOutputText joins the agent stdout/stderr-ish fields', () => {
+    expect(execOutputText({ stdout: 'out line' })).toBe('out line');
+    expect(execOutputText({ stdout: 'out', stderr: 'err' })).toBe('out\nerr');
+    expect(execOutputText({ output: ['a', 'b'] })).toBe('a\nb');
+    expect(execOutputText({ stdout: '', stderr: 'only stderr' })).toBe('only stderr');
+  });
+
+  it('execOutputText falls back to pretty JSON for shapes with no output field', () => {
+    expect(execOutputText({ exit: 1 })).toBe(JSON.stringify({ exit: 1 }, null, 2));
+    expect(execOutputText([1, 2, 3])).toBe(JSON.stringify([1, 2, 3], null, 2));
+  });
+
+  it('execOutputText treats null/undefined as empty', () => {
+    expect(execOutputText(null)).toBe('');
+    expect(execOutputText(undefined)).toBe('');
+  });
+
+  it('failureText reads a plain string ApiError.detail (the proxy relays the agent text)', () => {
+    expect(failureText(new ApiError(502, 'connect ECONNREFUSED'))).toBe('connect ECONNREFUSED');
+  });
+
+  it('failureText reads a nested DRF-style {detail} body', () => {
+    expect(failureText(new ApiError(502, { detail: 'no such container' }))).toBe(
+      'no such container',
+    );
+  });
+
+  it('failureText stringifies an object body with no nested detail', () => {
+    expect(failureText(new ApiError(400, { cmd: ['Expected a list of strings.'] }))).toBe(
+      JSON.stringify({ cmd: ['Expected a list of strings.'] }),
+    );
+  });
+
+  it('failureText falls back to String(e) for a non-ApiError failure', () => {
+    expect(failureText(new Error('network down'))).toBe('Error: network down');
   });
 });
 
@@ -269,5 +313,73 @@ describe('ContainerDetailView', () => {
     expect(t).toContain('No labels');
     expect(t).toContain('No binds');
     expect(t).toContain('No sysctls');
+  });
+
+  describe('tabs: Container / Logs / Terminal', () => {
+    // Stub the Logs/Terminal panels: they own the xterm.js + WebSocket wiring, tested in
+    // their own specs. Here we only check the parent wires the right props and only
+    // mounts what's needed.
+    const stubs = {
+      ContainerLogs: {
+        name: 'ContainerLogs',
+        props: ['path', 'containerId'],
+        template: '<div class="stub-logs" />',
+      },
+      ContainerTerminal: {
+        name: 'ContainerTerminal',
+        props: ['wsPath', 'containerId', 'active'],
+        template: '<div class="stub-terminal" />',
+      },
+    };
+    const mountTabs = () => mount(ContainerDetailView, { global: { stubs } });
+
+    it('shows the Container tab by default, with Logs/Terminal not fetched yet', async () => {
+      const w = mountTabs();
+      await flushPromises();
+      expect(w.find('.tab.active').text()).toBe('Container');
+      expect(w.find('section.props').exists()).toBe(true);
+      expect(w.find('.stub-logs').exists()).toBe(false); // ContainerLogs mounts only on its tab
+    });
+
+    it('switching to Logs mounts ContainerLogs with the proxy path and container id', async () => {
+      const w = mountTabs();
+      await flushPromises();
+      await w.findAll('.tab').find((t) => t.text() === 'Logs')!.trigger('click');
+      await flushPromises();
+      expect(w.find('.tab.active').text()).toBe('Logs');
+      expect(w.find('section.props').exists()).toBe(false); // Container tab content is gone
+      const logs = w.findComponent({ name: 'ContainerLogs' } as never) as VueWrapper<never>;
+      expect(logs.exists()).toBe(true);
+      expect(logs.props('path')).toBe('/api/plugins/docker/containers/1/logs/');
+      expect(logs.props('containerId')).toBe('abc123'); // fixture's ContainerID
+    });
+
+    it('switching to Terminal wires the ws path and active flag; the panel stays mounted when leaving', async () => {
+      const w = mountTabs();
+      await flushPromises();
+      await w.findAll('.tab').find((t) => t.text() === 'Terminal')!.trigger('click');
+      await flushPromises();
+      let terminal = w.findComponent({ name: 'ContainerTerminal' } as never) as VueWrapper<never>;
+      expect(terminal.props('wsPath')).toBe('/api/plugins/docker/containers/1/ws/');
+      expect(terminal.props('containerId')).toBe('abc123');
+      expect(terminal.props('active')).toBe(true);
+
+      // v-show, not v-if: switching away keeps the terminal's session alive underneath
+      await w.findAll('.tab').find((t) => t.text() === 'Container')!.trigger('click');
+      await flushPromises();
+      terminal = w.findComponent({ name: 'ContainerTerminal' } as never) as VueWrapper<never>;
+      expect(terminal.exists()).toBe(true);
+      expect(terminal.props('active')).toBe(false);
+    });
+
+    it('passes null path/containerId when the container has no ContainerID yet', async () => {
+      vi.spyOn(api, 'retrieve').mockResolvedValue({ ...fixture, ContainerID: '' } as never);
+      const w = mountTabs();
+      await flushPromises();
+      await w.findAll('.tab').find((t) => t.text() === 'Logs')!.trigger('click');
+      await flushPromises();
+      const logs = w.findComponent({ name: 'ContainerLogs' } as never) as VueWrapper<never>;
+      expect(logs.props('containerId')).toBeNull();
+    });
   });
 });

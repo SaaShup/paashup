@@ -8,6 +8,7 @@ import type {
   PluginAssetMount,
   PluginMigration,
   PluginRoute,
+  PluginWebSocketRoute,
 } from './types.js';
 
 interface CompiledRoute {
@@ -18,17 +19,22 @@ interface CompiledRoute {
 }
 
 const routes: CompiledRoute[] = [];
+const wsRoutes: { regex: RegExp; params: string[]; route: PluginWebSocketRoute }[] = [];
 const hooks = new Map<string, Hook[]>(); // key: `${table}:${event}`
 const assetMounts: PluginAssetMount[] = [];
 const loaded: { name: string; version: string }[] = [];
 
-function compile(route: PluginRoute): CompiledRoute {
+function compilePath(path: string): { regex: RegExp; params: string[] } {
   const params: string[] = [];
-  const pattern = route.path.replace(/\{(\w+)\}/g, (_, name) => {
+  const pattern = path.replace(/\{(\w+)\}/g, (_, name) => {
     params.push(name);
     return '([^/]+)';
   });
-  return { method: route.method, regex: new RegExp(`^${pattern}$`), params, route };
+  return { regex: new RegExp(`^${pattern}$`), params };
+}
+
+function compile(route: PluginRoute): CompiledRoute {
+  return { method: route.method, ...compilePath(route.path), route };
 }
 
 /**
@@ -117,6 +123,9 @@ export async function loadPlugins(db: Db, plugins: readonly Plugin[]): Promise<v
     for (const route of plugin.routes ?? []) {
       routes.push(compile(route));
     }
+    for (const route of plugin.websockets ?? []) {
+      wsRoutes.push({ ...compilePath(route.path), route });
+    }
     for (const hook of plugin.hooks ?? []) {
       const key = `${hook.table}:${hook.event}`;
       (hooks.get(key) ?? hooks.set(key, []).get(key)!).push(hook);
@@ -150,6 +159,22 @@ export function matchAsset(pathname: string): { dir: string; rel: string } | nul
 }
 
 /** Find a custom plugin route for a request, capturing path params. */
+/** Match an HTTP upgrade path against the registered WebSocket routes. */
+export function matchWebSocketRoute(
+  pathname: string,
+): { route: PluginWebSocketRoute; params: Record<string, string> } | null {
+  const p = pathname.endsWith('/') ? pathname : `${pathname}/`;
+  for (const c of wsRoutes) {
+    const m = c.regex.exec(p);
+    if (m) {
+      const params: Record<string, string> = {};
+      c.params.forEach((name, i) => (params[name] = m[i + 1]!));
+      return { route: c.route, params };
+    }
+  }
+  return null;
+}
+
 export function matchRoute(
   method: string,
   pathname: string,

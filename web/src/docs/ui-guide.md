@@ -46,6 +46,21 @@ Opening a resource shows a list page with:
 - If the server rejects your input, the error appears **inline** under the offending
   field.
 
+## Container logs and terminal
+
+The detail page of a Docker container has three tabs: **Container** (properties and the
+editable collections), **Logs** and **Terminal**. Both panels go through paas2box to the
+agent of the container's host, so they only work once the agent has created the container.
+
+- **Logs** — fetched when you open the tab and rendered like a terminal (colours
+  included); *Refresh* fetches them again, *Follow* polls every few seconds and keeps the
+  tail in view.
+- **Terminal** — a real interactive shell in the container (`sh` by default; change the
+  *Shell* field and *Connect* for another one). Keystrokes are streamed live, so `cd`,
+  editors, `top` and coloured prompts all behave as in a terminal. *Restart* opens a fresh
+  session. The agent can disable this with its `DISABLE_EXEC` setting, and it serves one
+  session at a time per host..
+
 ## Live updates
 
 paas2box streams every create / update / delete over a WebSocket. Open two browser

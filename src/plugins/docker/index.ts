@@ -11,6 +11,7 @@ import { readRoutes } from './routes/crud.js';
 import { containerWriteRoutes } from './routes/containers.js';
 import { hostWriteRoutes } from './routes/hosts.js';
 import { actionRoutes } from './routes/actions.js';
+import { terminalWebSockets } from './routes/terminal.js';
 import { hooks } from './hooks.js';
 import { DOCKER_WEBHOOKS } from './webhooks.js';
 import {
@@ -54,6 +55,8 @@ const dockerPlugin: Plugin = {
     // Docker-agent proxy actions (force_pull / logs / exec).
     ...actionRoutes,
   ],
+  // Interactive container terminal: browser ⇄ paasbox ⇄ agent exec stream.
+  websockets: terminalWebSockets,
   hooks,
   // Default agent-integration webhooks, created at startup if missing.
   seedWebhooks: DOCKER_WEBHOOKS,

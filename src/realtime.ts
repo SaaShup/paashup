@@ -1,4 +1,5 @@
-import type { Server, IncomingMessage } from 'node:http';
+import { STATUS_CODES, type Server, type IncomingMessage } from 'node:http';
+import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { Db } from './db/types.js';
 import { authenticate } from './auth.js';
@@ -44,7 +45,7 @@ export interface RealtimeOptions {
  *   `?access_token=<jwt>` (OIDC bearer)  or  `?token=<key>` (static API token).
  * Non-browser clients may still use the `Authorization` header.
  */
-async function wsAuthenticated(db: Db | undefined, req: IncomingMessage): Promise<boolean> {
+export async function wsAuthenticated(db: Db | undefined, req: IncomingMessage): Promise<boolean> {
   if (!db) return false;
   let header = req.headers.authorization;
   if (!header && req.url) {
@@ -57,14 +58,74 @@ async function wsAuthenticated(db: Db | undefined, req: IncomingMessage): Promis
   return (await authenticate(db, header)) != null;
 }
 
+// ---- HTTP upgrade router ---------------------------------------------------------------
+// One `upgrade` listener per http.Server dispatching on the request path, so several
+// WebSocket endpoints can share the server.
+
+export type UpgradeHandler = (
+  req: IncomingMessage,
+  socket: Duplex,
+  head: Buffer,
+) => void | Promise<void>;
+
+interface UpgradeRoute {
+  match: (pathname: string) => boolean;
+  handle: UpgradeHandler;
+}
+
+const upgradeRoutes = new WeakMap<Server, UpgradeRoute[]>();
+
+/** Refuse an upgrade with a plain HTTP response and close the socket. */
+export function rejectUpgrade(socket: Duplex, status: number, message?: string): void {
+  const text = message ?? STATUS_CODES[status] ?? '';
+  socket.write(
+    `HTTP/1.1 ${status} ${STATUS_CODES[status] ?? ''}\r\n` +
+      'Connection: close\r\n' +
+      'Content-Type: text/plain; charset=utf-8\r\n' +
+      `Content-Length: ${Buffer.byteLength(text)}\r\n\r\n${text}`,
+  );
+  socket.destroy();
+}
+
+export function addUpgradeRoute(
+  server: Server,
+  match: (pathname: string) => boolean,
+  handle: UpgradeHandler,
+): void {
+  let list = upgradeRoutes.get(server);
+  if (!list) {
+    list = [];
+    upgradeRoutes.set(server, list);
+    const routes = list;
+    server.on('upgrade', (req, socket, head) => {
+      const raw = new URL(req.url ?? '/', 'http://localhost').pathname;
+      const pathname = raw.endsWith('/') ? raw : `${raw}/`;
+      const r = routes.find((x) => x.match(pathname));
+      if (!r) return rejectUpgrade(socket, 404);
+      Promise.resolve(r.handle(req, socket, head)).catch((err: unknown) => {
+        console.error(err);
+        if (!socket.destroyed) rejectUpgrade(socket, 500);
+      });
+    });
+  }
+  list.push({ match, handle });
+}
+
 /** Attach a WebSocket change-feed to an HTTP server at `path` (default /api/ws/). */
 export function attachRealtime(
   server: Server,
   opts: RealtimeOptions = {},
   path = '/api/ws/',
 ): WebSocketServer {
-  wss = new WebSocketServer({ server, path });
-  wss.on('connection', (ws, req) => {
+  const feed = new WebSocketServer({ noServer: true });
+  wss = feed;
+  addUpgradeRoute(
+    server,
+    (p) => p === path,
+    (req, socket, head) =>
+      feed.handleUpgrade(req, socket, head, (ws) => feed.emit('connection', ws, req)),
+  );
+  feed.on('connection', (ws, req) => {
     // When auth is required, reject anonymous/invalid clients — otherwise the feed
     // would stream every create/update/delete (with data) to anyone who connects.
     void (async () => {
@@ -78,7 +139,7 @@ export function attachRealtime(
       ws.on('error', () => clients.delete(ws));
     })();
   });
-  return wss;
+  return feed;
 }
 
 /**

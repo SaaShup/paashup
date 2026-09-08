@@ -23,8 +23,20 @@ import {
   metricsContentType,
   recordHttp,
 } from '../metrics.js';
-import { matchRoute, matchAsset, fireHooks, loadedPlugins } from '../plugins/runtime.js';
-import { attachRealtime, broadcast } from '../realtime.js';
+import {
+  matchRoute,
+  matchWebSocketRoute,
+  matchAsset,
+  fireHooks,
+  loadedPlugins,
+} from '../plugins/runtime.js';
+import {
+  attachRealtime,
+  broadcast,
+  addUpgradeRoute,
+  rejectUpgrade,
+  wsAuthenticated,
+} from '../realtime.js';
 import { dispatchWebhooks, type WebhookEventContext } from '../webhooks.js';
 import { listUserTokens, createUserToken, revokeUserToken } from '../tokens.js';
 import '../journal.js'; // registers the journal-entries entity
@@ -705,5 +717,26 @@ export function createApiServer(opts: ServerOptions): http.Server {
   });
 
   if (opts.realtime) attachRealtime(server, { db, authRequired: !!opts.auth?.required });
+  // Plugin WebSocket endpoints.
+  addUpgradeRoute(
+    server,
+    (p) => matchWebSocketRoute(p) !== null,
+    async (req, socket, head) => {
+      const url = new URL(req.url ?? '/', 'http://localhost');
+      const m = matchWebSocketRoute(url.pathname)!;
+      if (opts.auth?.required && !(await wsAuthenticated(db, req))) {
+        return rejectUpgrade(socket, 401, 'authentication required');
+      }
+      await m.route.handler({
+        db,
+        params: m.params,
+        query: url.searchParams,
+        req,
+        socket,
+        head,
+        reject: (status, message) => rejectUpgrade(socket, status, message),
+      });
+    },
+  );
   return server;
 }

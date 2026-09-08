@@ -2,11 +2,13 @@
 // proxies an HTTP call to the owning host's agent (`host.endpoint` + /api/engine/...)
 // and maps an upstream failure to 502. Note: paasbox's plugin response layer is
 // JSON-only, so `logs` text is returned JSON-encoded (the source used text/html).
+
 import type { Db } from '../../../db/types.js';
 import type { PluginRoute, PluginRouteResult } from '../../../plugins/types.js';
 import { Repository } from '../../../repository/repository.js';
 import { getTable } from '../../../model/registry.js';
 import { ValidationError } from '../../../errors.js';
+import { splitCredentials } from '../../../webhooks.js';
 import { T } from '../meta.js';
 import { serializeImage } from '../serialize.js';
 
@@ -18,7 +20,17 @@ const badGateway = (payload: unknown): PluginRouteResult => ({
   body: { success: false, payload },
 });
 
-async function hostEndpoint(db: Db, hostId: unknown): Promise<string | undefined> {
+/** fetch() against the agent, with URL-embedded credentials turned into Basic auth. */
+export function agentFetch(rawUrl: string, init: RequestInit = {}): Promise<Response> {
+  const { url, authHeader } = splitCredentials(rawUrl);
+  const headers: Record<string, string> = {
+    ...((init.headers as Record<string, string> | undefined) ?? {}),
+  };
+  if (authHeader && !headers.Authorization) headers.Authorization = authHeader;
+  return fetch(url, { ...init, headers });
+}
+
+export async function hostEndpoint(db: Db, hostId: unknown): Promise<string | undefined> {
   const row = await db.get<{ endpoint: string }>(`SELECT endpoint FROM ${T.host} WHERE id = ?`, [
     Number(hostId),
   ]);
@@ -38,7 +50,7 @@ export const actionRoutes: PluginRoute[] = [
       if (!endpoint) return notFound;
       const data = { ...(await serializeImage(db, image as Row)), force: true };
       try {
-        const resp = await fetch(`${endpoint}/api/engine/images`, {
+        const resp = await agentFetch(`${endpoint}/api/engine/images`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ data }),
@@ -63,7 +75,7 @@ export const actionRoutes: PluginRoute[] = [
       const cid = (container as Row).ContainerID;
       if (!endpoint) return notFound;
       try {
-        const resp = await fetch(`${endpoint}/api/engine/containers/${cid}/logs`);
+        const resp = await agentFetch(`${endpoint}/api/engine/containers/${cid}/logs`);
         const text = await resp.text();
         if (!resp.ok) return { status: 502, body: text };
         return { status: 200, body: text };
@@ -88,7 +100,7 @@ export const actionRoutes: PluginRoute[] = [
       const cid = (container as Row).ContainerID;
       if (!endpoint) return notFound;
       try {
-        const resp = await fetch(`${endpoint}/api/engine/containers/${cid}/exec`, {
+        const resp = await agentFetch(`${endpoint}/api/engine/containers/${cid}/exec`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ cmd }),

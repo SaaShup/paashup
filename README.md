@@ -247,7 +247,7 @@ out of the box and appear in the web UI under the **plugins** menu section.
 | `/api/plugins/docker/images/` | embeds `containers`; `POST {id}/force_pull/` proxies to the agent |
 | `/api/plugins/docker/volumes/` | embeds `mounts` |
 | `/api/plugins/docker/networks/` | embeds `network_settings` |
-| `/api/plugins/docker/containers/` | inline nested `ports`/`env`/`labels`/`mounts`/`binds`/`network_settings`/`devices`/`log_driver_options`/`sysctls` on **read and write**; cross-host integrity is validated; `GET {id}/logs/`, `POST {id}/exec/` proxy to the agent |
+| `/api/plugins/docker/containers/` | inline nested `ports`/`env`/`labels`/`mounts`/`binds`/`network_settings`/`devices`/`log_driver_options`/`sysctls` on **read and write**; cross-host integrity is validated; `GET {id}/logs/`, `POST {id}/exec/` proxy to the agent; `WS {id}/ws/` relays the agent's interactive exec stream (terminal) |
 
 Differences from the NetBox plugin (documented gaps): NetBox token + webhook
 auto-provisioning is dropped (paas2box has its own auth + a WebSocket change-feed); the

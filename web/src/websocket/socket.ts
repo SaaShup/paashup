@@ -91,7 +91,7 @@ function defaultUrl(): string {
  * `new WebSocket(...)`, so the server reads the paas2box token from the query string.
  * Anonymous if there's no token.
  */
-function withCredential(url: string): string {
+export function withCredential(url: string): string {
   const token = getToken();
   if (!token) return url;
   const u = new URL(url);

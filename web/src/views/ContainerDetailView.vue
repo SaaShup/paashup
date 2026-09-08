@@ -15,6 +15,8 @@ import {
 } from './containerDetail.js';
 import CollectionTable from '../components/CollectionTable.vue';
 import ObjectForm from '../components/ObjectForm.vue';
+import ContainerLogs from '../components/ContainerLogs.vue';
+import ContainerTerminal from '../components/ContainerTerminal.vue';
 
 const ui = useUiStore();
 const resource = computed(() => ui.selected); // the container resource (endpoint/model/writable)
@@ -135,6 +137,25 @@ async function load() {
 onMounted(load);
 watch(() => ui.detailId, load); // re-fetch if another container is opened
 
+// ---- tabs: Container (properties + collections) / Logs / Terminal ----------------------
+type Tab = 'container' | 'logs' | 'terminal';
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'container', label: 'Container' },
+  { id: 'logs', label: 'Logs' },
+  { id: 'terminal', label: 'Terminal' },
+];
+const tab = ref<Tab>('container');
+const containerId = computed(() => {
+  const v = get('ContainerID');
+  return typeof v === 'string' && v !== '' ? v : null;
+});
+const actionPath = (action: 'logs' | 'exec' | 'ws'): string | null => {
+  const r = resource.value;
+  const id = ui.detailId;
+  return r && id != null ? `${r.endpoint}${id}/${action}/` : null;
+};
+watch(() => ui.detailId, () => (tab.value = 'container')); // another container: fresh start
+
 function back() {
   if (resource.value) ui.openResource(resource.value);
 }
@@ -165,113 +186,142 @@ async function onSaved() {
     <p v-if="loading" class="muted">Loading…</p>
 
     <template v-if="container && !loading">
-      <!-- core properties -->
-      <section class="card props">
-        <div class="prop">
-          <span class="k">Host</span>
-          <button v-if="host" class="link" @click="openTable('plugin_docker_host')">
-            {{ scalarText(host) }}
-          </button>
-          <span v-else class="v">—</span>
-        </div>
-        <div class="prop">
-          <span class="k">Image</span>
-          <button v-if="image" class="link" @click="openTable('plugin_docker_image')">
-            {{ scalarText(image) }}
-          </button>
-          <span v-else class="v">—</span>
-        </div>
-        <div v-for="s in scalars" :key="s.label" class="prop">
-          <span class="k">{{ s.label }}</span>
-          <span class="v">{{ s.value }}</span>
-        </div>
-      </section>
+      <nav class="tabs" role="tablist">
+        <button
+          v-for="t in TABS"
+          :key="t.id"
+          role="tab"
+          class="tab"
+          :class="{ active: tab === t.id }"
+          :aria-selected="tab === t.id"
+          @click="tab = t.id"
+        >
+          {{ t.label }}
+        </button>
+      </nav>
 
-      <!-- attached collections (all editable in place when the container is writable) -->
-      <template v-for="c in CONTAINER_COLLECTIONS" :key="c.field">
-        <section v-if="writable" class="collection editor">
-          <h4>
-            {{ c.title }}
-            <span class="n">{{ (drafts[c.field] ?? []).length }}</span>
-            <span class="spacer" />
-            <button class="btn btn-ghost sm" @click="addRow(c)">+ Add</button>
-            <button
-              class="btn btn-ok sm"
-              :disabled="!dirty[c.field] || savingField === c.field"
-              @click="saveCollection(c)"
-            >
-              {{ savingField === c.field ? 'Saving…' : 'Save' }}
+      <template v-if="tab === 'container'">
+        <!-- core properties -->
+        <section class="card props">
+          <div class="prop">
+            <span class="k">Host</span>
+            <button v-if="host" class="link" @click="openTable('plugin_docker_host')">
+              {{ scalarText(host) }}
             </button>
-            <button
-              class="btn btn-ghost sm"
-              :disabled="!dirty[c.field] || savingField === c.field"
-              @click="initDraft(c)"
-            >
-              Discard
+            <span v-else class="v">—</span>
+          </div>
+          <div class="prop">
+            <span class="k">Image</span>
+            <button v-if="image" class="link" @click="openTable('plugin_docker_image')">
+              {{ scalarText(image) }}
             </button>
-          </h4>
-          <p v-if="!(drafts[c.field] ?? []).length" class="empty">{{ c.empty }}</p>
-          <table v-else class="edit-table">
-            <thead>
-              <tr>
-                <th v-for="col in c.columns" :key="col.key" :class="{ req: col.required }">
-                  {{ col.label }}
-                </th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(row, i) in drafts[c.field]" :key="i">
-                <td v-for="col in c.columns" :key="col.key" :class="{ tight: col.bool }">
-                  <select
-                    v-if="col.fkTable"
-                    v-model="row[col.key]"
-                    @change="dirty[c.field] = true"
-                  >
-                    <option value="">—</option>
-                    <option v-for="o in fkOptions[col.fkTable] ?? []" :key="o.id" :value="o.id">
-                      {{ o.display }}
-                    </option>
-                  </select>
-                  <select
-                    v-else-if="col.choices"
-                    v-model="row[col.key]"
-                    @change="dirty[c.field] = true"
-                  >
-                    <option value="">—</option>
-                    <option v-for="ch in col.choices" :key="ch" :value="ch">{{ ch }}</option>
-                  </select>
-                  <input
-                    v-else-if="col.bool"
-                    type="checkbox"
-                    v-model="row[col.key]"
-                    @change="dirty[c.field] = true"
-                  />
-                  <input
-                    v-else
-                    :type="col.num ? 'number' : 'text'"
-                    v-model="row[col.key]"
-                    :placeholder="col.label"
-                    @input="dirty[c.field] = true"
-                  />
-                </td>
-                <td>
-                  <button class="btn btn-ghost sm danger" title="Remove" @click="removeRow(c, i)">
-                    ✕
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+            <span v-else class="v">—</span>
+          </div>
+          <div v-for="s in scalars" :key="s.label" class="prop">
+            <span class="k">{{ s.label }}</span>
+            <span class="v">{{ s.value }}</span>
+          </div>
         </section>
-        <CollectionTable
-          v-else
-          :title="c.title"
-          :empty="c.empty"
-          :rows="rows(c.field)"
-          :columns="c.columns"
-        />
+
+        <!-- attached collections (all editable in place when the container is writable) -->
+        <template v-for="c in CONTAINER_COLLECTIONS" :key="c.field">
+          <section v-if="writable" class="collection editor">
+            <h4>
+              {{ c.title }}
+              <span class="n">{{ (drafts[c.field] ?? []).length }}</span>
+              <span class="spacer" />
+              <button class="btn btn-ghost sm" @click="addRow(c)">+ Add</button>
+              <button
+                class="btn btn-ok sm"
+                :disabled="!dirty[c.field] || savingField === c.field"
+                @click="saveCollection(c)"
+              >
+                {{ savingField === c.field ? 'Saving…' : 'Save' }}
+              </button>
+              <button
+                class="btn btn-ghost sm"
+                :disabled="!dirty[c.field] || savingField === c.field"
+                @click="initDraft(c)"
+              >
+                Discard
+              </button>
+            </h4>
+            <p v-if="!(drafts[c.field] ?? []).length" class="empty">{{ c.empty }}</p>
+            <table v-else class="edit-table">
+              <thead>
+                <tr>
+                  <th v-for="col in c.columns" :key="col.key" :class="{ req: col.required }">
+                    {{ col.label }}
+                  </th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(row, i) in drafts[c.field]" :key="i">
+                  <td v-for="col in c.columns" :key="col.key" :class="{ tight: col.bool }">
+                    <select
+                      v-if="col.fkTable"
+                      v-model="row[col.key]"
+                      @change="dirty[c.field] = true"
+                    >
+                      <option value="">—</option>
+                      <option v-for="o in fkOptions[col.fkTable] ?? []" :key="o.id" :value="o.id">
+                        {{ o.display }}
+                      </option>
+                    </select>
+                    <select
+                      v-else-if="col.choices"
+                      v-model="row[col.key]"
+                      @change="dirty[c.field] = true"
+                    >
+                      <option value="">—</option>
+                      <option v-for="ch in col.choices" :key="ch" :value="ch">{{ ch }}</option>
+                    </select>
+                    <input
+                      v-else-if="col.bool"
+                      type="checkbox"
+                      v-model="row[col.key]"
+                      @change="dirty[c.field] = true"
+                    />
+                    <input
+                      v-else
+                      :type="col.num ? 'number' : 'text'"
+                      v-model="row[col.key]"
+                      :placeholder="col.label"
+                      @input="dirty[c.field] = true"
+                    />
+                  </td>
+                  <td>
+                    <button class="btn btn-ghost sm danger" title="Remove" @click="removeRow(c, i)">
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+          <CollectionTable
+            v-else
+            :title="c.title"
+            :empty="c.empty"
+            :rows="rows(c.field)"
+            :columns="c.columns"
+          />
+        </template>
       </template>
+
+      <ContainerLogs
+        v-if="tab === 'logs'"
+        :path="actionPath('logs')"
+        :container-id="containerId"
+      />
+      <ContainerTerminal
+        v-show="tab === 'terminal'"
+        :key="ui.detailId ?? 0"
+        :ws-path="actionPath('ws')"
+        :container-id="containerId"
+        :active="tab === 'terminal'"
+      />
     </template>
 
     <ObjectForm
@@ -340,6 +390,31 @@ async function onSaved() {
 }
 .link:hover {
   text-decoration: underline;
+}
+/* tabs */
+.tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+.tab {
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.tab:hover {
+  color: var(--text);
+}
+.tab.active {
+  color: var(--primary-d);
+  border-bottom-color: var(--primary);
+  font-weight: 600;
 }
 /* inline collection editors (env, labels, mounts, networks, binds, ports, …) */
 .editor {

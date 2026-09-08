@@ -503,7 +503,7 @@ export function renderTemplate(tpl: string, ctx: Record<string, unknown>): strin
  * fetch() rejects URLs that include userinfo, so we move them into a Basic auth
  * header and return the cleaned URL. `redacted` masks the password for logs.
  */
-function splitCredentials(rawUrl: string): {
+export function splitCredentials(rawUrl: string): {
   url: string;
   authHeader?: string;
   redacted: string;

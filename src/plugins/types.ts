@@ -18,6 +18,8 @@ export interface Plugin {
   /** Ordered schema migrations, tracked in `schema_migrations` like core ones. */
   readonly migrations?: readonly PluginMigration[];
   readonly routes?: readonly PluginRoute[];
+  /** WebSocket endpoints */
+  readonly websockets?: readonly PluginWebSocketRoute[];
   readonly hooks?: readonly Hook[];
   /** Custom fields to attach to core/plugin entities (stored in `custom_fields`). */
   readonly customFields?: readonly CustomField[];
@@ -82,6 +84,30 @@ export interface PluginRouteContext {
 export interface PluginRouteResult {
   readonly status: number;
   readonly body?: unknown;
+}
+
+export interface PluginWebSocketContext {
+  readonly db: Db;
+  /** Path params captured from `{name}` segments in the route path. */
+  readonly params: Record<string, string>;
+  readonly query: URLSearchParams;
+  /** The HTTP upgrade request. Already authenticated when the server requires auth. */
+  readonly req: import('node:http').IncomingMessage;
+  /** The raw socket of the upgrade request, to complete or abort the handshake. */
+  readonly socket: import('node:stream').Duplex;
+  /** The first packet of the upgraded stream. */
+  readonly head: Buffer;
+  /**
+   * Refuse the upgrade with a plain HTTP status (writes the response and ends the
+   * socket), e.g. 404 when the target object doesn't exist.
+   */
+  readonly reject: (status: number, message?: string) => void;
+}
+
+export interface PluginWebSocketRoute {
+  /** Absolute path; may contain `{param}` segments. */
+  readonly path: string;
+  readonly handler: (ctx: PluginWebSocketContext) => Promise<void> | void;
 }
 
 /** A custom (non-CRUD) endpoint, e.g. GET /api/plugins/inventory/stats/. */

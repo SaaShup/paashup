@@ -2,13 +2,15 @@
 // networks, containers) through paasbox. A port of SaaShup/netbox-docker-plugin to
 // the paasbox plugin contract: it registers the six top-level entities (→ NetBox-shaped
 // CRUD), ships dual-dialect DDL, overrides GET to embed the source's nested arrays,
-// adds custom container write routes (inline nested children + cross-host validation)
+// adds custom container write routes (inline nested children + cross-host validation),
+// custom image write routes (cross-host validation),
 // and the Docker-agent proxy actions, and seeds a default registry on host creation.
 import type { Plugin } from '../../plugins/types.js';
 import { ENTITY_METAS, META, T } from './meta.js';
 import { INITIAL_MIGRATION, HOST_SCOPE_MIGRATION, HOST_TOKEN_MIGRATION } from './migrations.js';
 import { readRoutes } from './routes/crud.js';
 import { containerWriteRoutes } from './routes/containers.js';
+import { imageWriteRoutes } from './routes/images.js';
 import { hostWriteRoutes } from './routes/hosts.js';
 import { actionRoutes } from './routes/actions.js';
 import { terminalWebSockets } from './routes/terminal.js';
@@ -50,6 +52,7 @@ const dockerPlugin: Plugin = {
     // Host PUT/PATCH override: a refresh marks the host "refreshing" and purges its
     // discovered resources before storing (create + delete stay on generic CRUD).
     ...hostWriteRoutes,
+    ...imageWriteRoutes,
     // Container writes accept inline nested children (override generic POST/PUT/PATCH).
     ...containerWriteRoutes,
     // Docker-agent proxy actions (force_pull / logs / exec).

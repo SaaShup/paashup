@@ -235,6 +235,70 @@ test('container validation reuses the engine (missing required field)', async ()
   assert.ok(res.body.image || res.body.name);
 });
 
+test('cross-host image registry is rejected on create', async () => {
+  const h2 = await api('POST', '/api/plugins/docker/hosts/', {
+    endpoint: 'http://other-image-host',
+    name: 'agent3',
+  });
+  const reg2 = (await api('GET', `/api/plugins/docker/hosts/${h2.body.id}/`)).body.registries[0].id;
+
+  const res = await api('POST', '/api/plugins/docker/images/', {
+    host: ids.host,
+    registry: reg2, // belongs to agent3, not ids.host
+    name: 'bad-image',
+  });
+  assert.equal(res.status, 400, JSON.stringify(res.body));
+  assert.ok(Array.isArray(res.body.registry));
+  assert.match(res.body.registry[0], /does not belong to host/);
+});
+
+test('cross-host image registry is rejected on update (single + bulk PATCH)', async () => {
+  const h2 = await api('POST', '/api/plugins/docker/hosts/', {
+    endpoint: 'http://other-image-host-2',
+    name: 'agent4',
+  });
+  const reg2 = (await api('GET', `/api/plugins/docker/hosts/${h2.body.id}/`)).body.registries[0].id;
+
+  const single = await api('PATCH', `/api/plugins/docker/images/${ids.image}/`, {
+    registry: reg2,
+  });
+  assert.equal(single.status, 400, JSON.stringify(single.body));
+  assert.match(single.body.registry[0], /does not belong to host/);
+
+  const bulk = await api('PATCH', '/api/plugins/docker/images/', [
+    { id: ids.image, registry: reg2 },
+  ]);
+  assert.equal(bulk.status, 400, JSON.stringify(bulk.body));
+  assert.match(bulk.body.registry[0], /does not belong to host/);
+
+  // neither rejected write actually changed anything
+  const stillOk = await api('GET', `/api/plugins/docker/images/${ids.image}/`);
+  assert.equal(stillOk.body.registry.id, ids.registry);
+});
+
+test('same-host image registry reassignment still succeeds', async () => {
+  // sanity: the validation only rejects an actual cross-host mismatch — reassigning
+  // to a registry that legitimately belongs to the image's own host must keep working.
+  const otherReg = await api('POST', '/api/plugins/docker/registries/', {
+    host: ids.host,
+    name: 'ghcr',
+    serveraddress: 'https://ghcr.io',
+  });
+  assert.equal(otherReg.status, 201, JSON.stringify(otherReg.body));
+
+  const res = await api('PATCH', `/api/plugins/docker/images/${ids.image}/`, {
+    registry: otherReg.body.id,
+  });
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.equal(res.body.registry.id, otherReg.body.id);
+
+  // restore, so later tests relying on ids.registry aren't affected
+  const restored = await api('PATCH', `/api/plugins/docker/images/${ids.image}/`, {
+    registry: ids.registry,
+  });
+  assert.equal(restored.status, 200, JSON.stringify(restored.body));
+});
+
 test('list pagination + filtering', async () => {
   const page = await api('GET', '/api/plugins/docker/containers/?limit=1');
   assert.equal(page.body.count >= 1, true);

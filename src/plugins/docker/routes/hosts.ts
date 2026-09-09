@@ -148,7 +148,10 @@ const deleteRoute: PluginRoute = {
       [id],
     );
     const prechange = await serializeHost(db, existing); // for the "[Docker] Delete host" webhook
-    await repo.destroy(id);
+    await db.transaction(async (tx) => {
+      await purgeHostResources(tx, id);
+      await new Repository<Row>(tx, getTable(T.host)!).destroy(id);
+    });
     if (tok?.token_id) {
       try {
         await db.execute('DELETE FROM auth_token WHERE id = ?', [tok.token_id]);

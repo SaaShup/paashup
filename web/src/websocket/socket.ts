@@ -1,5 +1,6 @@
 import type { ServerEvent } from './events.js';
 import { getToken } from '../auth/oidc.js';
+import { BASE } from '../base.js';
 
 export type ConnectionStatus = 'connecting' | 'open' | 'closed';
 type Listener = (e: ServerEvent) => void;
@@ -83,7 +84,7 @@ export class SocketManager {
 
 function defaultUrl(): string {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${proto}://${location.host}/api/ws/`;
+  return `${proto}://${location.host}${BASE}/api/ws/`;
 }
 
 /**

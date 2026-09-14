@@ -98,6 +98,9 @@ export function addUpgradeRoute(
     upgradeRoutes.set(server, list);
     const routes = list;
     server.on('upgrade', (req, socket, head) => {
+      const rawUrl = req.url ?? '/';
+      const apiIdx = rawUrl.split('?')[0]!.indexOf('/api/');
+      if (apiIdx > 0) req.url = rawUrl.slice(apiIdx);
       const raw = new URL(req.url ?? '/', 'http://localhost').pathname;
       const pathname = raw.endsWith('/') ? raw : `${raw}/`;
       const r = routes.find((x) => x.match(pathname));

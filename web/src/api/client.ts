@@ -2,6 +2,7 @@
 // the API serves the built SPA in prod). Auth: the paas2box token in localStorage —
 // minted by the SSO login (BFF exchange) or a static API key the user pasted in.
 import { getToken } from '../auth/oidc.js';
+import { withBase } from '../base.js';
 
 export interface Page<T = Record<string, unknown>> {
   count: number;
@@ -18,7 +19,7 @@ function authHeader(): Record<string, string> {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, {
+  const res = await fetch(withBase(path), {
     method,
     headers: {
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),

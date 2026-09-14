@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { extname, resolve as resolvePath } from 'node:path';
 import type { Db } from '../db/types.js';
 import type { TableMeta } from '../model/meta-types.js';
@@ -82,11 +83,24 @@ const MIME: Record<string, string> = {
   '.map': 'application/json',
 };
 
+/**
+ * Rewrite the built index.html's root-absolute asset URLs.
+ */
+function injectMountPrefix(html: string, prefix: string): string {
+  if (!prefix) return html;
+  const rewritten = html.replace(/((?:src|href)=")\//g, `$1${prefix}/`);
+  return rewritten.replace(
+    '<head>',
+    `<head><script>window.__PB_BASE__=${JSON.stringify(prefix)};</script>`,
+  );
+}
+
 /** Serve a static file from `root`, falling back to index.html (SPA routing). */
 async function serveStatic(
   res: http.ServerResponse,
   root: string,
   pathname: string,
+  mountPrefix = '',
 ): Promise<void> {
   const rootAbs = resolvePath(root);
   let rel = decodeURIComponent(pathname);
@@ -106,16 +120,17 @@ async function serveStatic(
       : { 'Cache-Control': 'public, max-age=31536000, immutable' };
   try {
     const data = await readFile(filePath);
+    const body = ext === '.html' ? injectMountPrefix(data.toString('utf8'), mountPrefix) : data;
     res.writeHead(200, { 'Content-Type': MIME[ext] ?? 'application/octet-stream', ...cache });
-    res.end(data);
+    res.end(body);
   } catch {
     try {
-      const html = await readFile(resolvePath(rootAbs, 'index.html'));
+      const html = await readFile(resolvePath(rootAbs, 'index.html'), 'utf8');
       res.writeHead(200, {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
       });
-      res.end(html);
+      res.end(injectMountPrefix(html, mountPrefix));
     } catch {
       res.writeHead(404);
       res.end();
@@ -315,6 +330,46 @@ function metricRoute(rawPath: string, collections: Map<string, string>): string 
   return 'other';
 }
 
+const RESERVED_ROUTES = new Set(['docs', 'api-keys', 'plugin']);
+
+/**
+ * Detect a leading mount prefix a reverse proxy forwards verbatim — e.g. Traefik's
+ * `PathPrefix('/datacenter')` — so paasbox can be exposed
+ * under any subpath.
+ */
+
+function detectMountPrefix(
+  rawUrl: string,
+  method: string,
+  webRoot: string | undefined,
+  collections: Map<string, string>,
+): string {
+  const pathname = rawUrl.split('?')[0]!;
+  const normalized = pathname.endsWith('/') ? pathname : `${pathname}/`;
+  const apiIdx = normalized.indexOf('/api/');
+  if (apiIdx !== -1) return normalized.slice(0, apiIdx);
+  const metricsIdx = normalized.indexOf('/metrics/');
+  if (metricsIdx !== -1) return normalized.slice(0, metricsIdx);
+  if (method !== 'GET') return '';
+
+  const segments = pathname.replace(/^\/+/, '').split('/').filter(Boolean);
+  const webRootAbs = webRoot ? resolvePath(webRoot) : undefined;
+  for (let i = 0; i <= segments.length; i++) {
+    const rest = `/${segments.slice(i).join('/')}`;
+    if (webRootAbs) {
+      const filePath = resolvePath(webRootAbs, `.${rest === '/' ? '/index.html' : rest}`);
+      if (filePath.startsWith(webRootAbs) && existsSync(filePath)) {
+        return i === 0 ? '' : `/${segments.slice(0, i).join('/')}`;
+      }
+    }
+    const head = segments[i] ?? '';
+    if (head === '' || RESERVED_ROUTES.has(head) || collections.has(`/${head}/`)) {
+      return i === 0 ? '' : `/${segments.slice(0, i).join('/')}`;
+    }
+  }
+  return '';
+}
+
 export function createApiServer(opts: ServerOptions): http.Server {
   const { db } = opts;
   const fixedBase = opts.baseUrl?.replace(/\/$/, '');
@@ -337,6 +392,8 @@ export function createApiServer(opts: ServerOptions): http.Server {
     });
     const baseUrl = fixedBase ?? `http://${req.headers.host ?? 'localhost:8000'}`;
     try {
+      const mountPrefix = detectMountPrefix(req.url ?? '/', method, opts.webRoot, collections);
+      if (mountPrefix) req.url = (req.url ?? '/').slice(mountPrefix.length) || '/';
       const path = (req.url ?? '/').split('?')[0]!.replace(/\/?$/, '/');
 
       // Public, unauthenticated schema endpoints (like NetBox's /api/schema/).
@@ -471,7 +528,7 @@ export function createApiServer(opts: ServerOptions): http.Server {
       // Static SPA for non-API GET routes (single-container deploy).
       const rawPath = (req.url ?? '/').split('?')[0]!;
       if (opts.webRoot && method === 'GET' && !rawPath.startsWith('/api/')) {
-        return serveStatic(res, opts.webRoot, rawPath);
+        return serveStatic(res, opts.webRoot, rawPath, mountPrefix);
       }
       // Plugin-mounted static assets (a plugin shipping its own web UI). Public, like the SPA.
       if (method === 'GET') {

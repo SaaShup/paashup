@@ -1,4 +1,5 @@
 import type { useUiStore } from './stores/ui.js';
+import { BASE } from './base.js';
 
 type UiStore = ReturnType<typeof useUiStore>;
 
@@ -94,6 +95,11 @@ export function applyRoute(ui: UiStore, route: Route | null): void {
   }
 }
 
+function currentPath(): string {
+  const p = window.location.pathname;
+  return BASE && p.startsWith(BASE) ? (p.slice(BASE.length) || '/') : p;
+}
+
 /**
  * Wire the store to the URL, both ways.
  */
@@ -102,18 +108,18 @@ export function startRouteSync(
   watch: (source: () => string, cb: (v: string) => void) => void,
 ): void {
   // deep link on first load; normalise the URL when it didn't resolve (unknown table)
-  applyRoute(ui, parseRoute(window.location.pathname));
+  applyRoute(ui, parseRoute(currentPath()));
   const clean = pathFor(ui);
-  if (clean && clean !== window.location.pathname) {
-    window.history.replaceState(null, '', clean);
+  const cleanFull = clean ? BASE + clean : clean;
+  if (cleanFull && cleanFull !== window.location.pathname) {
+    window.history.replaceState(null, '', cleanFull);
   }
-  window.addEventListener('popstate', () =>
-    applyRoute(ui, parseRoute(window.location.pathname)),
-  );
+  window.addEventListener('popstate', () => applyRoute(ui, parseRoute(currentPath())));
   watch(
     () => pathFor(ui),
     (p) => {
-      if (p && p !== window.location.pathname) window.history.pushState(null, '', p);
+      const full = p ? BASE + p : p;
+      if (full && full !== window.location.pathname) window.history.pushState(null, '', full);
     },
   );
 }

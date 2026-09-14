@@ -4,6 +4,7 @@
 // applies authorization, and returns a **paas2box token**. The SPA stores that token
 // (as the existing `pb_token`) and uses it for every API/WS call — so it never touches
 // provider secrets or provider tokens, and works for any provider (Keycloak, Google, …).
+import { withBase } from '../base.js';
 
 export interface Provider {
   id: string;
@@ -32,7 +33,7 @@ let cache: ProvidersResponse | null = null;
 export async function loadProviders(): Promise<ProvidersResponse> {
   if (cache) return cache;
   try {
-    cache = (await (await fetch('/api/auth/providers/')).json()) as ProvidersResponse;
+    cache = (await (await fetch(withBase('/api/auth/providers/'))).json()) as ProvidersResponse;
   } catch {
     cache = { login_required: false, providers: [] };
   }
@@ -60,7 +61,7 @@ async function challenge(verifier: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
   return base64url(new Uint8Array(digest));
 }
-const redirectUri = (): string => `${location.origin}/`;
+const redirectUri = (): string => `${location.origin}${withBase('/')}`;
 
 // ---- token store --------------------------------------------------------------
 export function getToken(): string | null {
@@ -122,7 +123,7 @@ export async function handleRedirectCallback(): Promise<boolean> {
   sessionStorage.removeItem(SS.state);
   sessionStorage.removeItem(SS.provider);
 
-  const res = await fetch('/api/auth/oidc/exchange/', {
+  const res = await fetch(withBase('/api/auth/oidc/exchange/'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ provider, code, code_verifier: verifier, redirect_uri: redirectUri() }),
@@ -156,7 +157,7 @@ export async function establishSession(): Promise<void> {
   const token = getToken();
   if (!token) return;
   try {
-    await fetch('/api/auth/session/', {
+    await fetch(withBase('/api/auth/session/'), {
       method: 'POST',
       headers: { Authorization: `Token ${token}` },
     });
@@ -171,7 +172,7 @@ export async function logout(): Promise<void> {
   const token = getToken();
   if (id && token) {
     try {
-      await fetch(`/api/users/tokens/${id}/`, {
+      await fetch(withBase(`/api/users/tokens/${id}/`), {
         method: 'DELETE',
         headers: { Authorization: `Token ${token}` },
       });
@@ -180,12 +181,12 @@ export async function logout(): Promise<void> {
     }
   }
   try {
-    await fetch('/api/auth/logout/', { method: 'POST' }); // clear the browser-session cookie
+    await fetch(withBase('/api/auth/logout/'), { method: 'POST' }); // clear the browser-session cookie
   } catch {
     /* best-effort */
   }
   clearTokens();
-  location.assign('/');
+  location.assign(withBase('/'));
 }
 
 /** Periodically drop the session once it expires, so the UI returns to the login gate. */

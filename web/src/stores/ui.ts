@@ -23,8 +23,8 @@ export const useUiStore = defineStore('ui', {
     selected: null as Resource | null,
     /** Object id being shown in the read-only detail view (with `selected` as its resource). */
     detailId: null as number | null,
-    /** One-shot column filters applied by the next list view it opens (then cleared). */
-    pendingFilters: null as Record<string, string> | null,
+    /** Column filters of the list view (part of the URL query string). */
+    filters: {} as Record<string, string>,
     // accordion: everything collapsed by default; user expands by clicking.
     expandedSections: {} as Record<string, boolean>,
     expandedGroups: {} as Record<string, boolean>,
@@ -91,6 +91,7 @@ export const useUiStore = defineStore('ui', {
       this.view = 'list';
       this.selected = r;
       this.detailId = null;
+      this.filters = {};
     },
     /** Open the read-only detail view for one object of resource `r`. */
     openDetail(r: Resource, id: number) {
@@ -101,7 +102,7 @@ export const useUiStore = defineStore('ui', {
     /** Open resource `r`'s list with `filters` pre-applied (e.g. a host's containers). */
     openResourceFiltered(r: Resource, filters: Record<string, string>) {
       this.openResource(r);
-      this.pendingFilters = filters;
+      this.filters = filters;
     },
     toggleSection(section: string) {
       this.expandedSections[section] = !this.expandedSections[section];

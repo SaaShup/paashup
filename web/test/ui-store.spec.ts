@@ -21,19 +21,19 @@ const containers: Resource = {
 describe('ui store: openResourceFiltered', () => {
   beforeEach(() => setActivePinia(createPinia()));
 
-  it('opens the resource list and stashes the one-shot filters', () => {
+  it('opens the resource list and keeps the filters', () => {
     const ui = useUiStore();
     ui.openResourceFiltered(containers, { host: '7' });
     expect(ui.view).toBe('list');
     expect(ui.selected?.table).toBe('plugin_docker_container');
-    expect(ui.pendingFilters).toEqual({ host: '7' });
+    expect(ui.filters).toEqual({ host: '7' });
     expect(ui.detailId).toBeNull(); // not a detail navigation
   });
 
-  it('a plain openResource leaves no pending filters', () => {
+  it('a plain openResource leaves no filters', () => {
     const ui = useUiStore();
     ui.openResource(containers);
-    expect(ui.pendingFilters).toBeNull();
+    expect(ui.filters).toEqual({});
   });
 });
 

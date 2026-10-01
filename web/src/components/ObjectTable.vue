@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import type { Route } from '../router.js';
+import RouteLink from './RouteLink.vue';
 import type { Obj } from '../api/client.js';
 import type { FilterOptions } from '../api/columnFilters.js';
 
@@ -15,14 +17,15 @@ const props = defineProps<{
   filters?: Record<string, string>;
   /** Selectable values per column; a column gets a header dropdown when present. */
   filterOptions?: FilterOptions;
-  /** Render the name (`display`) cell as a link that emits `open` (e.g. host → detail). */
-  linkable?: boolean;
+  /** Render the name (`display`) cell as a real link to this route (e.g. host → detail). */
+  linkTo?: (row: Obj) => Route | null;
+  /** Route of the extra-action link; when it returns null the button emits `action` instead. */
+  actionTo?: (row: Obj) => Route | null;
 }>();
 const emit = defineEmits<{
   (e: 'delete', id: number): void;
   (e: 'edit', row: Obj): void;
   (e: 'action', row: Obj): void;
-  (e: 'open', row: Obj): void;
   (e: 'toggle', payload: { id: number; checked: boolean }): void;
   (e: 'toggle-all', checked: boolean): void;
   (e: 'filter', payload: { field: string; value: string }): void;
@@ -64,7 +67,7 @@ function cell(value: unknown): string {
   if (typeof value === 'object') {
     const o = value as Record<string, unknown>;
     if ('label' in o) return String(o.label); // choice {value,label}
-    if ('display' in o) return String(o.display); // nested brief
+    if ('display' in o) return o.version ? `${o.display}:${o.version}` : String(o.display); // nested brief (+ image version)
     return '{…}';
   }
   if (typeof value === 'boolean') return value ? '✓' : '✗';
@@ -117,19 +120,24 @@ function cell(value: unknown): string {
           />
         </td>
         <td v-for="c in columns" :key="c">
-          <button
-            v-if="linkable && (c === 'display' || c === 'id')"
+          <RouteLink
+            v-if="linkTo && (c === 'display' || c === 'id') && linkTo(row)"
             class="rowlink"
-            @click="emit('open', row)"
+            :to="linkTo(row)!"
           >
             {{ cell(row[c]) }}
-          </button>
+          </RouteLink>
           <template v-else>{{ cell(row[c]) }}</template>
         </td>
         <td class="ops">
-          <button v-if="extraAction" class="extra" @click="emit('action', row)">
-            {{ extraAction }}
-          </button>
+          <template v-if="extraAction">
+            <RouteLink v-if="actionTo?.(row)" class="extra" :to="actionTo(row)!">
+              {{ extraAction }}
+            </RouteLink>
+            <button v-else class="extra" @click="emit('action', row)">
+              {{ extraAction }}
+            </button>
+          </template>
           <a
             v-if="(row as any).url"
             class="api"
@@ -224,6 +232,7 @@ tbody tr.selected {
 }
 .api,
 .extra {
+  text-decoration: none;
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--primary-d);

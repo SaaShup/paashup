@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue';
 import { useUiStore } from '../stores/ui.js';
+import type { Route } from '../router.js';
+import RouteLink from './RouteLink.vue';
 import { sectionLabel, isPage, type NavItem } from '../groups.js';
 
 const ui = useUiStore();
@@ -28,7 +30,10 @@ const pageActive = (it: NavItem) =>
   isPage(it) && ui.view === 'plugin-page' && ui.pluginPage?.url === it.url;
 const resActive = (it: NavItem) => !isPage(it) && ui.selected?.table === it.table;
 const pageIcon = (it: NavItem) => (isPage(it) ? it.icon || '🧩' : '🧩');
-const openItem = (it: NavItem) => (isPage(it) ? ui.openPluginPage(it) : ui.openResource(it));
+const itemRoute = (it: NavItem): Route =>
+  isPage(it)
+    ? { view: 'plugin-page', plugin: it.plugin, label: it.label }
+    : { view: 'list', table: it.table };
 
 // While searching, force everything open so matches are visible.
 const sectionOpen = (s: string) => searchActive.value || !!ui.expandedSections[s];
@@ -38,23 +43,23 @@ const groupOpen = (section: string, label: string) =>
 
 <template>
   <aside class="sidebar">
-    <button
+    <RouteLink
       class="nav-item top"
       :class="{ active: ui.view === 'dashboard' }"
-      @click="ui.openDashboard()"
+      :to="{ view: 'dashboard' }"
     >
       <span class="ico">▦</span> Dashboard
-    </button>
-    <button class="nav-item top" :class="{ active: ui.view === 'docs' }" @click="ui.openDocs()">
+    </RouteLink>
+    <RouteLink class="nav-item top" :class="{ active: ui.view === 'docs' }" :to="{ view: 'docs' }">
       <span class="ico">📖</span> Docs
-    </button>
-    <button
+    </RouteLink>
+    <RouteLink
       class="nav-item top"
       :class="{ active: ui.view === 'api-keys' }"
-      @click="ui.openApiKeys()"
+      :to="{ view: 'api-keys' }"
     >
       <span class="ico">🔑</span> API keys
-    </button>
+    </RouteLink>
 
     <div v-for="sec in ui.grouped" :key="sec.section" class="group">
       <button class="group-head" @click="ui.toggleSection(sec.section)">
@@ -70,32 +75,32 @@ const groupOpen = (section: string, label: string) =>
               <span class="caret sm">{{ groupOpen(sec.section, g.label) ? '▾' : '▸' }}</span>
               {{ g.label }}
             </button>
-            <button
+            <RouteLink
               v-for="it in g.items"
               v-show="groupOpen(sec.section, g.label)"
               :key="itemKey(it)"
               class="nav-item deep"
               :class="{ active: pageActive(it) || resActive(it) }"
-              @click="openItem(it)"
+              :to="itemRoute(it)"
             >
               <span v-if="isPage(it)" class="ico sm">{{ pageIcon(it) }}</span>
               <span class="label">{{ it.label }}</span>
               <span v-if="countOf(it) !== null" class="count">{{ countOf(it) }}</span>
-            </button>
+            </RouteLink>
           </template>
           <!-- section without sub-groups: items directly -->
           <template v-else>
-            <button
+            <RouteLink
               v-for="it in g.items"
               :key="itemKey(it)"
               class="nav-item"
               :class="{ active: pageActive(it) || resActive(it) }"
-              @click="openItem(it)"
+              :to="itemRoute(it)"
             >
               <span v-if="isPage(it)" class="ico sm">{{ pageIcon(it) }}</span>
               <span class="label">{{ it.label }}</span>
               <span v-if="countOf(it) !== null" class="count">{{ countOf(it) }}</span>
-            </button>
+            </RouteLink>
           </template>
         </template>
       </div>
@@ -172,6 +177,7 @@ const groupOpen = (section: string, label: string) =>
   background: var(--surface-2);
 }
 .nav-item {
+  text-decoration: none;
   display: flex;
   align-items: center;
   text-align: left;

@@ -4,6 +4,7 @@ import { useUiStore } from '../stores/ui.js';
 import { useObjectsStore } from '../stores/objects.js';
 import type { Obj } from '../api/client.js';
 import { buildFilterOptions, type FilterOptions } from '../api/columnFilters.js';
+import type { Route } from '../router.js';
 import ObjectTable from '../components/ObjectTable.vue';
 import ObjectForm from '../components/ObjectForm.vue';
 import IpRangeAddresses from '../components/IpRangeAddresses.vue';
@@ -39,7 +40,10 @@ const selectedIds = ref<number[]>([]); // checked container rows — toolbar ops
 // Per-column header filters: { fieldName -> selected value } sent as `?<field>=<value>`,
 // with the selectable values per column in `filterOptions` (FK rows / enum choices /
 // distinct scalar values — see api/columnFilters).
-const filters = ref<Record<string, string>>({});
+const filters = computed({
+  get: () => ui.filters,
+  set: (v: Record<string, string>) => (ui.filters = v),
+});
 const filterOptions = ref<FilterOptions>({});
 
 const resource = computed(() => ui.selected!);
@@ -99,16 +103,12 @@ function setFilter(payload: { field: string; value: string }) {
   if (payload.value) next[payload.field] = payload.value;
   else delete next[payload.field];
   filters.value = next;
-  offset.value = 0;
-  load();
 }
 
 /** Clear every active column filter and reload. */
 function clearFilters() {
   if (!Object.keys(filters.value).length) return;
   filters.value = {};
-  offset.value = 0;
-  load();
 }
 
 /** Build the per-column filter options for the current resource (best-effort). */
@@ -126,12 +126,17 @@ async function loadFilterOptions() {
 watch(
   () => resource.value?.table,
   () => {
-    offset.value = 0;
     search.value = '';
-    filters.value = ui.pendingFilters ?? {}; // one-shot filters from a cross-page link
-    ui.pendingFilters = null;
-    load();
     loadFilterOptions();
+  },
+  { immediate: true },
+);
+// a table or filter change (UI, link or browser history) restarts from the first page
+watch(
+  () => `${resource.value?.table}?${JSON.stringify(ui.filters)}`,
+  () => {
+    offset.value = 0;
+    load();
   },
   { immediate: true },
 );
@@ -180,36 +185,30 @@ function edit(row: Obj) {
   editing.value = row;
   formOpen.value = true;
 }
-/** Name-link click: open the read-only detail view for containers and hosts. */
-function onOpen(row: Obj) {
-  if (resource.value && (isContainer.value || isHost.value)) {
-    ui.openDetail(resource.value, (row as { id: number }).id);
-  }
+const idOf = (row: Obj): number => (row as { id: number }).id;
+/** Name link: containers and hosts open their read-only detail view. */
+function openTo(row: Obj): Route | null {
+  return resource.value && (isContainer.value || isHost.value)
+    ? { view: 'detail', table: resource.value.table, id: idOf(row) }
+    : null;
 }
-/** Per-row extra action: containers open the read-only detail view; IP ranges, their addresses. */
+/** Per-row extra link: a container's detail, or the child list pre-filtered to this row. */
+function actionTo(row: Obj): Route | null {
+  const id = String(idOf(row));
+  if (isContainer.value) return { view: 'detail', table: resource.value!.table, id: idOf(row) };
+  if (isHost.value)
+    return { view: 'list', table: 'plugin_docker_container', filters: { host: id } };
+  if (isKcServer.value)
+    return { view: 'list', table: 'plugin_keycloak_realm', filters: { server: id } };
+  if (isKcRealm.value)
+    return { view: 'list', table: 'plugin_keycloak_client', filters: { realm: id } };
+  if (isKcClient.value)
+    return { view: 'list', table: 'plugin_keycloak_redirect_url', filters: { client: id } };
+  return null;
+}
+/** Per-row extra button for the rows with no link: IP ranges open their addresses. */
 function onAction(row: Obj) {
-  const id = (row as { id: number }).id;
-  if (isContainer.value) {
-    ui.openDetail(resource.value!, id);
-  } else if (isHost.value) {
-    // jump to the Containers list, pre-filtered to this host
-    const containers = ui.resources.find((r) => r.table === 'plugin_docker_container');
-    if (containers) ui.openResourceFiltered(containers, { host: String(id) });
-  } else if (isKcServer.value) {
-    // jump to the Realms list, pre-filtered to this Keycloak server
-    const realms = ui.resources.find((r) => r.table === 'plugin_keycloak_realm');
-    if (realms) ui.openResourceFiltered(realms, { server: String(id) });
-  } else if (isKcRealm.value) {
-    // jump to the Clients list, pre-filtered to this realm
-    const clients = ui.resources.find((r) => r.table === 'plugin_keycloak_client');
-    if (clients) ui.openResourceFiltered(clients, { realm: String(id) });
-  } else if (isKcClient.value) {
-    // jump to the Redirect URLs list, pre-filtered to this client
-    const urls = ui.resources.find((r) => r.table === 'plugin_keycloak_redirect_url');
-    if (urls) ui.openResourceFiltered(urls, { client: String(id) });
-  } else {
-    addrRange.value = row; // IP range → addresses
-  }
+  addrRange.value = row;
 }
 </script>
 
@@ -300,11 +299,11 @@ function onAction(row: Obj) {
         :selected="selectedIds"
         :filters="filters"
         :filter-options="filterOptions"
-        :linkable="isHost || isContainer"
+        :link-to="openTo"
+        :action-to="actionTo"
         @delete="del"
         @edit="edit"
         @action="onAction"
-        @open="onOpen"
         @toggle="toggleSel"
         @toggle-all="toggleAllSel"
         @filter="setFilter"

@@ -353,6 +353,7 @@ function detectMountPrefix(
   if (method !== 'GET') return '';
 
   const segments = pathname.replace(/^\/+/, '').split('/').filter(Boolean);
+  const tables = new Set(collections.values());
   const webRootAbs = webRoot ? resolvePath(webRoot) : undefined;
   for (let i = 0; i <= segments.length; i++) {
     const rest = `/${segments.slice(i).join('/')}`;
@@ -363,7 +364,7 @@ function detectMountPrefix(
       }
     }
     const head = segments[i] ?? '';
-    if (head === '' || RESERVED_ROUTES.has(head) || collections.has(`/${head}/`)) {
+    if (head === '' || RESERVED_ROUTES.has(head) || tables.has(head)) {
       return i === 0 ? '' : `/${segments.slice(0, i).join('/')}`;
     }
   }

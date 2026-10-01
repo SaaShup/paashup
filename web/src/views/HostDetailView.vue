@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { useUiStore } from '../stores/ui.js';
+import type { Route } from '../router.js';
+import RouteLink from '../components/RouteLink.vue';
 import type { Resource } from '../api/resources.js';
 import { api, type Obj } from '../api/client.js';
 import { scalarText } from './containerDetail.js';
@@ -88,9 +90,9 @@ async function load(): Promise<void> {
 onMounted(load);
 watch(() => ui.detailId, load); // re-fetch if another host is opened
 
-function back() {
-  if (resource.value) ui.openResource(resource.value);
-}
+const backTo = computed<Route | null>(() =>
+  resource.value ? { view: 'list', table: resource.value.table } : null,
+);
 
 function add(r: Resource) {
   form.value = { resource: r, object: null, defaults: { host: ui.detailId } };
@@ -113,9 +115,11 @@ async function onSaved() {
   if (r) await loadCategory(r);
 }
 
-/** Open the read-only container detail (name link in the Containers section). */
-function openContainer(row: Obj) {
-  if (containerResource.value) ui.openDetail(containerResource.value, (row as { id: number }).id);
+/** Name link in the Containers section → the read-only container detail. */
+function containerTo(row: Obj): Route | null {
+  return containerResource.value
+    ? { view: 'detail', table: containerResource.value.table, id: (row as { id: number }).id }
+    : null;
 }
 
 // ---- container selection + bulk ops ----
@@ -156,7 +160,7 @@ async function bulkOp(op: string) {
       {{ resource.section.toUpperCase() }} › {{ resource.label }} › detail
     </div>
     <div class="head">
-      <button class="btn btn-ghost" @click="back">‹ Back</button>
+      <RouteLink v-if="backTo" class="btn btn-ghost" :to="backTo" back>‹ Back</RouteLink>
       <h2>{{ title || 'Host' }}</h2>
     </div>
 
@@ -208,10 +212,9 @@ async function bulkOp(op: string) {
           <ObjectTable
             :items="items[c.table] ?? []"
             :editable="c.resource.writable"
-            :linkable="c.table === CONTAINER_TABLE"
+            :link-to="c.table === CONTAINER_TABLE ? containerTo : undefined"
             :selectable="c.table === CONTAINER_TABLE"
             :selected="selected"
-            @open="openContainer"
             @edit="(row) => edit(c.resource, row)"
             @delete="(id) => del(c.resource, id)"
             @toggle="toggleSel"
@@ -256,6 +259,7 @@ async function bulkOp(op: string) {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 10px 24px;
   padding: 16px 18px;
+  margin-bottom: 14px;
 }
 .prop {
   display: flex;
@@ -274,6 +278,7 @@ async function bulkOp(op: string) {
 }
 .cat {
   padding: 14px 16px;
+  margin-bottom: 14px;
 }
 .cat-head {
   display: flex;

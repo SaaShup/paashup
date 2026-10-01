@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { useUiStore } from '../stores/ui.js';
+import type { Route } from '../router.js';
+import RouteLink from '../components/RouteLink.vue';
 import { api, type Obj } from '../api/client.js';
 import {
   CONTAINER_COLLECTIONS,
@@ -156,13 +158,14 @@ const actionPath = (action: 'logs' | 'exec' | 'ws'): string | null => {
 };
 watch(() => ui.detailId, () => (tab.value = 'container')); // another container: fresh start
 
-function back() {
-  if (resource.value) ui.openResource(resource.value);
-}
-/** Jump to the host/image resource list. */
-function openTable(table: string) {
-  const r = ui.resources.find((x) => x.table === table);
-  if (r) ui.openResource(r);
+const backTo = computed<Route | null>(() =>
+  resource.value ? { view: 'list', table: resource.value.table } : null,
+);
+/** Link to the container's host detail page (the hosts list if the brief has no id). */
+function hostTo(brief: unknown): Route {
+  const table = 'plugin_docker_host';
+  const id = (brief as { id?: unknown } | null)?.id;
+  return typeof id === 'number' ? { view: 'detail', table, id } : { view: 'list', table };
 }
 async function onSaved() {
   editing.value = false;
@@ -176,7 +179,7 @@ async function onSaved() {
       {{ resource.section.toUpperCase() }} › {{ resource.label }} › detail
     </div>
     <div class="head">
-      <button class="btn btn-ghost" @click="back">‹ Back</button>
+      <RouteLink v-if="backTo" class="btn btn-ghost" :to="backTo" back>‹ Back</RouteLink>
       <h2>{{ title || 'Container' }}</h2>
       <span class="spacer" />
       <button v-if="resource.writable" class="btn btn-ok" @click="editing = true">Edit</button>
@@ -205,16 +208,14 @@ async function onSaved() {
         <section class="card props">
           <div class="prop">
             <span class="k">Host</span>
-            <button v-if="host" class="link" @click="openTable('plugin_docker_host')">
+            <RouteLink v-if="host" class="link" :to="hostTo(host)">
               {{ scalarText(host) }}
-            </button>
+            </RouteLink>
             <span v-else class="v">—</span>
           </div>
           <div class="prop">
             <span class="k">Image</span>
-            <button v-if="image" class="link" @click="openTable('plugin_docker_image')">
-              {{ scalarText(image) }}
-            </button>
+            <span v-if="image" class="v">{{ scalarText(image) }}</span>
             <span v-else class="v">—</span>
           </div>
           <div v-for="s in scalars" :key="s.label" class="prop">
@@ -362,6 +363,7 @@ async function onSaved() {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 10px 24px;
   padding: 16px 18px;
+  margin-bottom: 14px;
 }
 .prop {
   display: flex;

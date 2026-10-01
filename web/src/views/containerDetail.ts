@@ -148,7 +148,7 @@ export function scalarText(value: unknown): string {
   if (typeof value === 'object') {
     const o = value as Record<string, unknown>;
     if ('label' in o) return String(o.label); // choice {value,label}
-    if ('display' in o) return String(o.display); // nested brief
+    if ('display' in o) return o.version ? `${o.display}:${o.version}` : String(o.display); // nested brief (+ image version)
     if ('name' in o) return String(o.name);
     return JSON.stringify(o);
   }

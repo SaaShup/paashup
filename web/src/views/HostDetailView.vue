@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { useUiStore } from '../stores/ui.js';
+import { useConnectionStore } from '../stores/connection.js';
 import type { Route } from '../router.js';
 import RouteLink from '../components/RouteLink.vue';
 import type { Resource } from '../api/resources.js';
@@ -30,6 +31,7 @@ const CONTAINER_OP_BTNS = [
 ] as const;
 
 const ui = useUiStore();
+const connection = useConnectionStore();
 const resource = computed(() => ui.selected); // the host resource
 
 const host = ref<Obj | null>(null);
@@ -88,6 +90,34 @@ async function load(): Promise<void> {
 }
 
 onMounted(load);
+
+const idOfRow = (o: Obj): unknown => (o as { id?: unknown }).id;
+const hostIdOf = (data: Record<string, unknown>): unknown => {
+  const h = data.host;
+  return h && typeof h === 'object' ? (h as { id?: unknown }).id : h;
+};
+watch(
+  () => connection.log[0],
+  (e) => {
+    if (!e) return;
+    if (e.table === resource.value?.table) {
+      if (e.event === 'updated' && e.id === ui.detailId && e.data && host.value)
+        host.value = { ...host.value, ...e.data } as Obj;
+      return;
+    }
+    const list = items.value[e.table];
+    if (!list) return;
+    const idx = list.findIndex((o) => idOfRow(o) === e.id);
+    let next = list;
+    if (e.event === 'deleted') {
+      if (idx >= 0) next = list.filter((_, i) => i !== idx);
+    } else if (e.data && hostIdOf(e.data) === ui.detailId) {
+      next =
+        idx >= 0 ? list.map((o, i) => (i === idx ? (e.data as Obj) : o)) : [e.data as Obj, ...list];
+    }
+    if (next !== list) items.value = { ...items.value, [e.table]: next };
+  },
+);
 watch(() => ui.detailId, load); // re-fetch if another host is opened
 
 const backTo = computed<Route | null>(() =>

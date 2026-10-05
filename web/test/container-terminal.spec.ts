@@ -6,6 +6,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import ContainerTerminal from '../src/components/ContainerTerminal.vue';
 
+const base = vi.hoisted(() => ({ value: '' }));
+vi.mock('../src/base.js', () => ({
+  get BASE() {
+    return base.value;
+  },
+}));
+
 const MSG = {
   stdin: 0,
   stdout: 1,
@@ -178,6 +185,20 @@ describe('ContainerTerminal', () => {
     expect(url.searchParams.get('tty')).toBe('true');
     expect(url.searchParams.get('command')).toBe('sh');
     expect(sock.binaryType).toBe('arraybuffer');
+  });
+
+  it.each([
+    ['', '/api/plugins/docker/containers/1/ws/'],
+    ['/datacenter', '/datacenter/api/plugins/docker/containers/1/ws/'],
+  ])('prefixes the ws URL with the mount base %j', async (prefix, expected) => {
+    base.value = prefix;
+    try {
+      mount(ContainerTerminal, { props: props() });
+      await flushPromises();
+      expect(new URL(FakeSocket.instances[0]!.url).pathname).toBe(expected);
+    } finally {
+      base.value = '';
+    }
   });
 
   it('shows connecting → connected status text as the socket opens', async () => {

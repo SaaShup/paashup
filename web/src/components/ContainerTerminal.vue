@@ -2,6 +2,7 @@
 // Interactive container terminal (xterm.js) over paasbox's WebSocket relay
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { withCredential } from '../websocket/socket.js';
+import { BASE } from '../base.js';
 import {
   hasXterm,
   openTerminal,
@@ -69,7 +70,7 @@ const statusText = computed(() => {
 
 function wsUrl(): string {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const u = new URL(`${proto}://${location.host}${props.wsPath}`);
+  const u = new URL(`${proto}://${location.host}${BASE}${props.wsPath}`);
   u.searchParams.set('tty', 'true');
   u.searchParams.set('command', shell.value.trim() || 'sh');
   return withCredential(u.toString());

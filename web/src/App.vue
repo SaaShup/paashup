@@ -20,6 +20,8 @@ import DashboardView from './views/DashboardView.vue';
 import ResourceListView from './views/ResourceListView.vue';
 import ContainerDetailView from './views/ContainerDetailView.vue';
 import HostDetailView from './views/HostDetailView.vue';
+import ObjectDetailView from './views/ObjectDetailView.vue';
+import { DETAIL_TABLES } from './views/objectDetail.js';
 import DocsView from './views/DocsView.vue';
 import ApiKeysView from './views/ApiKeysView.vue';
 import PluginPageView from './views/PluginPageView.vue';
@@ -119,6 +121,9 @@ onMounted(async () => {
         <PluginPageView v-else-if="ui.view === 'plugin-page'" />
         <HostDetailView
           v-else-if="ui.view === 'detail' && ui.selected?.table === 'plugin_docker_host'"
+        />
+        <ObjectDetailView
+          v-else-if="ui.view === 'detail' && DETAIL_TABLES.has(ui.selected?.table ?? '')"
         />
         <ContainerDetailView v-else-if="ui.view === 'detail'" />
         <ResourceListView v-else />

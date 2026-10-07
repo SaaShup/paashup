@@ -15,7 +15,11 @@ export type FieldKind =
   | 'fk'
   | 'json'
   | 'iplist'
+  | 'textarea'
   | 'tags';
+
+/** String fields entered in a large text box rather than a one-line input. */
+const LONG_TEXT = new Set(['public_key']);
 
 export interface FieldDef {
   name: string;
@@ -67,6 +71,7 @@ export async function formFields(model: string): Promise<FieldDef[]> {
       choices = p.items.enum;
     } else if (p.type === 'boolean') kind = 'boolean';
     else if (p.type === 'integer' || p.type === 'number') kind = 'number';
+    else if (LONG_TEXT.has(name)) kind = 'textarea'; // multi-line / very long values
     else if (name === 'dhcp_relays')
       kind = 'iplist'; // friendly one-IP-per-line editor
     else if (p.type === 'object' || p.type === 'array') kind = 'json';

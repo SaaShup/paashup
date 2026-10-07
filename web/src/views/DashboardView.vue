@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useUiStore } from '../stores/ui.js';
-import { sectionLabel, sectionRank } from '../groups.js';
+import { isHiddenResource, sectionLabel, sectionRank } from '../groups.js';
 import EventLog from '../components/EventLog.vue';
 
 const ui = useUiStore();
@@ -33,7 +33,7 @@ async function loadUsage(force = false) {
   try {
     // Counts live in the UI store (shared with the sidebar item badges + cached).
     await ui.loadCounts(ui.resources, force);
-    const counts = ui.resources.map((r) => ({
+    const counts = ui.resources.filter((r) => !isHiddenResource(r)).map((r) => ({
       section: r.section,
       endpoint: r.endpoint,
       count: ui.counts[r.table] ?? 0,

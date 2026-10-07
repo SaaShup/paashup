@@ -1,14 +1,18 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import type { Route } from '../router.js';
 import RouteLink from './RouteLink.vue';
 import type { Obj } from '../api/client.js';
 import type { FilterOptions } from '../api/columnFilters.js';
+import { useUiStore } from '../stores/ui.js';
+import { briefTarget } from '../views/objectDetail.js';
 
 const props = defineProps<{
   items: Obj[];
   editable?: boolean;
   extraAction?: string;
+  /** Columns to show right after id/name, ahead of the others (the table shows at most 8). */
+  preferred?: string[];
   /** Render a leading checkbox column for row selection (e.g. Docker containers). */
   selectable?: boolean;
   /** Currently-selected row ids (controlled by the parent). */
@@ -35,6 +39,13 @@ function onFilter(field: string, e: Event): void {
   emit('filter', { field, value: (e.target as HTMLSelectElement).value });
 }
 
+const ui = useUiStore();
+/** A foreign-key cell whose target has a detail page links to it. */
+function briefRoute(value: unknown): Route | null {
+  const t = briefTarget(value, ui.resources);
+  return t ? { view: 'detail', table: t.table, id: t.id } : null;
+}
+
 const idOf = (row: Obj): number => (row as { id: number }).id;
 const selectedSet = computed(() => new Set(props.selected ?? []));
 const allSelected = computed(
@@ -49,7 +60,8 @@ function onToggleAll(e: Event): void {
   emit('toggle-all', (e.target as HTMLInputElement).checked);
 }
 
-const HIDE = new Set(['url', 'display_url', 'custom_fields', 'tags']);
+// source_type / source_id are the raw halves of the `source` link shown instead
+const HIDE = new Set(['url', 'display_url', 'custom_fields', 'tags', 'source_type', 'source_id']);
 const FIRST = ['id', 'display'];
 
 const columns = computed(() => {
@@ -57,9 +69,37 @@ const columns = computed(() => {
   for (const row of props.items.slice(0, 20)) {
     for (const k of Object.keys(row)) if (!HIDE.has(k)) keys.add(k);
   }
-  const rest = [...keys].filter((k) => !FIRST.includes(k));
-  return [...FIRST.filter((k) => keys.has(k)), ...rest].slice(0, 8);
+  const front = [...FIRST, ...(props.preferred ?? [])].filter((k) => keys.has(k));
+  const rest = [...keys].filter((k) => !front.includes(k));
+  return [...front, ...rest].slice(0, 8);
 });
+
+/** The value of a column listed in CLIPPED_COLUMNS (an SSH key…) is cut with an ellipsis instead of
+ *  stretching the table; a Copy button puts the full value on the clipboard. */
+const CLIPPED_COLUMNS = new Set(['public_key']);
+const isLong = (column: string, value: unknown): boolean =>
+  CLIPPED_COLUMNS.has(column) && typeof value === 'string' && value.length > 48;
+
+const copied = ref('');
+let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+
+async function copyValue(value: unknown, key: string): Promise<void> {
+  const text = String(value);
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // no clipboard API (plain-http origin): select + copy from a temporary field
+    const t = document.createElement('textarea');
+    t.value = text;
+    document.body.appendChild(t);
+    t.select();
+    document.execCommand('copy');
+    t.remove();
+  }
+  copied.value = key;
+  clearTimeout(copiedTimer);
+  copiedTimer = setTimeout(() => (copied.value = ''), 1500);
+}
 
 function cell(value: unknown): string {
   if (value === null || value === undefined) return '—';
@@ -119,7 +159,7 @@ function cell(value: unknown): string {
             @change="onToggle(row, $event)"
           />
         </td>
-        <td v-for="c in columns" :key="c">
+        <td v-for="c in columns" :key="c" :class="{ long: isLong(c, row[c]) }">
           <RouteLink
             v-if="linkTo && (c === 'display' || c === 'id') && linkTo(row)"
             class="rowlink"
@@ -127,6 +167,20 @@ function cell(value: unknown): string {
           >
             {{ cell(row[c]) }}
           </RouteLink>
+          <RouteLink v-else-if="briefRoute(row[c])" class="rowlink" :to="briefRoute(row[c])!">
+            {{ cell(row[c]) }}
+          </RouteLink>
+          <span v-else-if="isLong(c, row[c])" class="clip">
+            <span class="clip-text" :title="cell(row[c])">{{ cell(row[c]) }}</span>
+            <button
+              type="button"
+              class="copy"
+              title="Copy the full value"
+              @click="copyValue(row[c], `${idOf(row)}:${c}`)"
+            >
+              {{ copied === `${idOf(row)}:${c}` ? '✓ Copied' : 'Copy' }}
+            </button>
+          </span>
           <template v-else>{{ cell(row[c]) }}</template>
         </td>
         <td class="ops">
@@ -182,6 +236,33 @@ table {
 }
 .rowlink:hover {
   color: var(--primary-d);
+}
+td.long {
+  max-width: 320px;
+}
+.clip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.clip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.copy {
+  flex: none;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.copy:hover {
+  border-color: var(--primary);
+  color: var(--primary);
 }
 th,
 td {

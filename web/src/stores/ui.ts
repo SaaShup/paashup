@@ -7,10 +7,39 @@ import {
   subgroupsFor,
   sectionRank,
   effectiveSection,
-  pluginNameOf,
   isHiddenSection,
+  isHiddenResource,
+  sectionOf,
   type SubGroupView,
 } from '../groups.js';
+
+/** Core tables the OpenStack sync writes to (their counts/lists must be refreshed after it). */
+export const OPENSTACK_SYNCED_TABLES = [
+  'virtualization_cluster_type',
+  'virtualization_cluster',
+  'virtualization_virtual_machine_type',
+  'virtualization_virtual_machine',
+  'virtualization_vminterface',
+  'virtualization_virtual_disk',
+  'ipam_ipaddress',
+  'dcim_region',
+  'dcim_site',
+  'virtualization_image',
+  'virtualization_ssh_key',
+];
+
+/**
+ * Tables whose content changed behind the change-feed's back: the OpenStack sync writes
+ * VMs, clusters, IPs... with plain SQL, so no per-row events exist. The cloud's own
+ * events tell us when it finished (state connected/error) or was removed.
+ */
+export function bulkChangedTables(e: ChangeEvent): string[] {
+  if (e.table !== 'plugin_openstack_cloud') return [];
+  const raw = (e.data as { state?: unknown } | undefined)?.state;
+  const state = typeof raw === 'object' && raw ? (raw as { value?: unknown }).value : raw;
+  const finished = e.event === 'updated' && (state === 'connected' || state === 'error');
+  return finished || e.event === 'deleted' ? OPENSTACK_SYNCED_TABLES : [];
+}
 
 /** UI navigation state: which view is shown, the resource catalog, group collapse. */
 export const useUiStore = defineStore('ui', {
@@ -38,13 +67,10 @@ export const useUiStore = defineStore('ui', {
       const q = state.search.trim().toLowerCase();
       const by = new Map<string, Resource[]>();
       for (const r of state.resources) {
-        if (isHiddenSection(r.section)) continue; // e.g. vpn, wireless
+        if (isHiddenSection(r.section) || isHiddenResource(r)) continue; // e.g. vpn, wireless, most of dcim
         if (q && !`${r.section} ${r.label} ${r.table}`.toLowerCase().includes(q)) continue;
         // promote configured plugins (e.g. docker) to their own top-level section
-        const sec =
-          r.section === 'plugins'
-            ? effectiveSection(r.section, pluginNameOf(r.endpoint))
-            : r.section;
+        const sec = sectionOf(r);
         (by.get(sec) ?? by.set(sec, []).get(sec)!).push(r);
       }
       // plugin-contributed pages, bucketed by their (possibly promoted) section
@@ -140,9 +166,17 @@ export const useUiStore = defineStore('ui', {
       else if (e.event === 'deleted') this.counts[e.table] = Math.max(0, this.counts[e.table] - 1);
     },
     /**
-     * A Docker host change state re-fetch the real counts
+     * A Docker host refresh or an OpenStack sync changes many rows at once without
+     * per-row events: re-fetch the real counts of the affected tables.
      */
     resyncCountsAfterBulkChange(e: ChangeEvent): Promise<void> | undefined {
+      const synced = bulkChangedTables(e);
+      if (synced.length) {
+        return this.loadCounts(
+          this.resources.filter((r) => synced.includes(r.table)),
+          true,
+        );
+      }
       if (e.table !== 'plugin_docker_host') return;
       const refreshing =
         e.event === 'updated' &&

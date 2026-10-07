@@ -6,7 +6,7 @@ Each entity below maps to one API collection endpoint and is intended as a datab
 
 > Foreign keys (`→`) are stored as the referenced row's integer `id`. Many-to-many (`⇄`) relations need a join table. `slug` columns are unique. Other unique constraints (e.g. `name` scoped to a parent) follow NetBox's models and are noted where derivable.
 
-**82 entities**, **1484 fields** total.
+**84 entities**, **1502 fields** total.
 
 
 > **Generic relations.** Where NetBox uses a polymorphic FK, this model stores a pair of columns: `<rel>_type` (a content-type reference such as `dcim.interface`) plus `<rel>_id` (the target row id). Affected: `Prefix.scope_*`, `Cluster.scope_*`, `IPAddress.assigned_object_*`, `Service.*`, `FHRPGroupAssignment.*`, `MACAddress.assigned_object_*`, etc.
@@ -19,7 +19,7 @@ _46 entities._
 
 ### CableBundle
 
-- **Table (suggested):** `dcim_cable_bundle`
+- **Table:** `dcim_cable_bundle`
 - **Endpoint:** `/api/dcim/cable-bundles/`
 - **Read schema:** `CableBundle` · **Write schema:** `CableBundleRequest`
 
@@ -42,7 +42,7 @@ _46 entities._
 
 ### CableTermination
 
-- **Table (suggested):** `dcim_cable_termination`
+- **Table:** `dcim_cable_termination`
 - **Endpoint:** `/api/dcim/cable-terminations/`
 - **Read schema:** `CableTermination` · **Write schema:** `(read-only / stub)`
 
@@ -64,7 +64,7 @@ _46 entities._
 
 ### Cable
 
-- **Table (suggested):** `dcim_cable`
+- **Table:** `dcim_cable`
 - **Endpoint:** `/api/dcim/cables/`
 - **Read schema:** `Cable` · **Write schema:** `WritableCableRequest`
 
@@ -96,7 +96,7 @@ _46 entities._
 
 ### ConsolePortTemplate
 
-- **Table (suggested):** `dcim_console_port_template`
+- **Table:** `dcim_console_port_template`
 - **Endpoint:** `/api/dcim/console-port-templates/`
 - **Read schema:** `ConsolePortTemplate` · **Write schema:** `WritableConsolePortTemplateRequest`
 
@@ -117,7 +117,7 @@ _46 entities._
 
 ### ConsolePort
 
-- **Table (suggested):** `dcim_console_port`
+- **Table:** `dcim_console_port`
 - **Endpoint:** `/api/dcim/console-ports/`
 - **Read schema:** `ConsolePort` · **Write schema:** `WritableConsolePortRequest`
 
@@ -152,7 +152,7 @@ _46 entities._
 
 ### ConsoleServerPortTemplate
 
-- **Table (suggested):** `dcim_console_server_port_template`
+- **Table:** `dcim_console_server_port_template`
 - **Endpoint:** `/api/dcim/console-server-port-templates/`
 - **Read schema:** `ConsoleServerPortTemplate` · **Write schema:** `WritableConsoleServerPortTemplateRequest`
 
@@ -173,7 +173,7 @@ _46 entities._
 
 ### ConsoleServerPort
 
-- **Table (suggested):** `dcim_console_server_port`
+- **Table:** `dcim_console_server_port`
 - **Endpoint:** `/api/dcim/console-server-ports/`
 - **Read schema:** `ConsoleServerPort` · **Write schema:** `WritableConsoleServerPortRequest`
 
@@ -208,7 +208,7 @@ _46 entities._
 
 ### DeviceBayTemplate
 
-- **Table (suggested):** `dcim_device_bay_template`
+- **Table:** `dcim_device_bay_template`
 - **Endpoint:** `/api/dcim/device-bay-templates/`
 - **Read schema:** `DeviceBayTemplate` · **Write schema:** `DeviceBayTemplateRequest`
 
@@ -228,7 +228,7 @@ _46 entities._
 
 ### DeviceBay
 
-- **Table (suggested):** `dcim_device_bay`
+- **Table:** `dcim_device_bay`
 - **Endpoint:** `/api/dcim/device-bays/`
 - **Read schema:** `DeviceBay` · **Write schema:** `DeviceBayRequest`
 
@@ -254,7 +254,7 @@ _46 entities._
 
 ### DeviceRole
 
-- **Table (suggested):** `dcim_device_role`
+- **Table:** `dcim_device_role`
 - **Endpoint:** `/api/dcim/device-roles/`
 - **Read schema:** `DeviceRole` · **Write schema:** `WritableDeviceRoleRequest`
 
@@ -284,7 +284,7 @@ _46 entities._
 
 ### DeviceType
 
-- **Table (suggested):** `dcim_device_type`
+- **Table:** `dcim_device_type`
 - **Endpoint:** `/api/dcim/device-types/`
 - **Read schema:** `DeviceType` · **Write schema:** `WritableDeviceTypeRequest`
 
@@ -330,7 +330,7 @@ _46 entities._
 
 ### Device
 
-- **Table (suggested):** `dcim_device`
+- **Table:** `dcim_device`
 - **Endpoint:** `/api/dcim/devices/`
 - **Read schema:** `DeviceWithConfigContext` · **Write schema:** `WritableDeviceWithConfigContextRequest`
 
@@ -389,7 +389,7 @@ _46 entities._
 
 ### FrontPortTemplate
 
-- **Table (suggested):** `dcim_front_port_template`
+- **Table:** `dcim_front_port_template`
 - **Endpoint:** `/api/dcim/front-port-templates/`
 - **Read schema:** `FrontPortTemplate` · **Write schema:** `WritableFrontPortTemplateRequest`
 
@@ -413,7 +413,7 @@ _46 entities._
 
 ### FrontPort
 
-- **Table (suggested):** `dcim_front_port`
+- **Table:** `dcim_front_port`
 - **Endpoint:** `/api/dcim/front-ports/`
 - **Read schema:** `FrontPort` · **Write schema:** `WritableFrontPortRequest`
 
@@ -447,7 +447,7 @@ _46 entities._
 
 ### InterfaceTemplate
 
-- **Table (suggested):** `dcim_interface_template`
+- **Table:** `dcim_interface_template`
 - **Endpoint:** `/api/dcim/interface-templates/`
 - **Read schema:** `InterfaceTemplate` · **Write schema:** `WritableInterfaceTemplateRequest`
 
@@ -474,7 +474,7 @@ _46 entities._
 
 ### Interface
 
-- **Table (suggested):** `dcim_interface`
+- **Table:** `dcim_interface`
 - **Endpoint:** `/api/dcim/interfaces/`
 - **Read schema:** `Interface` · **Write schema:** `WritableInterfaceRequest`
 
@@ -540,7 +540,7 @@ _46 entities._
 
 ### InventoryItemRole
 
-- **Table (suggested):** `dcim_inventory_item_role`
+- **Table:** `dcim_inventory_item_role`
 - **Endpoint:** `/api/dcim/inventory-item-roles/`
 - **Read schema:** `InventoryItemRole` · **Write schema:** `InventoryItemRoleRequest`
 
@@ -565,7 +565,7 @@ _46 entities._
 
 ### InventoryItemTemplate
 
-- **Table (suggested):** `dcim_inventory_item_template`
+- **Table:** `dcim_inventory_item_template`
 - **Endpoint:** `/api/dcim/inventory-item-templates/`
 - **Read schema:** `InventoryItemTemplate` · **Write schema:** `InventoryItemTemplateRequest`
 
@@ -591,7 +591,7 @@ _46 entities._
 
 ### InventoryItem
 
-- **Table (suggested):** `dcim_inventory_item`
+- **Table:** `dcim_inventory_item`
 - **Endpoint:** `/api/dcim/inventory-items/`
 - **Read schema:** `InventoryItem` · **Write schema:** `WritableInventoryItemRequest`
 
@@ -625,7 +625,7 @@ _46 entities._
 
 ### Location
 
-- **Table (suggested):** `dcim_location`
+- **Table:** `dcim_location`
 - **Endpoint:** `/api/dcim/locations/`
 - **Read schema:** `Location` · **Write schema:** `WritableLocationRequest`
 
@@ -657,7 +657,7 @@ _46 entities._
 
 ### MACAddress
 
-- **Table (suggested):** `dcim_macaddress`
+- **Table:** `dcim_macaddress`
 - **Endpoint:** `/api/dcim/mac-addresses/`
 - **Read schema:** `MACAddress` · **Write schema:** `MACAddressRequest`
 
@@ -681,7 +681,7 @@ _46 entities._
 
 ### Manufacturer
 
-- **Table (suggested):** `dcim_manufacturer`
+- **Table:** `dcim_manufacturer`
 - **Endpoint:** `/api/dcim/manufacturers/`
 - **Read schema:** `Manufacturer` · **Write schema:** `ManufacturerRequest`
 
@@ -708,7 +708,7 @@ _46 entities._
 
 ### ModuleBayTemplate
 
-- **Table (suggested):** `dcim_module_bay_template`
+- **Table:** `dcim_module_bay_template`
 - **Endpoint:** `/api/dcim/module-bay-templates/`
 - **Read schema:** `ModuleBayTemplate` · **Write schema:** `ModuleBayTemplateRequest`
 
@@ -730,7 +730,7 @@ _46 entities._
 
 ### ModuleBay
 
-- **Table (suggested):** `dcim_module_bay`
+- **Table:** `dcim_module_bay`
 - **Endpoint:** `/api/dcim/module-bays/`
 - **Read schema:** `ModuleBay` · **Write schema:** `ModuleBayRequest`
 
@@ -758,7 +758,7 @@ _46 entities._
 
 ### ModuleTypeProfile
 
-- **Table (suggested):** `dcim_module_type_profile`
+- **Table:** `dcim_module_type_profile`
 - **Endpoint:** `/api/dcim/module-type-profiles/`
 - **Read schema:** `ModuleTypeProfile` · **Write schema:** `ModuleTypeProfileRequest`
 
@@ -781,7 +781,7 @@ _46 entities._
 
 ### ModuleType
 
-- **Table (suggested):** `dcim_module_type`
+- **Table:** `dcim_module_type`
 - **Endpoint:** `/api/dcim/module-types/`
 - **Read schema:** `ModuleType` · **Write schema:** `WritableModuleTypeRequest`
 
@@ -819,7 +819,7 @@ _46 entities._
 
 ### Module
 
-- **Table (suggested):** `dcim_module`
+- **Table:** `dcim_module`
 - **Endpoint:** `/api/dcim/modules/`
 - **Read schema:** `Module` · **Write schema:** `WritableModuleRequest`
 
@@ -848,7 +848,7 @@ _46 entities._
 
 ### Platform
 
-- **Table (suggested):** `dcim_platform`
+- **Table:** `dcim_platform`
 - **Endpoint:** `/api/dcim/platforms/`
 - **Read schema:** `Platform` · **Write schema:** `WritablePlatformRequest`
 
@@ -877,7 +877,7 @@ _46 entities._
 
 ### PowerFeed
 
-- **Table (suggested):** `dcim_power_feed`
+- **Table:** `dcim_power_feed`
 - **Endpoint:** `/api/dcim/power-feeds/`
 - **Read schema:** `PowerFeed` · **Write schema:** `WritablePowerFeedRequest`
 
@@ -918,7 +918,7 @@ _46 entities._
 
 ### PowerOutletTemplate
 
-- **Table (suggested):** `dcim_power_outlet_template`
+- **Table:** `dcim_power_outlet_template`
 - **Endpoint:** `/api/dcim/power-outlet-templates/`
 - **Read schema:** `PowerOutletTemplate` · **Write schema:** `WritablePowerOutletTemplateRequest`
 
@@ -942,7 +942,7 @@ _46 entities._
 
 ### PowerOutlet
 
-- **Table (suggested):** `dcim_power_outlet`
+- **Table:** `dcim_power_outlet`
 - **Endpoint:** `/api/dcim/power-outlets/`
 - **Read schema:** `PowerOutlet` · **Write schema:** `WritablePowerOutletRequest`
 
@@ -980,7 +980,7 @@ _46 entities._
 
 ### PowerPanel
 
-- **Table (suggested):** `dcim_power_panel`
+- **Table:** `dcim_power_panel`
 - **Endpoint:** `/api/dcim/power-panels/`
 - **Read schema:** `PowerPanel` · **Write schema:** `PowerPanelRequest`
 
@@ -1005,7 +1005,7 @@ _46 entities._
 
 ### PowerPortTemplate
 
-- **Table (suggested):** `dcim_power_port_template`
+- **Table:** `dcim_power_port_template`
 - **Endpoint:** `/api/dcim/power-port-templates/`
 - **Read schema:** `PowerPortTemplate` · **Write schema:** `WritablePowerPortTemplateRequest`
 
@@ -1028,7 +1028,7 @@ _46 entities._
 
 ### PowerPort
 
-- **Table (suggested):** `dcim_power_port`
+- **Table:** `dcim_power_port`
 - **Endpoint:** `/api/dcim/power-ports/`
 - **Read schema:** `PowerPort` · **Write schema:** `WritablePowerPortRequest`
 
@@ -1064,7 +1064,7 @@ _46 entities._
 
 ### RackGroup
 
-- **Table (suggested):** `dcim_rack_group`
+- **Table:** `dcim_rack_group`
 - **Endpoint:** `/api/dcim/rack-groups/`
 - **Read schema:** `RackGroup` · **Write schema:** `RackGroupRequest`
 
@@ -1088,7 +1088,7 @@ _46 entities._
 
 ### RackReservation
 
-- **Table (suggested):** `dcim_rack_reservation`
+- **Table:** `dcim_rack_reservation`
 - **Endpoint:** `/api/dcim/rack-reservations/`
 - **Read schema:** `RackReservation` · **Write schema:** `WritableRackReservationRequest`
 
@@ -1115,7 +1115,7 @@ _46 entities._
 
 ### RackRole
 
-- **Table (suggested):** `dcim_rack_role`
+- **Table:** `dcim_rack_role`
 - **Endpoint:** `/api/dcim/rack-roles/`
 - **Read schema:** `RackRole` · **Write schema:** `RackRoleRequest`
 
@@ -1140,7 +1140,7 @@ _46 entities._
 
 ### RackType
 
-- **Table (suggested):** `dcim_rack_type`
+- **Table:** `dcim_rack_type`
 - **Endpoint:** `/api/dcim/rack-types/`
 - **Read schema:** `RackType` · **Write schema:** `WritableRackTypeRequest`
 
@@ -1178,7 +1178,7 @@ _46 entities._
 
 ### Rack
 
-- **Table (suggested):** `dcim_rack`
+- **Table:** `dcim_rack`
 - **Endpoint:** `/api/dcim/racks/`
 - **Read schema:** `Rack` · **Write schema:** `WritableRackRequest`
 
@@ -1226,7 +1226,7 @@ _46 entities._
 
 ### RearPortTemplate
 
-- **Table (suggested):** `dcim_rear_port_template`
+- **Table:** `dcim_rear_port_template`
 - **Endpoint:** `/api/dcim/rear-port-templates/`
 - **Read schema:** `RearPortTemplate` · **Write schema:** `WritableRearPortTemplateRequest`
 
@@ -1250,7 +1250,7 @@ _46 entities._
 
 ### RearPort
 
-- **Table (suggested):** `dcim_rear_port`
+- **Table:** `dcim_rear_port`
 - **Endpoint:** `/api/dcim/rear-ports/`
 - **Read schema:** `RearPort` · **Write schema:** `WritableRearPortRequest`
 
@@ -1284,7 +1284,7 @@ _46 entities._
 
 ### Region
 
-- **Table (suggested):** `dcim_region`
+- **Table:** `dcim_region`
 - **Endpoint:** `/api/dcim/regions/`
 - **Read schema:** `Region` · **Write schema:** `WritableRegionRequest`
 
@@ -1311,7 +1311,7 @@ _46 entities._
 
 ### SiteGroup
 
-- **Table (suggested):** `dcim_site_group`
+- **Table:** `dcim_site_group`
 - **Endpoint:** `/api/dcim/site-groups/`
 - **Read schema:** `SiteGroup` · **Write schema:** `WritableSiteGroupRequest`
 
@@ -1338,7 +1338,7 @@ _46 entities._
 
 ### Site
 
-- **Table (suggested):** `dcim_site`
+- **Table:** `dcim_site`
 - **Endpoint:** `/api/dcim/sites/`
 - **Read schema:** `Site` · **Write schema:** `WritableSiteRequest`
 
@@ -1378,7 +1378,7 @@ _46 entities._
 
 ### VirtualChassis
 
-- **Table (suggested):** `dcim_virtual_chassis`
+- **Table:** `dcim_virtual_chassis`
 - **Endpoint:** `/api/dcim/virtual-chassis/`
 - **Read schema:** `VirtualChassis` · **Write schema:** `WritableVirtualChassisRequest`
 
@@ -1404,7 +1404,7 @@ _46 entities._
 
 ### VirtualDeviceContext
 
-- **Table (suggested):** `dcim_virtual_device_context`
+- **Table:** `dcim_virtual_device_context`
 - **Endpoint:** `/api/dcim/virtual-device-contexts/`
 - **Read schema:** `VirtualDeviceContext` · **Write schema:** `WritableVirtualDeviceContextRequest`
 
@@ -1439,7 +1439,7 @@ _18 entities._
 
 ### Aggregate
 
-- **Table (suggested):** `ipam_aggregate`
+- **Table:** `ipam_aggregate`
 - **Endpoint:** `/api/ipam/aggregates/`
 - **Read schema:** `Aggregate` · **Write schema:** `WritableAggregateRequest`
 
@@ -1465,7 +1465,7 @@ _18 entities._
 
 ### ASNRange
 
-- **Table (suggested):** `ipam_asnrange`
+- **Table:** `ipam_asnrange`
 - **Endpoint:** `/api/ipam/asn-ranges/`
 - **Read schema:** `ASNRange` · **Write schema:** `ASNRangeRequest`
 
@@ -1493,7 +1493,7 @@ _18 entities._
 
 ### ASN
 
-- **Table (suggested):** `ipam_asn`
+- **Table:** `ipam_asn`
 - **Endpoint:** `/api/ipam/asns/`
 - **Read schema:** `ASN` · **Write schema:** `ASNRequest`
 
@@ -1521,7 +1521,7 @@ _18 entities._
 
 ### FHRPGroupAssignment
 
-- **Table (suggested):** `ipam_fhrpgroup_assignment`
+- **Table:** `ipam_fhrpgroup_assignment`
 - **Endpoint:** `/api/ipam/fhrp-group-assignments/`
 - **Read schema:** `FHRPGroupAssignment` · **Write schema:** `FHRPGroupAssignmentRequest`
 
@@ -1540,7 +1540,7 @@ _18 entities._
 
 ### FHRPGroup
 
-- **Table (suggested):** `ipam_fhrpgroup`
+- **Table:** `ipam_fhrpgroup`
 - **Endpoint:** `/api/ipam/fhrp-groups/`
 - **Read schema:** `FHRPGroup` · **Write schema:** `FHRPGroupRequest`
 
@@ -1567,7 +1567,7 @@ _18 entities._
 
 ### IPAddress
 
-- **Table (suggested):** `ipam_ipaddress`
+- **Table:** `ipam_ipaddress`
 - **Endpoint:** `/api/ipam/ip-addresses/`
 - **Read schema:** `IPAddress` · **Write schema:** `WritableIPAddressRequest`
 
@@ -1599,7 +1599,7 @@ _18 entities._
 
 ### IPRange
 
-- **Table (suggested):** `ipam_iprange`
+- **Table:** `ipam_iprange`
 - **Endpoint:** `/api/ipam/ip-ranges/`
 - **Read schema:** `IPRange` · **Write schema:** `WritableIPRangeRequest`
 
@@ -1632,7 +1632,7 @@ _18 entities._
 
 ### Prefix
 
-- **Table (suggested):** `ipam_prefix`
+- **Table:** `ipam_prefix`
 - **Endpoint:** `/api/ipam/prefixes/`
 - **Read schema:** `Prefix` · **Write schema:** `WritablePrefixRequest`
 
@@ -1666,7 +1666,7 @@ _18 entities._
 
 ### RIR
 
-- **Table (suggested):** `ipam_rir`
+- **Table:** `ipam_rir`
 - **Endpoint:** `/api/ipam/rirs/`
 - **Read schema:** `RIR` · **Write schema:** `RIRRequest`
 
@@ -1691,7 +1691,7 @@ _18 entities._
 
 ### Role
 
-- **Table (suggested):** `ipam_role`
+- **Table:** `ipam_role`
 - **Endpoint:** `/api/ipam/roles/`
 - **Read schema:** `Role` · **Write schema:** `RoleRequest`
 
@@ -1718,7 +1718,7 @@ _18 entities._
 
 ### RouteTarget
 
-- **Table (suggested):** `ipam_route_target`
+- **Table:** `ipam_route_target`
 - **Endpoint:** `/api/ipam/route-targets/`
 - **Read schema:** `RouteTarget` · **Write schema:** `RouteTargetRequest`
 
@@ -1741,7 +1741,7 @@ _18 entities._
 
 ### ServiceTemplate
 
-- **Table (suggested):** `ipam_service_template`
+- **Table:** `ipam_service_template`
 - **Endpoint:** `/api/ipam/service-templates/`
 - **Read schema:** `ServiceTemplate` · **Write schema:** `WritableServiceTemplateRequest`
 
@@ -1765,7 +1765,7 @@ _18 entities._
 
 ### Service
 
-- **Table (suggested):** `ipam_service`
+- **Table:** `ipam_service`
 - **Endpoint:** `/api/ipam/services/`
 - **Read schema:** `Service` · **Write schema:** `WritableServiceRequest`
 
@@ -1793,7 +1793,7 @@ _18 entities._
 
 ### VLANGroup
 
-- **Table (suggested):** `ipam_vlangroup`
+- **Table:** `ipam_vlangroup`
 - **Endpoint:** `/api/ipam/vlan-groups/`
 - **Read schema:** `VLANGroup` · **Write schema:** `VLANGroupRequest`
 
@@ -1823,7 +1823,7 @@ _18 entities._
 
 ### VLANTranslationPolicy
 
-- **Table (suggested):** `ipam_vlantranslation_policy`
+- **Table:** `ipam_vlantranslation_policy`
 - **Endpoint:** `/api/ipam/vlan-translation-policies/`
 - **Read schema:** `VLANTranslationPolicy` · **Write schema:** `VLANTranslationPolicyRequest`
 
@@ -1841,7 +1841,7 @@ _18 entities._
 
 ### VLANTranslationRule
 
-- **Table (suggested):** `ipam_vlantranslation_rule`
+- **Table:** `ipam_vlantranslation_rule`
 - **Endpoint:** `/api/ipam/vlan-translation-rules/`
 - **Read schema:** `VLANTranslationRule` · **Write schema:** `VLANTranslationRuleRequest`
 
@@ -1858,7 +1858,7 @@ _18 entities._
 
 ### VLAN
 
-- **Table (suggested):** `ipam_vlan`
+- **Table:** `ipam_vlan`
 - **Endpoint:** `/api/ipam/vlans/`
 - **Read schema:** `VLAN` · **Write schema:** `WritableVLANRequest`
 
@@ -1890,7 +1890,7 @@ _18 entities._
 
 ### VRF
 
-- **Table (suggested):** `ipam_vrf`
+- **Table:** `ipam_vrf`
 - **Endpoint:** `/api/ipam/vrfs/`
 - **Read schema:** `VRF` · **Write schema:** `VRFRequest`
 
@@ -1919,12 +1919,12 @@ _18 entities._
 
 ## Virtualization
 
-_7 entities._
+_9 entities._
 
 
 ### ClusterGroup
 
-- **Table (suggested):** `virtualization_cluster_group`
+- **Table:** `virtualization_cluster_group`
 - **Endpoint:** `/api/virtualization/cluster-groups/`
 - **Read schema:** `ClusterGroup` · **Write schema:** `ClusterGroupRequest`
 
@@ -1948,7 +1948,7 @@ _7 entities._
 
 ### ClusterType
 
-- **Table (suggested):** `virtualization_cluster_type`
+- **Table:** `virtualization_cluster_type`
 - **Endpoint:** `/api/virtualization/cluster-types/`
 - **Read schema:** `ClusterType` · **Write schema:** `ClusterTypeRequest`
 
@@ -1972,7 +1972,7 @@ _7 entities._
 
 ### Cluster
 
-- **Table (suggested):** `virtualization_cluster`
+- **Table:** `virtualization_cluster`
 - **Endpoint:** `/api/virtualization/clusters/`
 - **Read schema:** `Cluster` · **Write schema:** `WritableClusterRequest`
 
@@ -2005,7 +2005,7 @@ _7 entities._
 
 ### VMInterface
 
-- **Table (suggested):** `virtualization_vminterface`
+- **Table:** `virtualization_vminterface`
 - **Endpoint:** `/api/virtualization/interfaces/`
 - **Read schema:** `VMInterface` · **Write schema:** `WritableVMInterfaceRequest`
 
@@ -2043,7 +2043,7 @@ _7 entities._
 
 ### VirtualDisk
 
-- **Table (suggested):** `virtualization_virtual_disk`
+- **Table:** `virtualization_virtual_disk`
 - **Endpoint:** `/api/virtualization/virtual-disks/`
 - **Read schema:** `VirtualDisk` · **Write schema:** `VirtualDiskRequest`
 
@@ -2066,7 +2066,7 @@ _7 entities._
 
 ### VirtualMachineType
 
-- **Table (suggested):** `virtualization_virtual_machine_type`
+- **Table:** `virtualization_virtual_machine_type`
 - **Endpoint:** `/api/virtualization/virtual-machine-types/`
 - **Read schema:** `VirtualMachineType` · **Write schema:** `VirtualMachineTypeRequest`
 
@@ -2093,7 +2093,7 @@ _7 entities._
 
 ### VirtualMachine
 
-- **Table (suggested):** `virtualization_virtual_machine`
+- **Table:** `virtualization_virtual_machine`
 - **Endpoint:** `/api/virtualization/virtual-machines/`
 - **Read schema:** `VirtualMachineWithConfigContext` · **Write schema:** `WritableVirtualMachineWithConfigContextRequest`
 
@@ -2112,6 +2112,7 @@ _7 entities._
 | `cluster` | integer (fk) | ✓ |  |  | → **Cluster** (FK) |
 | `device` | integer (fk) | ✓ |  |  | → **Device** (FK) |
 | `platform` | integer (fk) | ✓ |  |  | → **Platform** (FK) |
+| `image` | integer (fk) | ✓ |  |  | → **Image** (FK) |
 | `primary_ip` | integer (fk) | ✓ |  | ✓ | → **IPAddress** (FK) |
 | `primary_ip4` | integer (fk) | ✓ |  |  | → **IPAddress** (FK) |
 | `primary_ip6` | integer (fk) | ✓ |  |  | → **IPAddress** (FK) |
@@ -2134,6 +2135,43 @@ _7 entities._
 | `config_context` | json | ✓ |  | ✓ |  |
 
 
+### Image _(paas2box)_
+
+- **Table:** `virtualization_image`
+- **Endpoint:** `/api/virtualization/images/`
+- **Read schema:** `(paas2box entity)` · **Write schema:** `(paas2box entity)`
+
+| Field | Type | Null | Req | RO | Relationship / Notes |
+|-------|------|:----:|:---:|:--:|----------------------|
+| `name` | string(255) |  | ✓ |  | unique |
+| `description` | string(200) | ✓ |  |  |  |
+| `source_type` | string (content-type) | ✓ |  |  | generic relation (content-type + id) |
+| `source_id` | integer | ✓ |  |  | generic relation (content-type + id) |
+| `tags` | m2m |  |  |  | ⇄ **Tag** (M2M) |
+| `custom_fields` | json |  |  |  |  |
+| `created` | datetime | ✓ |  | ✓ |  |
+| `last_updated` | datetime | ✓ |  | ✓ |  |
+
+
+### SshKey _(paas2box)_
+
+- **Table:** `virtualization_ssh_key`
+- **Endpoint:** `/api/virtualization/ssh-keys/`
+- **Read schema:** `(paas2box entity)` · **Write schema:** `(paas2box entity)`
+
+| Field | Type | Null | Req | RO | Relationship / Notes |
+|-------|------|:----:|:---:|:--:|----------------------|
+| `name` | string(100) |  | ✓ |  | unique |
+| `public_key` | string |  | ✓ |  |  |
+| `description` | string(200) | ✓ |  |  |  |
+| `source_type` | string (content-type) | ✓ |  |  | generic relation (content-type + id) |
+| `source_id` | integer | ✓ |  |  | generic relation (content-type + id) |
+| `tags` | m2m |  |  |  | ⇄ **Tag** (M2M) |
+| `custom_fields` | json |  |  |  |  |
+| `created` | datetime | ✓ |  | ✓ |  |
+| `last_updated` | datetime | ✓ |  | ✓ |  |
+
+
 # External entities
 
 FK/M2M targets that live in other NetBox apps. Per project scope: **Tag, Tenant, TenantGroup, Owner, OwnerGroup** are modeled fully (extracted from the full NetBox schema); **User, ConfigTemplate, L2VPNTermination, WirelessLAN, WirelessLink** are minimal stubs to be fleshed out when those subsystems are built.
@@ -2146,7 +2184,7 @@ _2 entities._
 
 ### Tag _(external, full)_
 
-- **Table (suggested):** `extras_tag`
+- **Table:** `extras_tag`
 - **Endpoint:** `/api/extras/tags/`
 - **Read schema:** `Tag` · **Write schema:** `TagRequest`
 
@@ -2169,7 +2207,7 @@ _2 entities._
 
 ### ConfigTemplate _(external, stub)_
 
-- **Table (suggested):** `extras_config_template`
+- **Table:** `extras_config_template`
 - **Endpoint:** `/api/extras/config-templates/`
 - **Read schema:** `(hand-defined stub)` · **Write schema:** `(read-only / stub)`
 
@@ -2187,7 +2225,7 @@ _2 entities._
 
 ### Tenant _(external, full)_
 
-- **Table (suggested):** `tenancy_tenant`
+- **Table:** `tenancy_tenant`
 - **Endpoint:** `/api/tenancy/tenants/`
 - **Read schema:** `Tenant` · **Write schema:** `TenantRequest`
 
@@ -2221,7 +2259,7 @@ _2 entities._
 
 ### TenantGroup _(external, full)_
 
-- **Table (suggested):** `tenancy_tenant_group`
+- **Table:** `tenancy_tenant_group`
 - **Endpoint:** `/api/tenancy/tenant-groups/`
 - **Read schema:** `TenantGroup` · **Write schema:** `WritableTenantGroupRequest`
 
@@ -2252,7 +2290,7 @@ _4 entities._
 
 ### Owner _(external, full)_
 
-- **Table (suggested):** `users_owner`
+- **Table:** `users_owner`
 - **Endpoint:** `/api/users/owners/`
 - **Read schema:** `Owner` · **Write schema:** `OwnerRequest`
 
@@ -2271,7 +2309,7 @@ _4 entities._
 
 ### OwnerGroup _(external, full)_
 
-- **Table (suggested):** `users_owner_group`
+- **Table:** `users_owner_group`
 - **Endpoint:** `/api/users/owner-groups/`
 - **Read schema:** `OwnerGroup` · **Write schema:** `OwnerGroupRequest`
 
@@ -2288,7 +2326,7 @@ _4 entities._
 
 ### User _(external, stub)_
 
-- **Table (suggested):** `users_user`
+- **Table:** `users_user`
 - **Endpoint:** `/api/users/users/`
 - **Read schema:** `(hand-defined stub)` · **Write schema:** `(read-only / stub)`
 
@@ -2305,7 +2343,7 @@ _4 entities._
 
 ### Group _(external, stub)_
 
-- **Table (suggested):** `users_group`
+- **Table:** `users_group`
 - **Endpoint:** `/api/users/groups/`
 - **Read schema:** `(hand-defined stub)` · **Write schema:** `(read-only / stub)`
 
@@ -2321,7 +2359,7 @@ _1 entities._
 
 ### L2VPNTermination _(external, stub)_
 
-- **Table (suggested):** `vpn_l2_vpntermination`
+- **Table:** `vpn_l2_vpntermination`
 - **Endpoint:** `/api/vpn/l2vpn-terminations/`
 - **Read schema:** `(hand-defined stub)` · **Write schema:** `(read-only / stub)`
 
@@ -2339,7 +2377,7 @@ _2 entities._
 
 ### WirelessLAN _(external, stub)_
 
-- **Table (suggested):** `wireless_wireless_lan`
+- **Table:** `wireless_wireless_lan`
 - **Endpoint:** `/api/wireless/wireless-lans/`
 - **Read schema:** `(hand-defined stub)` · **Write schema:** `(read-only / stub)`
 
@@ -2351,7 +2389,7 @@ _2 entities._
 
 ### WirelessLink _(external, stub)_
 
-- **Table (suggested):** `wireless_wireless_link`
+- **Table:** `wireless_wireless_link`
 - **Endpoint:** `/api/wireless/wireless-links/`
 - **Read schema:** `(hand-defined stub)` · **Write schema:** `(read-only / stub)`
 

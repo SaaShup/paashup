@@ -82,6 +82,7 @@ function persistedColumns(ent) {
       required,
     };
     if (f.auto) meta.auto = f.auto;
+    if (f.form_hidden) meta.formHidden = true;
     if (f.references) meta.references = f.references;
     if (f.kind === 'generic_type') meta.genericRel = f.name.replace(/_type$/, '');
     else if (f.kind === 'generic_id') meta.genericRel = f.name.replace(/_id$/, '');
@@ -225,6 +226,7 @@ for (const ent of Object.values(ENTITIES)) {
     if (c.enum) parts.push(`enum: ${JSON.stringify(c.enum)}`);
     if (c.enumLabels) parts.push(`enumLabels: ${JSON.stringify(c.enumLabels)}`);
     if (c.auto) parts.push(`auto: ${JSON.stringify(c.auto)}`);
+    if (c.formHidden) parts.push('formHidden: true');
     mlines.push(`      { ${parts.join(', ')} },`);
   }
   mlines.push('    ],');

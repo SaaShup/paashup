@@ -2,6 +2,10 @@ import type { TableMeta } from '../model/meta-types.js';
 import { ValidationError } from '../errors.js';
 import { customFieldsFor } from '../customfields/registry.js';
 
+/** `<type> <base64> [comment]` on one line, for the key types OpenSSH and OpenStack accept. */
+export const SSH_PUBLIC_KEY =
+  /^(ssh-rsa|ssh-ed25519|ssh-dss|ecdsa-sha2-nistp(?:256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/]+={0,3}( [^\r\n]*)?$/;
+
 /** Field-keyed error messages, NetBox-style: { name: ["This field is required."] }. */
 export type FieldErrors = Record<string, string[] | Record<string, string[]>>;
 
@@ -87,6 +91,18 @@ export function validateWrite(
           add('dhcp_relays', `Entry ${i + 1} ("${String(item)}") is not a valid IP address.`);
         }
       });
+    }
+  }
+
+  // An SSH key holds the *public* half only, on a single line, in OpenSSH format.
+  if (meta.table === 'virtualization_ssh_key' && typeof data.public_key === 'string') {
+    const key = data.public_key.trim();
+    if (/PRIVATE KEY/.test(key)) {
+      add('public_key', 'This looks like a private key. Only the public key is stored.');
+    } else if (!SSH_PUBLIC_KEY.test(key)) {
+      add('public_key', 'Not a valid OpenSSH public key (e.g. "ssh-ed25519 AAAA… comment").');
+    } else {
+      data.public_key = key; // stored without surrounding whitespace
     }
   }
 

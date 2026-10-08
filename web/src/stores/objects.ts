@@ -7,6 +7,7 @@ interface TableState {
   items: Obj[];
   count: number;
   loading: boolean;
+  params?: Record<string, string | number>;
 }
 
 const idOf = (o: Obj): number => (o as { id: number }).id;
@@ -27,6 +28,7 @@ export const useObjectsStore = defineStore('objects', {
       this.byTable[table] ??= { endpoint, items: [], count: 0, loading: false };
       const slot = this.byTable[table]!;
       slot.endpoint = endpoint;
+      slot.params = params;
       slot.loading = true;
       try {
         const page = await api.list(endpoint, params);
@@ -35,6 +37,16 @@ export const useObjectsStore = defineStore('objects', {
       } finally {
         slot.loading = false;
       }
+    },
+
+    /** Re-fetch the already-loaded lists among `tables` (after a change made without events). */
+    async reloadTables(tables: string[]) {
+      await Promise.all(
+        tables
+          .map((t) => [t, this.byTable[t]] as const)
+          .filter(([, slot]) => slot && !slot.loading)
+          .map(([t, slot]) => this.load(t, slot!.endpoint, slot!.params)),
+      );
     },
 
     async remove(table: string, id: number) {

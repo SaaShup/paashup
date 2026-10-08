@@ -9,6 +9,7 @@ import { api, type Obj } from '../api/client.js';
 import { scalarText } from './containerDetail.js';
 import ObjectTable from '../components/ObjectTable.vue';
 import ObjectForm from '../components/ObjectForm.vue';
+import { briefTarget } from './objectDetail.js';
 
 // The host's sub-resources, shown one categorised section each. Containers come first
 // (the primary thing operators look at), then images/volumes/networks; registries lead.
@@ -56,6 +57,17 @@ const HEADER_FIELDS = [
 const scalars = computed(() =>
   HEADER_FIELDS.map(([k, label]) => ({ label, value: scalarText(get(k)) })),
 );
+/** The machine the engine runs on, linked to its detail page when it has one. */
+const machine = computed(() => {
+  const v = get('virtual_machine') ?? get('device');
+  if (!v) return null;
+  const t = briefTarget(v, ui.resources);
+  return {
+    label: get('virtual_machine') ? 'Virtual machine' : 'Device',
+    text: scalarText(v),
+    to: t ? ({ view: 'detail', table: t.table, id: t.id } as Route) : null,
+  };
+});
 
 /** Resolve each category to its catalogued Resource (endpoint/model/writable). */
 const cats = computed(() =>
@@ -204,6 +216,13 @@ async function bulkOp(op: string) {
           <span class="k">{{ s.label }}</span>
           <span class="v">{{ s.value }}</span>
         </div>
+        <div v-if="machine" class="prop">
+          <span class="k">{{ machine.label }}</span>
+          <span class="v">
+            <RouteLink v-if="machine.to" class="vmlink" :to="machine.to">{{ machine.text }}</RouteLink>
+            <template v-else>{{ machine.text }}</template>
+          </span>
+        </div>
       </section>
 
       <!-- one section per attached category -->
@@ -283,6 +302,11 @@ async function bulkOp(op: string) {
 }
 .error {
   color: var(--danger);
+}
+.vmlink {
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: underline;
 }
 .props {
   display: grid;

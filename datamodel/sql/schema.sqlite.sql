@@ -1347,6 +1347,7 @@ CREATE TABLE virtualization_virtual_machine (
     cluster_id INTEGER,
     device_id TEXT,
     platform_id INTEGER,
+    image_id INTEGER,
     primary_ip4_id INTEGER,
     primary_ip6_id INTEGER,
     vcpus NUMERIC,
@@ -1368,6 +1369,7 @@ CREATE TABLE virtualization_virtual_machine (
     FOREIGN KEY (cluster_id) REFERENCES virtualization_cluster(id) ON DELETE SET NULL,
     FOREIGN KEY (device_id) REFERENCES dcim_device(id) ON DELETE SET NULL,
     FOREIGN KEY (platform_id) REFERENCES dcim_platform(id) ON DELETE SET NULL,
+    FOREIGN KEY (image_id) REFERENCES virtualization_image(id) ON DELETE SET NULL,
     FOREIGN KEY (primary_ip4_id) REFERENCES ipam_ipaddress(id) ON DELETE SET NULL,
     FOREIGN KEY (primary_ip6_id) REFERENCES ipam_ipaddress(id) ON DELETE SET NULL,
     FOREIGN KEY (tenant_id) REFERENCES tenancy_tenant(id) ON DELETE SET NULL,
@@ -1452,6 +1454,29 @@ CREATE TABLE extras_config_template (
     name TEXT NOT NULL,
     description TEXT,
     template_code TEXT
+);
+
+CREATE TABLE virtualization_image (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    source_type TEXT,
+    source_id INTEGER,
+    custom_fields TEXT,
+    created TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    last_updated TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE virtualization_ssh_key (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    public_key TEXT NOT NULL,
+    description TEXT,
+    source_type TEXT,
+    source_id INTEGER,
+    custom_fields TEXT,
+    created TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    last_updated TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
 CREATE TABLE vpn_l2_vpntermination (
@@ -1671,6 +1696,8 @@ CREATE UNIQUE INDEX uq_users_owner_group_name ON users_owner_group (name);
 CREATE UNIQUE INDEX uq_users_user_username ON users_user (username);
 CREATE UNIQUE INDEX uq_users_group_name ON users_group (name);
 CREATE UNIQUE INDEX uq_extras_config_template_name ON extras_config_template (name);
+CREATE UNIQUE INDEX uq_virtualization_image_name ON virtualization_image (name);
+CREATE UNIQUE INDEX uq_virtualization_ssh_key_name ON virtualization_ssh_key (name);
 
 -- ----- constraints enforced in the application layer -----
 -- SKIP unique on dcim_cable_termination (termination_type, termination_id): column not present in model

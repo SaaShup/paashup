@@ -2198,6 +2198,7 @@ export interface VirtualMachine {
   cluster: number | null;
   device: string | null;
   platform: number | null;
+  image: number | null;
   primary_ip4: number | null;
   primary_ip6: number | null;
   vcpus: number | null;
@@ -2224,6 +2225,7 @@ export interface VirtualMachineCreate {
   cluster?: number | null;
   device?: string | null;
   platform?: number | null;
+  image?: number | null;
   primary_ip4?: number | null;
   primary_ip6?: number | null;
   vcpus?: number | null;
@@ -2387,6 +2389,50 @@ export interface ConfigTemplateCreate {
 }
 export type ConfigTemplateUpdate = Partial<ConfigTemplateCreate>;
 
+/** Image — `/api/virtualization/images/` */
+export interface Image {
+  id: number;
+  name: string;
+  description: string | null;
+  source_type: string | null;
+  source_id: number | null;
+  custom_fields: Json;
+  created?: string | null;
+  last_updated?: string | null;
+}
+export interface ImageCreate {
+  name: string;
+  description?: string | null;
+  source_type?: string | null;
+  source_id?: number | null;
+  custom_fields?: Json;
+  tags?: RelationInput;
+}
+export type ImageUpdate = Partial<ImageCreate>;
+
+/** SshKey — `/api/virtualization/ssh-keys/` */
+export interface SshKey {
+  id: number;
+  name: string;
+  public_key: string;
+  description: string | null;
+  source_type: string | null;
+  source_id: number | null;
+  custom_fields: Json;
+  created?: string | null;
+  last_updated?: string | null;
+}
+export interface SshKeyCreate {
+  name: string;
+  public_key: string;
+  description?: string | null;
+  source_type?: string | null;
+  source_id?: number | null;
+  custom_fields?: Json;
+  tags?: RelationInput;
+}
+export type SshKeyUpdate = Partial<SshKeyCreate>;
+
 /** L2VPNTermination — `/api/vpn/l2vpn-terminations/` */
 export interface L2VPNTermination {
   id: number;
@@ -2506,6 +2552,8 @@ export interface TableTypeMap {
   "users_user": { row: User; create: UserCreate; update: UserUpdate };
   "users_group": { row: Group; create: GroupCreate; update: GroupUpdate };
   "extras_config_template": { row: ConfigTemplate; create: ConfigTemplateCreate; update: ConfigTemplateUpdate };
+  "virtualization_image": { row: Image; create: ImageCreate; update: ImageUpdate };
+  "virtualization_ssh_key": { row: SshKey; create: SshKeyCreate; update: SshKeyUpdate };
   "vpn_l2_vpntermination": { row: L2VPNTermination; create: L2VPNTerminationCreate; update: L2VPNTerminationUpdate };
   "wireless_wireless_lan": { row: WirelessLAN; create: WirelessLANCreate; update: WirelessLANUpdate };
   "wireless_wireless_link": { row: WirelessLink; create: WirelessLinkCreate; update: WirelessLinkUpdate };

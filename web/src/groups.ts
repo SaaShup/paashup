@@ -60,6 +60,8 @@ const SECTION_GROUPS: Record<string, SubGroup[]> = {
     { label: 'Clusters', match: ['cluster'] },
     { label: 'Virtual Machines', match: ['virtual-machine', 'virtual-disk'] },
     { label: 'Interfaces', match: ['interface'] },
+    { label: 'Images', match: ['image'] },
+    { label: 'SSH Keys', match: ['ssh-key'] },
   ],
   tenancy: [{ label: 'Tenants', match: ['tenant'] }],
   users: [
@@ -80,8 +82,17 @@ const OTHER = 'Other';
 const HIDDEN_SECTIONS = new Set(['vpn', 'wireless']);
 export const isHiddenSection = (section: string): boolean => HIDDEN_SECTIONS.has(section);
 
+// DCIM is on its way out: only these resources (by endpoint slug) stay in the menu. The
+// tables and API are untouched.
+const VISIBLE_DCIM = new Set(['regions', 'sites']);
+export const isHiddenResource = (r: Resource): boolean =>
+  r.section === 'dcim' && !VISIBLE_DCIM.has(resourceSlug(r));
+
+export const sectionOf = (r: Resource): string =>
+  r.section === 'plugins' ? effectiveSection(r.section, pluginNameOf(r.endpoint)) : r.section;
+
 // Plugins promoted to their own top-level menu section (instead of nesting under PLUGINS).
-const PROMOTED_PLUGINS = new Set(['docker', 'keycloak', 'cloudflare']);
+const PROMOTED_PLUGINS = new Set(['docker', 'keycloak', 'cloudflare', 'openstack']);
 
 /** Plugin name from a /api/plugins/<name>/… endpoint. */
 export function pluginNameOf(endpoint: string): string {
@@ -94,7 +105,7 @@ export function effectiveSection(section: string, pluginName: string): string {
 }
 
 // Section display order (listed sections come first, in this order) + label overrides.
-const SECTION_ORDER = ['extras', 'docker', 'cloudflare', 'keycloak', 'plugins'];
+const SECTION_ORDER = ['extras', 'docker', 'cloudflare', 'openstack', 'keycloak', 'plugins'];
 const SECTION_LABELS: Record<string, string> = { extras: 'OPERATIONS' };
 
 export function sectionLabel(section: string): string {

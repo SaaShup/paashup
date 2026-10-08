@@ -6,7 +6,7 @@ import { socket } from './websocket/socket.js';
 import { isChange } from './websocket/events.js';
 import { useConnectionStore } from './stores/connection.js';
 import { useObjectsStore } from './stores/objects.js';
-import { useUiStore } from './stores/ui.js';
+import { useUiStore, bulkChangedTables } from './stores/ui.js';
 
 const app = createApp(App);
 const pinia = createPinia();
@@ -23,7 +23,9 @@ socket.on((event) => {
     connection.record(event);
     objects.applyChange(event);
     ui.bumpCount(event); // keep sidebar item counts live
-    void ui.resyncCountsAfterBulkChange(event); // resync counts on refresh host
+    void ui.resyncCountsAfterBulkChange(event); // resync counts on refresh host / cloud sync
+    const synced = bulkChangedTables(event);
+    if (synced.length) void objects.reloadTables(synced); // open lists of synced tables
   }
 });
 socket.connect();

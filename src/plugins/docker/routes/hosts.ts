@@ -130,6 +130,7 @@ const updateRoutes: PluginRoute[] = (['PUT', 'PATCH'] as const).map((method): Pl
 
     const out = await serializeHost(db, (await repo.retrieve(id))!);
     emitHost(db, 'updated', id, out);
+    await fireHooks(db, T.host, 'updated', id, out); // like the generic CRUD (e.g. VM linking)
     return { status: 200, body: out };
   },
 }));

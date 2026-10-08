@@ -8,6 +8,7 @@ import type { Route } from '../router.js';
 import ObjectTable from '../components/ObjectTable.vue';
 import ObjectForm from '../components/ObjectForm.vue';
 import IpRangeAddresses from '../components/IpRangeAddresses.vue';
+import { DETAIL_TABLES } from './objectDetail.js';
 
 const PAGE = 50;
 // Log-like tables (journal entries, event/log feeds) read newest-first.
@@ -47,6 +48,21 @@ const filters = computed({
 const filterOptions = ref<FilterOptions>({});
 
 const resource = computed(() => ui.selected!);
+
+/** Columns shown first for tables whose useful fields would otherwise be cut off. */
+const PREFERRED_COLUMNS: Record<string, string[]> = {
+  virtualization_virtual_machine: [
+    'status',
+    'cluster',
+    'virtual_machine_type',
+    'image',
+    'primary_ip4',
+    'vcpus',
+    'memory',
+  ],
+  virtualization_ssh_key: ['name', 'public_key', 'source', 'description'],
+  virtualization_image: ['name', 'source', 'description'],
+};
 const slot = computed(() => (resource.value ? objects.byTable[resource.value.table] : undefined));
 const isContainer = computed(() => resource.value?.table === 'plugin_docker_container');
 const isHost = computed(() => resource.value?.table === 'plugin_docker_host');
@@ -188,7 +204,8 @@ function edit(row: Obj) {
 const idOf = (row: Obj): number => (row as { id: number }).id;
 /** Name link: containers and hosts open their read-only detail view. */
 function openTo(row: Obj): Route | null {
-  return resource.value && (isContainer.value || isHost.value)
+  return resource.value &&
+    (isContainer.value || isHost.value || DETAIL_TABLES.has(resource.value.table))
     ? { view: 'detail', table: resource.value.table, id: idOf(row) }
     : null;
 }
@@ -279,6 +296,7 @@ function onAction(row: Obj) {
       <ObjectTable
         v-if="slot"
         :items="slot.items"
+        :preferred="PREFERRED_COLUMNS[resource.table]"
         :editable="resource.writable"
         :extra-action="
           isContainer

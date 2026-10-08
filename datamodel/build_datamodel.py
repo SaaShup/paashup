@@ -373,6 +373,23 @@ EXTRA_FIELDS = {
     ],
 }
 
+EXTRA_FIELDS["virtualization/virtual-machines"] = [
+    (
+        "platform",  # insert after platform
+        {
+            "name": "image",
+            "kind": "fk",
+            "type": "integer (fk)",
+            "references": "Image",
+            "nullable": True,
+            "required_on_create": False,
+            "writable": True,
+            "read_only": False,
+            "paas2box_extra": True,
+        },
+    ),
+]
+
 # Entities whose primary key is a server-generated UUID (string) instead of an
 # auto-increment integer. The id column becomes TEXT, FKs that point at them become
 # TEXT, and only the PK is unique.
@@ -478,7 +495,7 @@ def col(name, typ, kind="scalar", **kw):
         {
             k: v
             for k, v in kw.items()
-            if k in ("references", "enum", "max_length", "unique", "description")
+            if k in ("references", "enum", "max_length", "unique", "description", "form_hidden")
         }
     )
     return f
@@ -515,6 +532,55 @@ STUBS = {
             col("name", "string(100)", max_length=100, required=True, unique=True),
             col("description", "string(200)", max_length=200, nullable=True),
             col("template_code", "string", "scalar", nullable=True),
+        ],
+    },
+    # paas2box entities (no NetBox equivalent): provider-neutral, filled by whichever
+    # cloud/hypervisor plugin is in use (OpenStack today, Proxmox... later).
+    "virtualization/images": {
+        "section": "virtualization",
+        "model": "Image",
+        "endpoint": "/api/virtualization/images/",
+        "fields": [
+            col("name", "string(255)", max_length=255, required=True, unique=True),
+            col("description", "string(200)", max_length=200, nullable=True),
+            # where the row was imported from (a generic relation, e.g. an OpenStack cloud);
+            # empty = created in paas2box. Set by plugins, hidden from the forms.
+            col(
+                "source_type",
+                "string (content-type)",
+                "generic_type",
+                nullable=True,
+                form_hidden=True,
+            ),
+            col("source_id", "integer", "generic_id", nullable=True, form_hidden=True),
+            col("tags", "m2m", "m2m", references="Tag"),
+            col("custom_fields", "json", nullable=False),
+            col("created", "datetime", nullable=True, writable=False, read_only=True),
+            col("last_updated", "datetime", nullable=True, writable=False, read_only=True),
+        ],
+    },
+    "virtualization/ssh-keys": {
+        "section": "virtualization",
+        "model": "SshKey",
+        "endpoint": "/api/virtualization/ssh-keys/",
+        "fields": [
+            col("name", "string(100)", max_length=100, required=True, unique=True),
+            col("public_key", "string", required=True),  # public half only, never a private key
+            col("description", "string(200)", max_length=200, nullable=True),
+            # where the row was imported from (a generic relation, e.g. an OpenStack cloud);
+            # empty = created in paas2box. Set by plugins, hidden from the forms.
+            col(
+                "source_type",
+                "string (content-type)",
+                "generic_type",
+                nullable=True,
+                form_hidden=True,
+            ),
+            col("source_id", "integer", "generic_id", nullable=True, form_hidden=True),
+            col("tags", "m2m", "m2m", references="Tag"),
+            col("custom_fields", "json", nullable=False),
+            col("created", "datetime", nullable=True, writable=False, read_only=True),
+            col("last_updated", "datetime", nullable=True, writable=False, read_only=True),
         ],
     },
     "vpn/l2vpn-terminations": {
@@ -778,6 +844,11 @@ md.append(
 )
 
 
+# Entities defined by paas2box itself (no NetBox equivalent), registered as stubs only
+# because that is how the generator takes hand-written entities.
+PAAS2BOX_MODELS = {"Image", "SshKey"}
+
+
 def emit_section(section):
     md.append(f"\n## {SECTION_TITLES[section]}\n")
     ents = [(k, e) for k, e in entities.items() if e["section"] == section]
@@ -789,13 +860,16 @@ def emit_section(section):
             "external-full": " _(external, full)_",
             "external-stub": " _(external, stub)_",
         }.get(origin, "")
+        own = ent["model"] in PAAS2BOX_MODELS
+        if own:
+            tag = " _(paas2box)_"
         md.append(f"\n### {ent['model']}{tag}\n")
-        md.append(f"- **Table (suggested):** `{model_table[ent['model']]}`")
+        md.append(f"- **Table:** `{model_table[ent['model']]}`")
         md.append(f"- **Endpoint:** `{ent['endpoint']}`")
-        rs = ent.get("read_schema") or "(hand-defined stub)"
+        rs = ent.get("read_schema") or ("(paas2box entity)" if own else "(hand-defined stub)")
         md.append(
             f"- **Read schema:** `{rs}` · "
-            f"**Write schema:** `{ent['write_schema'] or '(read-only / stub)'}`\n"
+            f"**Write schema:** `{ent['write_schema'] or ('(paas2box entity)' if own else '(read-only / stub)')}`\n"
         )
         md.append(md_table(ent))
         md.append("")

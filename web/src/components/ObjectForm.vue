@@ -290,6 +290,13 @@ async function submit() {
               rows="3"
               placeholder="{ }"
             />
+            <textarea
+              v-else-if="f.kind === 'textarea'"
+              v-model="values[f.name]"
+              class="long-text"
+              rows="6"
+              spellcheck="false"
+            />
             <input
               v-else
               :type="f.kind === 'number' ? 'number' : 'text'"
@@ -377,6 +384,12 @@ textarea:focus {
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
+}
+textarea.long-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  word-break: break-all;
+  resize: vertical;
 }
 input[type='checkbox'] {
   width: auto;

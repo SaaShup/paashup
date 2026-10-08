@@ -420,6 +420,52 @@ test('a keypair removed in OpenStack removes its key', async () => {
   );
 });
 
+test('a new key is owned by the user named like the keypair or like its comment', async () => {
+  const user = (username) =>
+    db.execute(
+      `INSERT INTO users_user (username, is_active, date_joined) VALUES (?, 1, '2026-01-01T00:00:00Z')`,
+      [username],
+    );
+  await user('bob');
+  await user('alice@example.com');
+  await user('carol@example.com');
+  const owners = async () =>
+    Object.fromEntries(
+      (
+        await all(
+          `SELECT k.name, u.username FROM virtualization_ssh_key k
+           LEFT JOIN users_user u ON u.id = k.owner_id WHERE k.source_id IS NOT NULL`,
+        )
+      ).map((r) => [r.name, r.username]),
+    );
+
+  os.state.regions.GRA9.keypairs.push(
+    { name: 'Bob', public_key: RSA.replace('DhA', 'DhC') }, // name = username (any case)
+    { name: 'ci', public_key: `${RSA.replace('DhA', 'DhD')} alice@example.com` }, // comment
+    { name: 'ghost', public_key: `${RSA.replace('DhA', 'DhE')} stranger@example.com` },
+  );
+  await resync(ovh.id);
+  assert.deepEqual(await owners(), {
+    laptop: null,
+    Bob: 'bob',
+    ci: 'alice@example.com',
+    ghost: null,
+  });
+
+  // a later sync leaves a hand-set owner alone
+  await db.execute(
+    `UPDATE virtualization_ssh_key SET owner_id = (SELECT id FROM users_user WHERE username = 'carol@example.com')
+     WHERE name = 'ci'`,
+  );
+  await resync(ovh.id);
+  assert.equal((await owners()).ci, 'carol@example.com');
+
+  os.state.regions.GRA9.keypairs.splice(-3);
+  await resync(ovh.id);
+  await db.execute(`UPDATE virtualization_ssh_key SET owner_id = NULL`);
+  await db.execute(`DELETE FROM users_user`);
+});
+
 // ---- two clouds -------------------------------------------------------------------------
 
 let second;

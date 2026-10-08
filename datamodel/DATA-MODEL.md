@@ -6,7 +6,7 @@ Each entity below maps to one API collection endpoint and is intended as a datab
 
 > Foreign keys (`→`) are stored as the referenced row's integer `id`. Many-to-many (`⇄`) relations need a join table. `slug` columns are unique. Other unique constraints (e.g. `name` scoped to a parent) follow NetBox's models and are noted where derivable.
 
-**84 entities**, **1502 fields** total.
+**84 entities**, **1503 fields** total.
 
 
 > **Generic relations.** Where NetBox uses a polymorphic FK, this model stores a pair of columns: `<rel>_type` (a content-type reference such as `dcim.interface`) plus `<rel>_id` (the target row id). Affected: `Prefix.scope_*`, `Cluster.scope_*`, `IPAddress.assigned_object_*`, `Service.*`, `FHRPGroupAssignment.*`, `MACAddress.assigned_object_*`, etc.
@@ -2164,6 +2164,7 @@ _9 entities._
 | `name` | string(100) |  | ✓ |  | unique |
 | `public_key` | string |  | ✓ |  |  |
 | `description` | string(200) | ✓ |  |  |  |
+| `owner` | integer (fk) | ✓ |  |  | → **User** (FK) |
 | `source_type` | string (content-type) | ✓ |  |  | generic relation (content-type + id) |
 | `source_id` | integer | ✓ |  |  | generic relation (content-type + id) |
 | `tags` | m2m |  |  |  | ⇄ **Tag** (M2M) |

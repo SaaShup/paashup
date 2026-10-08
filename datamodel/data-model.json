@@ -19802,6 +19802,16 @@
           "max_length": 200
         },
         {
+          "name": "owner",
+          "type": "integer (fk)",
+          "kind": "fk",
+          "nullable": true,
+          "required_on_create": false,
+          "writable": true,
+          "read_only": false,
+          "references": "User"
+        },
+        {
           "name": "source_type",
           "type": "string (content-type)",
           "kind": "generic_type",

@@ -1472,11 +1472,13 @@ CREATE TABLE virtualization_ssh_key (
     name TEXT NOT NULL,
     public_key TEXT NOT NULL,
     description TEXT,
+    owner_id INTEGER,
     source_type TEXT,
     source_id INTEGER,
     custom_fields TEXT,
     created TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    last_updated TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    last_updated TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (owner_id) REFERENCES users_user(id) ON DELETE SET NULL
 );
 
 CREATE TABLE vpn_l2_vpntermination (

@@ -60,7 +60,7 @@ const PREFERRED_COLUMNS: Record<string, string[]> = {
     'vcpus',
     'memory',
   ],
-  virtualization_ssh_key: ['name', 'public_key', 'source', 'description'],
+  virtualization_ssh_key: ['name', 'public_key', 'owner', 'source', 'description'],
   virtualization_image: ['name', 'source', 'description'],
 };
 const slot = computed(() => (resource.value ? objects.byTable[resource.value.table] : undefined));

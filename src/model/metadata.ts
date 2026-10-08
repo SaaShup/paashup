@@ -1962,6 +1962,7 @@ export const tables = {
       { name: "name", column: "name", tsKind: "string", nullable: false, writable: true, required: true, maxLength: 100 },
       { name: "public_key", column: "public_key", tsKind: "string", nullable: false, writable: true, required: true },
       { name: "description", column: "description", tsKind: "string", nullable: true, writable: true, required: false, maxLength: 200 },
+      { name: "owner", column: "owner_id", tsKind: "number", nullable: true, writable: true, required: false, references: "User" },
       { name: "source_type", column: "source_type", tsKind: "string", nullable: true, writable: true, required: false, genericRel: "source", formHidden: true },
       { name: "source_id", column: "source_id", tsKind: "number", nullable: true, writable: true, required: false, genericRel: "source", formHidden: true },
       { name: "custom_fields", column: "custom_fields", tsKind: "json", nullable: false, writable: true, required: false },

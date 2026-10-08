@@ -898,12 +898,17 @@ export async function linkDockerHosts(db: Db, onlyHostId?: number): Promise<void
 
 const shortHash = (s: string): string => createHash('sha256').update(s).digest('hex').slice(0, 8);
 
+/** The comment of an OpenSSH public key (`<type> <base64> <comment>`), '' when it has none. */
+const keyComment = (publicKey: string): string => publicKey.split(/\s+/).slice(2).join(' ').trim();
+
 /**
  * Import a cloud's Nova keypairs as SSH keys marked with the cloud as their source. A
  * key that already exists in paas2box with the same public key and no source (added by
  * hand) is left alone and not imported again; the same key from another cloud is that
- * cloud's own row. A name already taken by a different key gets a suffix. Returns the ids
- * of the keys this cloud owns.
+ * cloud's own row. A name already taken by a different key gets a suffix. A new key is
+ * given as owner the paasbox user whose username matches its name, or else its comment
+ * (e.g. an email); with no match the owner stays empty. Later syncs never change it, so a
+ * hand-set owner sticks. Returns the ids of the keys this cloud owns.
  */
 async function importKeypairs(db: Db, cloudId: number, keypairs: Keypair[]): Promise<number[]> {
   const ids: number[] = [];
@@ -929,9 +934,20 @@ async function importKeypairs(db: Db, cloudId: number, keypairs: Keypair[]): Pro
       [name],
     );
     if (taken) name = `${name.slice(0, 91)}-${shortHash(k.publicKey)}`;
+    // the owner is the paasbox user whose username is the key's name or, failing that,
+    // its comment
+    let owner: { id: number } | undefined;
+    for (const candidate of [k.name, keyComment(k.publicKey)]) {
+      if (!candidate) continue;
+      owner = await db.get<{ id: number }>(
+        `SELECT id FROM users_user WHERE lower(username) = lower(?)`,
+        [candidate],
+      );
+      if (owner) break;
+    }
     const r = await db.execute(
-      `INSERT INTO virtualization_ssh_key (name, public_key, source_type, source_id) VALUES (?, ?, ?, ?)`,
-      [name, k.publicKey, type, cloudId],
+      `INSERT INTO virtualization_ssh_key (name, public_key, owner_id, source_type, source_id) VALUES (?, ?, ?, ?, ?)`,
+      [name, k.publicKey, owner ? Number(owner.id) : null, type, cloudId],
     );
     ids.push(Number(r.insertId));
   }

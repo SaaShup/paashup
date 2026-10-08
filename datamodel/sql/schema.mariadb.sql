@@ -1471,11 +1471,13 @@ CREATE TABLE virtualization_ssh_key (
     name VARCHAR(100) NOT NULL,
     public_key TEXT NOT NULL,
     description VARCHAR(200),
+    owner_id BIGINT,
     source_type VARCHAR(100),
     source_id BIGINT,
     custom_fields JSON,
     created DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6),
-    last_updated DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)
+    last_updated DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    FOREIGN KEY (owner_id) REFERENCES users_user(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE vpn_l2_vpntermination (

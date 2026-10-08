@@ -2416,6 +2416,7 @@ export interface SshKey {
   name: string;
   public_key: string;
   description: string | null;
+  owner: number | null;
   source_type: string | null;
   source_id: number | null;
   custom_fields: Json;
@@ -2426,6 +2427,7 @@ export interface SshKeyCreate {
   name: string;
   public_key: string;
   description?: string | null;
+  owner?: number | null;
   source_type?: string | null;
   source_id?: number | null;
   custom_fields?: Json;

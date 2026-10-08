@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { api, ApiError, type Obj } from '../api/client.js';
+import { currentUsername } from '../auth/oidc.js';
 import { formFields, modelEndpoints, getSchemaDoc, type FieldDef } from '../api/schema.js';
 
 const props = defineProps<{
@@ -121,6 +122,12 @@ onMounted(async () => {
       .map((g) => g.name);
   }
   await Promise.all(fks.map((f) => loadOptions(f)));
+  // a new SSH key belongs to the signed-in user by default (still editable)
+  if (!isEdit && props.model === 'SshKey' && !values.value.owner) {
+    const me = currentUsername()?.toLowerCase();
+    const mine = options.value.owner?.find((o) => o.display.toLowerCase() === me);
+    if (mine) values.value.owner = mine.id;
+  }
   // re-filter dependent pickers when the field they depend on changes
   for (const f of fks) {
     if (!fkDeps.value[f.name]?.length) continue;

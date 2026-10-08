@@ -567,6 +567,8 @@ STUBS = {
             col("name", "string(100)", max_length=100, required=True, unique=True),
             col("public_key", "string", required=True),  # public half only, never a private key
             col("description", "string(200)", max_length=200, nullable=True),
+            # the paasbox user this key belongs to (matched by name on import, editable)
+            col("owner", "integer (fk)", "fk", nullable=True, references="User"),
             # where the row was imported from (a generic relation, e.g. an OpenStack cloud);
             # empty = created in paas2box. Set by plugins, hidden from the forms.
             col(

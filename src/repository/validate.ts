@@ -6,6 +6,13 @@ import { customFieldsFor } from '../customfields/registry.js';
 export const SSH_PUBLIC_KEY =
   /^(ssh-rsa|ssh-ed25519|ssh-dss|ecdsa-sha2-nistp(?:256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/]+={0,3}( [^\r\n]*)?$/;
 
+/**
+ * What Nova accepts as a keypair name (compute API up to 2.91; 2.92 also allows "." and
+ * "@"): letters, digits, "_", "-" and inner spaces. Keys are checked against it when created
+ * so any of them can be registered as a keypair when a VM is launched with it.
+ */
+export const NOVA_KEYPAIR_NAME = /^[A-Za-z0-9_-]+(?: [A-Za-z0-9_-]+)*$/;
+
 /** Field-keyed error messages, NetBox-style: { name: ["This field is required."] }. */
 export type FieldErrors = Record<string, string[] | Record<string, string[]>>;
 
@@ -92,6 +99,19 @@ export function validateWrite(
         }
       });
     }
+  }
+
+  // A new SSH key must have a name Nova accepts, so it can be used to launch a VM.
+  if (
+    meta.table === 'virtualization_ssh_key' &&
+    !partial &&
+    typeof data.name === 'string' &&
+    !NOVA_KEYPAIR_NAME.test(data.name)
+  ) {
+    add(
+      'name',
+      'Use only letters, digits, "-", "_" and spaces (no leading or trailing space): this is what OpenStack accepts as a keypair name.',
+    );
   }
 
   // An SSH key holds the *public* half only, on a single line, in OpenSSH format.

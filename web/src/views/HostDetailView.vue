@@ -7,8 +7,11 @@ import RouteLink from '../components/RouteLink.vue';
 import type { Resource } from '../api/resources.js';
 import { api, type Obj } from '../api/client.js';
 import { scalarText } from './containerDetail.js';
+import { pillFor } from '../format.js';
+import StatusPill from '../components/StatusPill.vue';
 import ObjectTable from '../components/ObjectTable.vue';
 import ObjectForm from '../components/ObjectForm.vue';
+import { confirmDialog } from '../composables/confirm.js';
 import { briefTarget } from './objectDetail.js';
 
 // The host's sub-resources, shown one categorised section each. Containers come first
@@ -55,7 +58,11 @@ const HEADER_FIELDS = [
   ['netbox_base_url', 'NetBox base URL'],
 ] as const;
 const scalars = computed(() =>
-  HEADER_FIELDS.map(([k, label]) => ({ label, value: scalarText(get(k)) })),
+  HEADER_FIELDS.map(([k, label]) => ({
+    label,
+    value: scalarText(get(k)),
+    pill: pillFor('plugin_docker_host', k, get(k)),
+  })),
 );
 /** The machine the engine runs on, linked to its detail page when it has one. */
 const machine = computed(() => {
@@ -143,7 +150,13 @@ function edit(r: Resource, row: Obj) {
   form.value = { resource: r, object: row, defaults: null };
 }
 async function del(r: Resource, id: number) {
-  if (!window.confirm('Delete this item?')) return;
+  const ok = await confirmDialog({
+    title: 'Delete',
+    message: 'Delete this item?',
+    confirmLabel: 'Delete',
+    tone: 'danger',
+  });
+  if (!ok) return;
   try {
     await api.remove(r.endpoint, id);
     await loadCategory(r);
@@ -180,12 +193,13 @@ async function bulkOp(op: string) {
   const r = containerResource.value;
   if (!r || !selected.value.length) return;
   const ids = [...selected.value];
-  if (
-    !window.confirm(
-      `Run "${op}" on ${ids.length} selected container${ids.length === 1 ? '' : 's'}?`,
-    )
-  )
-    return;
+  const ok = await confirmDialog({
+    title: `Run "${op}"`,
+    message: `Run "${op}" on ${ids.length} selected container${ids.length === 1 ? '' : 's'}?`,
+    confirmLabel: 'Run',
+    tone: ['stop', 'kill', 'recreate'].includes(op) ? 'danger' : 'primary',
+  });
+  if (!ok) return;
   error.value = '';
   try {
     for (const id of ids) await api.update(r.endpoint, id, { operation: op });
@@ -214,7 +228,10 @@ async function bulkOp(op: string) {
       <section class="card props">
         <div v-for="s in scalars" :key="s.label" class="prop">
           <span class="k">{{ s.label }}</span>
-          <span class="v">{{ s.value }}</span>
+          <span class="v">
+            <StatusPill v-if="s.pill" v-bind="s.pill" />
+            <template v-else>{{ s.value }}</template>
+          </span>
         </div>
         <div v-if="machine" class="prop">
           <span class="k">{{ machine.label }}</span>
@@ -260,6 +277,7 @@ async function bulkOp(op: string) {
         <div v-else class="table-wrap">
           <ObjectTable
             :items="items[c.table] ?? []"
+            :table="c.table"
             :editable="c.resource.writable"
             :link-to="c.table === CONTAINER_TABLE ? containerTo : undefined"
             :selectable="c.table === CONTAINER_TABLE"

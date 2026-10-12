@@ -11,6 +11,17 @@ export const region = (extra = {}) => ({
   images: [],
   volumes: [],
   keypairs: [],
+  flavors: [{ id: 'fl-1', name: 'b2-7', vcpus: 2, ram: 7168, disk: 50 }],
+  limits: {
+    maxTotalInstances: 10,
+    totalInstancesUsed: 0,
+    maxTotalCores: 20,
+    totalCoresUsed: 0,
+    maxTotalRAMSize: 51200,
+    totalRAMUsed: 0,
+  },
+  buildReads: 0, // how many times a new server is read as BUILD before it turns ACTIVE
+  failBuild: null, // a message: a new server ends in ERROR with this fault
   down: false, // the whole compute API answers 500
   glanceDown: false,
   volumesDown: false,
@@ -99,6 +110,51 @@ export async function startFakeOpenStack() {
       if (type === 'compute') {
         if (r.down) return send(500, { error: { message: 'compute is down' } });
         if (rest === '/servers/detail') return send(200, { servers: r.servers });
+        if (rest === '/flavors/detail') return send(200, { flavors: r.flavors });
+        if (rest === '/limits') return send(200, { limits: { absolute: r.limits } });
+        if (req.method === 'POST' && rest === '/servers') {
+          const spec = JSON.parse(raw).server;
+          const flavor = r.flavors.find((f) => f.id === spec.flavorRef);
+          const created = server(`srv-${r.servers.length + 1}-${Date.now()}`, spec.name, {
+            status: 'BUILD',
+            flavor: {
+              original_name: flavor?.name,
+              vcpus: flavor?.vcpus,
+              ram: flavor?.ram,
+              disk: flavor?.disk,
+            },
+            image: { id: spec.imageRef },
+            metadata: spec.metadata ?? {},
+            key_name: spec.key_name,
+            networks: spec.networks,
+            reads: 0,
+          });
+          r.servers.push(created);
+          r.created = [...(r.created ?? []), spec];
+          return send(202, { server: { id: created.id } });
+        }
+        const one = rest.match(/^\/servers\/([^/]+)$/);
+        if (one) {
+          const i = r.servers.findIndex((x) => x.id === one[1]);
+          if (i < 0) return send(404, { itemNotFound: { message: 'Instance could not be found' } });
+          const found = r.servers[i];
+          if (req.method === 'DELETE') {
+            r.servers.splice(i, 1);
+            r.deleted = [...(r.deleted ?? []), found.id];
+            return send(204, {});
+          }
+          if (found.status === 'BUILD' && found.reads++ >= r.buildReads) {
+            found.status = r.failBuild ? 'ERROR' : 'ACTIVE';
+            if (r.failBuild) found.fault = { message: r.failBuild };
+            else found.addresses = { 'Ext-Net': [addr(`51.0.0.${r.servers.length + 10}`)] };
+          }
+          return send(200, { server: found });
+        }
+        if (req.method === 'POST' && rest === '/os-keypairs') {
+          const k = JSON.parse(raw).keypair;
+          r.keypairs.push({ name: k.name, public_key: k.public_key });
+          return send(200, { keypair: k });
+        }
         if (rest === '/os-keypairs') {
           return send(200, {
             keypairs: r.keypairs.map((k) => ({
@@ -110,6 +166,11 @@ export async function startFakeOpenStack() {
       if (type === 'image' && rest === '/v2/images') {
         if (r.glanceDown) return send(500, { message: 'glance is down' });
         return send(200, { images: r.images });
+      }
+      const oneImage = type === 'image' && rest.match(/^\/v2\/images\/([^/]+)$/);
+      if (oneImage) {
+        const found = r.images.find((i) => i.id === oneImage[1]);
+        return found ? send(200, found) : send(404, { message: 'image not found' });
       }
       if (type === 'volumev3' && rest === '/volumes/detail') {
         if (r.volumesDown) return send(500, { error: { message: 'cinder is down' } });

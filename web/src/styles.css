@@ -81,6 +81,22 @@ a {
   background: var(--ok);
   border-color: var(--ok);
 }
+.btn-warn {
+  background: var(--warn);
+  border-color: var(--warn);
+}
+.btn-warn:hover {
+  background: #b45309;
+  border-color: #b45309;
+}
+.btn-danger {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+.btn-danger:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
 
 /* inputs */
 .input,

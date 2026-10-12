@@ -1,0 +1,392 @@
+// Creating and deleting VMs on OpenStack from paasbox, end to end against the fake cloud
+// (test/fake-openstack.mjs). Verifies:
+//   - a create request is validated (fields, flavor, region, key) and the project's quotas
+//     are checked, all with readable errors and nothing created on the cloud
+//   - a server is booted from the image with the networks / key / groups chosen and the
+//     `managed-by` stamp; the VM is imported as managed, follows the server to active (or
+//     failed), and its journal keeps the SSH key it was launched with, in full
+//   - an SSH key of paasbox missing from the region is uploaded first; a keypair of that name
+//     with another key, or a key name Nova refuses, is an error — never renamed
+//   - only VMs paasbox created can be deleted on OpenStack: managed → deleted on the cloud and
+//     removed here; imported → refused (403); unknown → 404
+// Run: node --test test/openstack-vm.test.mjs
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+process.env.PB_OPENSTACK_POLL_MS = '20'; // read when the plugin loads: follow servers fast
+
+const { SqliteDb } = await import('../dist/db/sqlite.js');
+const { loadPlugins } = await import('../dist/plugins/runtime.js');
+const { createApiServer } = await import('../dist/api/server.js');
+const { default: openstackPlugin } = await import('../dist/plugins/openstack/index.js');
+const { region, server, startFakeOpenStack } = await import('./fake-openstack.mjs');
+
+const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
+const DB_FILE = join(ROOT, 'test', '.openstack-vm.sqlite');
+const CLOUDS = '/api/plugins/openstack/clouds/';
+const SERVERS = '/api/plugins/openstack/servers/';
+const KEYS = '/api/virtualization/ssh-keys/';
+const VM_TYPE = 'virtualization.virtualmachine';
+
+const ED25519 =
+  'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl me@host';
+const RSA = 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7vbqajDhA alice@host';
+
+let db, apiServer, base, os, cloudId, gra;
+
+const api = async (m, p, b) => {
+  const res = await fetch(`${base}${p}`, {
+    method: m,
+    headers: b ? { 'Content-Type': 'application/json' } : undefined,
+    body: b ? JSON.stringify(b) : undefined,
+  });
+  const t = await res.text();
+  return { status: res.status, body: t ? JSON.parse(t) : undefined };
+};
+const until = async (fn, what) => {
+  for (let i = 0; i < 300; i++) {
+    const v = await fn();
+    if (v) return v;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  throw new Error(`timed out waiting for ${what}`);
+};
+const vmNamed = (name) =>
+  db.get(
+    `SELECT v.id, v.status, s.managed, s.server_id FROM virtualization_virtual_machine v
+       JOIN plugin_openstack_server s ON s.virtual_machine_id = v.id WHERE v.name = ?`,
+    [name],
+  );
+const statusOf = async (id) =>
+  (await db.get('SELECT status FROM virtualization_virtual_machine WHERE id = ?', [id]))?.status;
+const journalOf = async (vmId) =>
+  (
+    await db.query(
+      `SELECT kind, comments FROM extras_journalentry
+        WHERE assigned_object_type = ? AND assigned_object_id = ? ORDER BY id`,
+      [VM_TYPE, vmId],
+    )
+  ).map((r) => ({ ...r }));
+// how many full synchronizations the cloud has run (each leaves a "Synchronized" entry)
+const syncRuns = async () =>
+  (
+    await db.get(
+      `SELECT COUNT(*) n FROM extras_journalentry
+        WHERE assigned_object_type = 'plugins.openstackcloud' AND assigned_object_id = ?
+          AND comments LIKE 'Synchronized%'`,
+      [cloudId],
+    )
+  ).n;
+const good = (extra = {}) => ({
+  region: 'GRA9',
+  name: 'web',
+  flavor_id: 'fl-1',
+  image_id: 'img-ubuntu',
+  network_ids: ['net-ext'],
+  ssh_key: { source: 'cloud', name: 'laptop' },
+  ...extra,
+});
+const create = (extra) => api('POST', `${CLOUDS}${cloudId}/servers/`, good(extra));
+
+before(async () => {
+  os = await startFakeOpenStack();
+  rmSync(DB_FILE, { force: true });
+  db = new SqliteDb(DB_FILE);
+  db.exec(readFileSync(join(ROOT, 'datamodel', 'sql', 'schema.sqlite.sql'), 'utf8'));
+  db.exec(readFileSync(join(ROOT, 'migrations', '0008_journalentry.sqlite.sql'), 'utf8'));
+  await loadPlugins(db, [openstackPlugin]);
+  apiServer = createApiServer({ db, realtime: true });
+  await new Promise((r) => apiServer.listen(0, '127.0.0.1', r));
+  base = `http://127.0.0.1:${apiServer.address().port}`;
+
+  gra = region({
+    keypairs: [{ name: 'laptop', public_key: ED25519 }],
+    images: [{ id: 'img-ubuntu', name: 'Ubuntu 24.04' }],
+    servers: [server('legacy-1', 'legacy')], // there before paasbox: not managed
+    buildReads: 2,
+  });
+  os.state.regions = { GRA9: gra };
+  const res = await api('POST', CLOUDS, {
+    name: 'ovh',
+    auth_url: os.authUrl,
+    username: os.state.user,
+    password: os.state.password,
+  });
+  assert.equal(res.status, 201, JSON.stringify(res.body));
+  cloudId = res.body.id;
+  await until(async () => (await vmNamed('legacy'))?.id, 'the first sync');
+});
+after(async () => {
+  await new Promise((r) => apiServer.close(r));
+  await os.close();
+  await db.close();
+  rmSync(DB_FILE, { force: true });
+});
+
+// ---- validation -------------------------------------------------------------------------
+
+test('a create request is checked field by field', async () => {
+  const empty = await api('POST', `${CLOUDS}${cloudId}/servers/`, {});
+  assert.equal(empty.status, 400);
+  for (const f of ['name', 'region', 'flavor_id', 'image_id', 'network_ids', 'ssh_key']) {
+    assert.ok(empty.body[f], `${f} is reported`);
+  }
+  assert.equal((await create({ name: 'x'.repeat(65) })).status, 400);
+  assert.equal((await create({ network_ids: [] })).status, 400);
+  assert.equal((await create({ flavor_id: 'nope' })).body.flavor_id.length, 1);
+  assert.equal((await create({ region: 'MARS1' })).body.region.length, 1);
+  assert.match(
+    (await create({ ssh_key: { source: 'cloud', name: 'ghost' } })).body.ssh_key[0],
+    /No SSH keypair named "ghost"/,
+  );
+  assert.equal((await api('POST', `${CLOUDS}99999/servers/`, good())).status, 404, 'unknown cloud');
+  assert.equal(gra.created, undefined, 'nothing was created on the cloud');
+});
+
+test('a project out of quota is refused with a readable message', async () => {
+  const limits = gra.limits;
+  const refuse = async (patch, expected) => {
+    Object.assign(limits, patch);
+    const res = await create({ name: 'too-much' });
+    assert.equal(res.status, 400);
+    assert.match(res.body.detail, expected);
+    Object.assign(limits, { totalInstancesUsed: 0, totalCoresUsed: 0, totalRAMUsed: 0 });
+  };
+  await refuse({ totalInstancesUsed: 10 }, /no instance left \(10 used of 10\)/);
+  await refuse({ totalCoresUsed: 19 }, /not enough vCPUs/);
+  await refuse({ totalRAMUsed: 50000 }, /not enough memory/);
+  assert.equal(gra.created, undefined);
+});
+
+// ---- create -----------------------------------------------------------------------------
+
+test('a VM is booted with what was chosen, imported as managed and journaled with its key', async () => {
+  const syncsBefore = await syncRuns();
+  const res = await create({
+    name: 'web-1',
+    network_ids: ['net-ext', 'net-priv'],
+    security_groups: ['default', 'ssh'],
+  });
+  assert.equal(res.status, 202, JSON.stringify(res.body));
+  assert.equal(res.body.ssh_key, 'laptop');
+
+  const spec = gra.created.at(-1);
+  assert.equal(spec.name, 'web-1');
+  assert.equal(spec.flavorRef, 'fl-1');
+  assert.equal(spec.imageRef, 'img-ubuntu');
+  assert.equal(spec.key_name, 'laptop');
+  assert.deepEqual(spec.networks, [{ uuid: 'net-ext' }, { uuid: 'net-priv' }]);
+  assert.deepEqual(spec.security_groups, [{ name: 'default' }, { name: 'ssh' }]);
+  assert.deepEqual(spec.metadata, { 'managed-by': 'paasbox' });
+
+  // the VM exists as soon as the request is answered, still building
+  const right = await vmNamed('web-1');
+  assert.equal(res.body.vm_id, right.id);
+  assert.equal(right.status, 'planned');
+  const vm = await until(() => vmNamed('web-1'), 'the VM to be imported');
+  assert.equal(!!vm.managed, true);
+  assert.equal(vm.server_id, res.body.server_id);
+  await until(async () => (await statusOf(vm.id)) === 'active', 'the VM to be active');
+
+  // only this server was read: no full synchronization, nothing else touched
+  assert.equal(await syncRuns(), syncsBefore, 'no full sync ran');
+  assert.ok(await vmNamed('legacy'), 'the other VMs are left alone');
+  assert.equal(
+    (
+      await db.get(
+        `SELECT i.name FROM virtualization_virtual_machine v
+         JOIN virtualization_image i ON i.id = v.image_id WHERE v.id = ?`,
+        [vm.id],
+      )
+    )?.name,
+    'Ubuntu 24.04',
+    'the VM is linked to its image',
+  );
+
+  assert.ok(
+    (
+      await db.get(`SELECT primary_ip4_id AS ip FROM virtualization_virtual_machine WHERE id = ?`, [
+        vm.id,
+      ])
+    ).ip,
+    'the address it got once active is imported',
+  );
+
+  const log = await journalOf(vm.id);
+  assert.equal(log[0].kind, 'info');
+  assert.ok(log[0].comments.includes('with SSH key "laptop"'));
+  assert.ok(log[0].comments.includes(ED25519), 'the public key is in the journal, in full');
+  assert.equal(log.at(-1).kind, 'success');
+});
+
+test('the security groups are optional', async () => {
+  assert.equal((await create({ name: 'web-nogroup' })).status, 202);
+  assert.equal(gra.created.at(-1).security_groups, undefined);
+  const vm = await until(() => vmNamed('web-nogroup'), 'the VM');
+  await until(async () => (await statusOf(vm.id)) === 'active', 'the VM to be active');
+});
+
+test('a server that fails to build leaves the VM failed, with the reason in its journal', async () => {
+  gra.failBuild = 'No valid host was found';
+  const res = await create({ name: 'doomed' });
+  assert.equal(res.status, 202);
+  const vm = await until(() => vmNamed('doomed'), 'the VM to be imported');
+  await until(async () => (await statusOf(vm.id)) === 'failed', 'the VM to be failed');
+  const log = await journalOf(vm.id);
+  assert.ok(log.some((e) => e.kind === 'danger' && e.comments.includes('No valid host was found')));
+  gra.failBuild = null;
+});
+
+// ---- SSH keys ---------------------------------------------------------------------------
+
+test('a paasbox key missing from the region is uploaded, then reused', async () => {
+  const key = (await api('POST', KEYS, { name: 'alice key', public_key: RSA })).body;
+  const before = gra.keypairs.length;
+  const first = await create({ name: 'with-alice', ssh_key: { source: 'paasbox', id: key.id } });
+  assert.equal(first.status, 202, JSON.stringify(first.body));
+  assert.equal(gra.keypairs.length, before + 1);
+  assert.deepEqual(
+    gra.keypairs.find((k) => k.name === 'alice key'),
+    { name: 'alice key', public_key: RSA },
+  );
+  assert.equal(gra.created.at(-1).key_name, 'alice key');
+  const vm = await until(() => vmNamed('with-alice'), 'the VM');
+  await until(async () => (await journalOf(vm.id))[0], 'its journal');
+  assert.ok((await journalOf(vm.id))[0].comments.includes(RSA));
+
+  // already there with the same key: used as is, not uploaded again
+  const second = await create({ name: 'with-alice-2', ssh_key: { source: 'paasbox', id: key.id } });
+  assert.equal(second.status, 202);
+  assert.equal(gra.keypairs.length, before + 1);
+});
+
+test('a keypair of that name holding another key is an error; nothing is renamed or created', async () => {
+  const key = (await api('POST', KEYS, { name: 'clash', public_key: RSA.replace('DhA', 'DhB') }))
+    .body;
+  gra.keypairs.push({ name: 'clash', public_key: ED25519 });
+  const created = gra.created.length;
+  const res = await create({ name: 'never', ssh_key: { source: 'paasbox', id: key.id } });
+  assert.equal(res.status, 400);
+  assert.match(res.body.ssh_key[0], /"clash" already exists in region GRA9 with a different/);
+  assert.equal(gra.created.length, created);
+  assert.equal(gra.keypairs.filter((k) => k.name === 'clash').length, 1, 'no keypair was added');
+});
+
+test('a key name Nova refuses cannot be used, and is not adapted', async () => {
+  // keys imported from a cloud on a recent Nova can carry "@" or "."
+  const id = (
+    await db.execute(
+      `INSERT INTO virtualization_ssh_key (name, public_key) VALUES ('ana@example.com', ?)`,
+      [RSA.replace('DhA', 'DhC')],
+    )
+  ).insertId;
+  const keypairs = gra.keypairs.length;
+  const res = await create({ name: 'never-2', ssh_key: { source: 'paasbox', id } });
+  assert.equal(res.status, 400);
+  assert.match(
+    res.body.ssh_key[0],
+    /"ana@example.com" cannot be used as an OpenStack keypair name/,
+  );
+  assert.equal(gra.keypairs.length, keypairs);
+  assert.equal(
+    (await create({ name: 'never-3', ssh_key: { source: 'paasbox', id: 99999 } })).body.ssh_key[0],
+    'This SSH key does not exist.',
+  );
+});
+
+// ---- delete -----------------------------------------------------------------------------
+
+test('the changes of a VM are broadcast as it is built, journaled and removed', async () => {
+  const events = [];
+  const ws = new WebSocket(`ws://127.0.0.1:${apiServer.address().port}/api/ws/`);
+  ws.addEventListener('message', (e) => events.push(JSON.parse(e.data)));
+  await new Promise((r) => ws.addEventListener('open', r));
+  const mine = (vmId, event) =>
+    events.filter(
+      (e) =>
+        e.type === 'change' &&
+        e.table === 'virtualization_virtual_machine' &&
+        e.id === vmId &&
+        (!event || e.event === event),
+    );
+
+  const res = await create({ name: 'live' });
+  assert.equal(res.status, 202);
+  const vmId = res.body.vm_id;
+  await until(() => mine(vmId, 'created').length, 'the created event');
+  assert.equal(mine(vmId, 'created')[0].data.status.value, 'planned');
+
+  await until(() => mine(vmId, 'updated').some((e) => e.data.status.value === 'active'), 'active');
+  assert.ok(
+    mine(vmId, 'updated').some((e) => e.data.primary_ip4),
+    'the address it got is broadcast',
+  );
+
+  assert.equal((await api('DELETE', `${SERVERS}${vmId}/`)).status, 202);
+  await until(() => mine(vmId, 'deleted').length, 'the deleted event');
+  assert.equal(mine(vmId, 'deleted')[0].data, undefined);
+  ws.close();
+});
+
+test('the servers behind the VMs tell managed from imported', async () => {
+  const web = await vmNamed('web-1');
+  const legacy = await vmNamed('legacy');
+  const one = await api('GET', `${SERVERS}?virtual_machine_id=${web.id}`);
+  assert.equal(one.body.count, 1);
+  assert.deepEqual(
+    { managed: one.body.results[0].managed, cloud: one.body.results[0].cloud },
+    { managed: true, cloud: 'ovh' },
+  );
+  const all = (await api('GET', SERVERS)).body.results;
+  assert.equal(all.find((r) => r.virtual_machine_id === legacy.id).managed, false);
+});
+
+test('a VM paasbox created is deleted on OpenStack and then removed here', async () => {
+  const vm = await vmNamed('web-nogroup');
+  const res = await api('DELETE', `${SERVERS}${vm.id}/`);
+  assert.equal(res.status, 202, JSON.stringify(res.body));
+  assert.deepEqual(gra.deleted.at(-1), vm.server_id);
+  await until(async () => !(await vmNamed('web-nogroup')), 'the VM to be removed');
+  assert.ok(!gra.servers.some((s) => s.id === vm.server_id));
+  assert.ok(await vmNamed('web-1'), 'the other VMs are left alone');
+  assert.ok(await vmNamed('legacy'));
+});
+
+test('a VM that existed before paasbox cannot be deleted from here', async () => {
+  const legacy = await vmNamed('legacy');
+  const deleted = (gra.deleted ?? []).length;
+  const res = await api('DELETE', `${SERVERS}${legacy.id}/`);
+  assert.equal(res.status, 403);
+  assert.match(res.body.detail, /Only VMs created by paasbox/);
+  assert.equal((gra.deleted ?? []).length, deleted, 'nothing was deleted on the cloud');
+  assert.equal(await statusOf(legacy.id), 'active');
+});
+
+test('a VM with no OpenStack server behind it is a 404', async () => {
+  const id = (
+    await api('POST', '/api/virtualization/virtual-machines/', { name: 'plain', status: 'active' })
+  ).body.id;
+  assert.equal((await api('DELETE', `${SERVERS}${id}/`)).status, 404);
+  assert.equal((await api('DELETE', `${SERVERS}99999/`)).status, 404);
+});
+
+test('the cloud journal keeps what was requested and done', async () => {
+  const entries = async () =>
+    (
+      await db.query(
+        `SELECT comments FROM extras_journalentry WHERE assigned_object_type = 'plugins.openstackcloud'
+          AND assigned_object_id = ?`,
+        [cloudId],
+      )
+    ).map((r) => r.comments);
+  // the "deleted" entry is written once the server is gone and the VM removed
+  const log = await until(async () => {
+    const all = await entries();
+    return all.some((c) => c.includes('Server "web-nogroup" deleted in GRA9')) ? all : null;
+  }, 'the deletion to be journaled');
+  assert.ok(log.some((c) => c.includes('Server "web-1" requested in GRA9')));
+  assert.ok(log.some((c) => c.includes('Deletion of server "web-nogroup" requested')));
+});

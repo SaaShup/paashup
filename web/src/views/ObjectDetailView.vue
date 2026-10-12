@@ -1,15 +1,20 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useUiStore } from '../stores/ui.js';
-import type { Route } from '../router.js';
+import { applyRoute, type Route } from '../router.js';
 import RouteLink from '../components/RouteLink.vue';
 import ObjectTable from '../components/ObjectTable.vue';
 import ObjectForm from '../components/ObjectForm.vue';
 import { api, type Obj } from '../api/client.js';
+import { confirmDialog } from '../composables/confirm.js';
 import { scalarText } from './containerDetail.js';
+import { fieldLabel, formatUnit, pillFor } from '../format.js';
+import StatusPill from '../components/StatusPill.vue';
+import { useConnectionStore } from '../stores/connection.js';
 import { briefTarget, DETAIL, LINKABLE_TABLES, type RelatedSection } from './objectDetail.js';
 
 const ui = useUiStore();
+const connection = useConnectionStore();
 const resource = computed(() => ui.selected);
 const config = computed(() => (resource.value ? DETAIL[resource.value.table] : undefined));
 
@@ -20,6 +25,12 @@ const loading = ref(false);
 const error = ref('');
 const editing = ref(false);
 const refreshing = ref(false);
+// A VM that is a server of an OpenStack cloud: "managed" ones (created by paasbox) can be
+// deleted here, which deletes the server on OpenStack.
+const OPENSTACK_SERVERS = '/api/plugins/openstack/servers/';
+const vmServer = ref<{ managed: boolean; cloud: string } | null>(null);
+const notice = ref('');
+const deleting = ref(false);
 
 const HIDE = new Set(['id', 'url', 'display_url', 'display', 'custom_fields', 'tags']);
 const get = (k: string): unknown => (obj.value as Record<string, unknown> | null)?.[k];
@@ -32,8 +43,9 @@ const fields = computed(() => {
     .filter(([k, v]) => !hidden.has(k) && v !== '' && !(Array.isArray(v) && !v.length))
     .map(([k, v]) => ({
       key: k,
-      label: k.replace(/_/g, ' '),
-      text: scalarText(v),
+      label: fieldLabel(resource.value?.table, k),
+      text: formatUnit(resource.value?.table, k, v) ?? scalarText(v),
+      pill: pillFor(resource.value?.table, k, v),
       to: routeOfBrief(v),
     }));
 });
@@ -57,16 +69,20 @@ function linkTo(table: string) {
     LINKABLE_TABLES.has(table) ? { view: 'detail', table, id: (row as { id: number }).id } : null;
 }
 
-async function load(): Promise<void> {
+/** Load the object and its related lists. `quiet` refreshes them in place (live updates). */
+async function load(quiet = false): Promise<void> {
   const r = resource.value;
   const id = ui.detailId;
   if (!r || id == null) return;
-  loading.value = true;
+  if (!quiet) loading.value = true;
   error.value = '';
   try {
     obj.value = await api.retrieve<Obj>(r.endpoint, id);
-    lists.value = {};
-    regionStatus.value = [];
+    await loadVmServer(r.table, id);
+    if (!quiet) {
+      lists.value = {};
+      regionStatus.value = [];
+    }
     await Promise.all([
       ...sections.value.map(async (s) => {
         try {
@@ -84,6 +100,51 @@ async function load(): Promise<void> {
     error.value = String(e);
   } finally {
     loading.value = false;
+  }
+}
+
+async function loadVmServer(table: string, id: number): Promise<void> {
+  vmServer.value = null;
+  if (table !== 'virtualization_virtual_machine') return;
+  try {
+    const row = (await api.list(OPENSTACK_SERVERS, { virtual_machine_id: id })).results[0];
+    if (row) vmServer.value = { managed: !!row.managed, cloud: String(row.cloud) };
+  } catch {
+    /* no OpenStack plugin: a plain VM */
+  }
+}
+
+/** Delete the VM's server on OpenStack, then follow the VM until it is gone. */
+async function deleteOnOpenStack(): Promise<void> {
+  const r = resource.value;
+  const id = ui.detailId;
+  if (!r || id == null || !vmServer.value) return;
+  const ok = await confirmDialog({
+    title: 'Delete on OpenStack',
+    message: `Delete "${title.value}" on OpenStack (cloud "${vmServer.value.cloud}")?\n\nThe server and its disk are destroyed and this cannot be undone.`,
+    confirmLabel: 'Delete',
+    tone: 'danger',
+  });
+  if (!ok) return;
+  deleting.value = true;
+  error.value = '';
+  try {
+    await api.remove(OPENSTACK_SERVERS, id);
+    notice.value = 'Deletion requested on OpenStack. This page closes when the server is gone.';
+    const tick = async (): Promise<void> => {
+      try {
+        obj.value = await api.retrieve<Obj>(r.endpoint, id);
+      } catch {
+        applyRoute(ui, { view: 'list', table: r.table }); // the VM is gone
+        return;
+      }
+      poll = setTimeout(tick, 4000);
+    };
+    poll = setTimeout(tick, 2000);
+  } catch (e) {
+    deleting.value = false;
+    const d = (e as { detail?: { detail?: unknown } }).detail;
+    error.value = typeof d?.detail === 'string' ? d.detail : String(e);
   }
 }
 
@@ -120,9 +181,34 @@ async function refresh(): Promise<void> {
   }
 }
 
-onMounted(load);
-onBeforeUnmount(() => clearTimeout(poll));
-watch(() => [ui.detailId, ui.selected?.table], load);
+onMounted(() => load());
+onBeforeUnmount(() => {
+  clearTimeout(poll);
+  clearTimeout(liveTimer);
+});
+watch(
+  () => [ui.detailId, ui.selected?.table],
+  () => load(),
+);
+
+// Follow the object live: when the change feed reports this object (a VM going from
+// "planned" to "active", its address, a journal entry…), reload it in place. If it was
+// deleted, go back to the list.
+let liveTimer: ReturnType<typeof setTimeout> | undefined;
+watch(
+  () => connection.log[0],
+  (e) => {
+    const r = resource.value;
+    const id = ui.detailId;
+    if (!e || !r || id == null || e.table !== r.table || String(e.id) !== String(id)) return;
+    if (e.event === 'deleted') {
+      applyRoute(ui, { view: 'list', table: r.table });
+      return;
+    }
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(() => void load(true), 250);
+  },
+);
 
 const backTo = computed<Route | null>(() =>
   resource.value ? { view: 'list', table: resource.value.table } : null,
@@ -149,9 +235,23 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
       <button v-if="resource.writable && resource.model" class="btn" @click="editing = true">
         Edit
       </button>
+      <button
+        v-if="vmServer?.managed && resource.writable"
+        class="btn btn-danger"
+        :disabled="deleting"
+        title="Delete the server on OpenStack"
+        @click="deleteOnOpenStack"
+      >
+        {{ deleting ? 'Deleting…' : 'Delete' }}
+      </button>
     </div>
 
     <p v-if="error" class="error">{{ error }}</p>
+    <p v-if="notice" class="muted">{{ notice }}</p>
+    <p v-if="vmServer && !vmServer.managed" class="muted">
+      Server of the OpenStack cloud "{{ vmServer.cloud }}", not created by paasbox: delete it in
+      OpenStack.
+    </p>
     <p v-if="loading" class="muted">Loading…</p>
 
     <template v-if="obj && !loading">
@@ -159,7 +259,8 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
         <div v-for="f in fields" :key="f.key" class="prop">
           <span class="k">{{ f.label }}</span>
           <span class="v">
-            <RouteLink v-if="f.to" class="rowlink" :to="f.to">{{ f.text }}</RouteLink>
+            <StatusPill v-if="f.pill" v-bind="f.pill" />
+            <RouteLink v-else-if="f.to" class="rowlink" :to="f.to">{{ f.text }}</RouteLink>
             <template v-else>{{ f.text }}</template>
           </span>
         </div>
@@ -217,6 +318,7 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
         <div v-else class="table-wrap">
           <ObjectTable
             :items="lists[s.title] ?? []"
+            :table="s.table"
             :link-to="linkTo(s.table)"
             :preferred="
               s.table === 'virtualization_virtual_machine'

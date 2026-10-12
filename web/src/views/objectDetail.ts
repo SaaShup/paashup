@@ -72,10 +72,25 @@ export const DETAIL: Record<string, DetailConfig> = {
         },
       },
       {
-        title: 'Disks',
+        title: 'Volumes',
         table: 'virtualization_virtual_disk',
-        empty: 'No disks',
+        empty: 'No volumes',
         load: byFk('virtual_machine_id'),
+      },
+      {
+        // what was done to the VM through paasbox (e.g. the SSH key it was launched with)
+        title: 'Journal',
+        table: 'extras_journalentry',
+        empty: 'No journal entries',
+        load: async (endpoint, id) =>
+          (
+            await api.list(endpoint, {
+              assigned_object_type: 'virtualization.virtualmachine',
+              assigned_object_id: id,
+              ordering: '-id',
+              limit: 20,
+            })
+          ).results,
       },
     ],
   },

@@ -26,6 +26,7 @@ import DocsView from './views/DocsView.vue';
 import ApiKeysView from './views/ApiKeysView.vue';
 import PluginPageView from './views/PluginPageView.vue';
 import LoginView from './views/LoginView.vue';
+import ConfirmDialog from './components/ConfirmDialog.vue';
 
 const ui = useUiStore();
 const logoOk = ref(true);
@@ -74,6 +75,7 @@ onMounted(async () => {
 </script>
 
 <template>
+  <ConfirmDialog />
   <LoginView v-if="showLogin" />
   <div v-else class="app">
     <header class="topbar">

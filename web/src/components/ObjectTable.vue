@@ -6,9 +6,13 @@ import type { Obj } from '../api/client.js';
 import type { FilterOptions } from '../api/columnFilters.js';
 import { useUiStore } from '../stores/ui.js';
 import { briefTarget } from '../views/objectDetail.js';
+import { columnLabel, formatUnit, pillFor } from '../format.js';
+import StatusPill from './StatusPill.vue';
 
 const props = defineProps<{
   items: Obj[];
+  /** Table of the rows: gives memory, disk… their unit. */
+  table?: string;
   editable?: boolean;
   extraAction?: string;
   /** Columns to show right after id/name, ahead of the others (the table shows at most 8). */
@@ -101,6 +105,10 @@ async function copyValue(value: unknown, key: string): Promise<void> {
   copiedTimer = setTimeout(() => (copied.value = ''), 1500);
 }
 
+/** A cell's text: with its unit when the column has one (memory, disk…), else as is. */
+const show = (row: Obj, column: string): string =>
+  formatUnit(props.table, column, row[column]) ?? cell(row[column]);
+
 function cell(value: unknown): string {
   if (value === null || value === undefined) return '—';
   if (Array.isArray(value)) return `[${value.length}]`;
@@ -129,7 +137,7 @@ function cell(value: unknown): string {
           />
         </th>
         <th v-for="c in columns" :key="c" class="colhead">
-          <div class="th-title">{{ c }}</div>
+          <div class="th-title">{{ columnLabel(table, c) }}</div>
           <select
             v-if="filterOptions && filterOptions[c]"
             class="col-filter"
@@ -165,13 +173,14 @@ function cell(value: unknown): string {
             class="rowlink"
             :to="linkTo(row)!"
           >
-            {{ cell(row[c]) }}
+            {{ show(row, c) }}
           </RouteLink>
+          <StatusPill v-else-if="pillFor(table, c, row[c])" v-bind="pillFor(table, c, row[c])!" />
           <RouteLink v-else-if="briefRoute(row[c])" class="rowlink" :to="briefRoute(row[c])!">
-            {{ cell(row[c]) }}
+            {{ show(row, c) }}
           </RouteLink>
           <span v-else-if="isLong(c, row[c])" class="clip">
-            <span class="clip-text" :title="cell(row[c])">{{ cell(row[c]) }}</span>
+            <span class="clip-text" :title="show(row, c)">{{ show(row, c) }}</span>
             <button
               type="button"
               class="copy"
@@ -181,7 +190,7 @@ function cell(value: unknown): string {
               {{ copied === `${idOf(row)}:${c}` ? '✓ Copied' : 'Copy' }}
             </button>
           </span>
-          <template v-else>{{ cell(row[c]) }}</template>
+          <template v-else>{{ show(row, c) }}</template>
         </td>
         <td class="ops">
           <template v-if="extraAction">

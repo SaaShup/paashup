@@ -1,5 +1,6 @@
-// OpenStack client: Keystone v3 password auth, service catalogue lookup, and
-// read-only calls to Nova / Glance / Neutron / Cinder. Service URLs come from the Keystone catalogue,
+// OpenStack client: Keystone v3 password auth, service catalogue lookup, reads on
+// Nova / Glance / Neutron / Cinder, and the few writes of the "create / delete VM" flow
+// (boot a server, delete it, register a keypair). Service URLs come from the Keystone catalogue,
 // so it works the same on OVH and on a DevStack. One token covers every
 // region of the project; each call names the region whose endpoints it uses.
 import { createHash } from 'node:crypto';
@@ -197,34 +198,53 @@ function endpointFor(session: Session, region: string, service: Service): string
   throw new OpenStackError(`Service "${service}" is not available in region ${region}`);
 }
 
-/** Authenticated GET on a regional service; retries once with a fresh token on a 401. */
-async function get(
+/** Authenticated call on a regional service; retries once with a fresh token on a 401. */
+async function send(
+  c: CloudConfig,
+  region: string,
+  service: Service,
+  method: string,
+  path: string,
+  body?: unknown,
+  extra: Record<string, string> = {},
+  retry = true,
+): Promise<Json> {
+  const session = await authenticate(c);
+  const base = endpointFor(session, region, service);
+  const res = await http(
+    `${base}${path}`,
+    {
+      method,
+      headers: {
+        'X-Auth-Token': session.token,
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...extra,
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    },
+    `OpenStack ${service}`,
+  );
+  if (res.status === 401 && retry) {
+    sessions.delete(cacheKey(c));
+    return send(c, region, service, method, path, body, extra, false);
+  }
+  if (!res.ok) {
+    throw new OpenStackError(
+      `OpenStack ${method} ${service}${path.split('?')[0]} failed (${res.status}) in ${region}${await readError(res)}`,
+      res.status,
+    );
+  }
+  return (await res.json().catch(() => ({}))) as Json;
+}
+
+const get = (
   c: CloudConfig,
   region: string,
   service: Service,
   path: string,
   retry = true,
   extra: Record<string, string> = {},
-): Promise<Json> {
-  const session = await authenticate(c);
-  const base = endpointFor(session, region, service);
-  const res = await http(
-    `${base}${path}`,
-    { headers: { 'X-Auth-Token': session.token, ...extra } },
-    `OpenStack ${service}`,
-  );
-  if (res.status === 401 && retry) {
-    sessions.delete(cacheKey(c));
-    return get(c, region, service, path, false, extra);
-  }
-  if (!res.ok) {
-    throw new OpenStackError(
-      `OpenStack GET ${service}${path.split('?')[0]} failed (${res.status}) in ${region}${await readError(res)}`,
-      res.status,
-    );
-  }
-  return (await res.json().catch(() => ({}))) as Json;
-}
+): Promise<Json> => send(c, region, service, 'GET', path, undefined, extra, retry);
 
 /** A "next" link is absolute; turn it back into a path relative to the service endpoint. */
 async function relativeTo(
@@ -325,6 +345,39 @@ export async function listServers(c: CloudConfig, region: string): Promise<Serve
     rows = await getAll(c, region, 'compute', path, 'servers');
     embedded = false;
   }
+  return parseServers(c, region, rows, embedded);
+}
+
+/** One server, or null once it no longer exists. */
+export async function getServer(
+  c: CloudConfig,
+  region: string,
+  id: string,
+): Promise<Server | null> {
+  const path = `/servers/${encodeURIComponent(id)}`;
+  let row: Json | undefined;
+  let embedded = true;
+  try {
+    try {
+      row = (await get(c, region, 'compute', path, true, EMBEDDED_FLAVOR)).server as Json;
+    } catch (e) {
+      if (!(e instanceof OpenStackError) || e.status !== 406) throw e;
+      embedded = false;
+      row = (await get(c, region, 'compute', path)).server as Json;
+    }
+  } catch (e) {
+    if (e instanceof OpenStackError && e.status === 404) return null;
+    throw e;
+  }
+  return row ? (await parseServers(c, region, [row], embedded))[0]! : null;
+}
+
+async function parseServers(
+  c: CloudConfig,
+  region: string,
+  rows: Json[],
+  embedded: boolean,
+): Promise<Server[]> {
   const byId = embedded
     ? new Map<string, Flavor>()
     : new Map((await listFlavors(c, region)).map((f) => [f.id, f]));
@@ -370,6 +423,21 @@ export async function listImageNames(c: CloudConfig, region: string): Promise<Ma
   return new Map(rows.filter((i) => i.name).map((i) => [String(i.id), String(i.name)]));
 }
 
+/** The name of one Glance image, or null when it is not visible to the project. */
+export async function getImageName(
+  c: CloudConfig,
+  region: string,
+  id: string,
+): Promise<string | null> {
+  try {
+    const image = await get(c, region, 'image', `/v2/images/${encodeURIComponent(id)}`);
+    return image.name ? String(image.name) : null;
+  } catch (e) {
+    if (e instanceof OpenStackError && (e.status === 404 || e.status === 403)) return null;
+    throw e;
+  }
+}
+
 export interface Keypair {
   name: string;
   /** OpenSSH public key; empty for the x509 keypairs Nova can also hold */
@@ -403,7 +471,97 @@ export async function listVolumes(c: CloudConfig, region: string): Promise<Volum
   }));
 }
 
-/** Read-only listings exposed to the UI for the future "create VM" form. */
+// ---- writes ---------------------------------------------------------------------
+
+export interface NewServer {
+  name: string;
+  flavorId: string;
+  imageId: string;
+  networkIds: string[];
+  keyName: string;
+  /** security group names; empty = the project's default group */
+  securityGroups: string[];
+  metadata: Record<string, string>;
+}
+
+/** Boot a server from an image; returns its id (it is still BUILDing). */
+export async function createServer(c: CloudConfig, region: string, s: NewServer): Promise<string> {
+  const res = await send(c, region, 'compute', 'POST', '/servers', {
+    server: {
+      name: s.name,
+      flavorRef: s.flavorId,
+      imageRef: s.imageId,
+      key_name: s.keyName,
+      networks: s.networkIds.map((uuid) => ({ uuid })),
+      ...(s.securityGroups.length
+        ? { security_groups: s.securityGroups.map((name) => ({ name })) }
+        : {}),
+      metadata: s.metadata,
+    },
+  });
+  const id = (res.server as Json | undefined)?.id;
+  if (!id)
+    throw new OpenStackError(`OpenStack did not return the id of the new server in ${region}`);
+  return String(id);
+}
+
+/** Ask for the deletion of a server; a server that is already gone is not an error. */
+export async function deleteServer(c: CloudConfig, region: string, id: string): Promise<void> {
+  try {
+    await send(c, region, 'compute', 'DELETE', `/servers/${encodeURIComponent(id)}`);
+  } catch (e) {
+    if (!(e instanceof OpenStackError) || e.status !== 404) throw e;
+  }
+}
+
+/** A server's status and, when it failed, why; null once it no longer exists. */
+export async function getServerState(
+  c: CloudConfig,
+  region: string,
+  id: string,
+): Promise<{ status: string; fault: string | null } | null> {
+  try {
+    const res = await get(c, region, 'compute', `/servers/${encodeURIComponent(id)}`);
+    const server = (res.server as Json | undefined) ?? {};
+    const fault = (server.fault as Json | undefined)?.message;
+    return { status: String(server.status ?? ''), fault: fault ? String(fault) : null };
+  } catch (e) {
+    if (e instanceof OpenStackError && e.status === 404) return null;
+    throw e;
+  }
+}
+
+/** Register a public key as a Nova keypair of the region. */
+export async function createKeypair(
+  c: CloudConfig,
+  region: string,
+  name: string,
+  publicKey: string,
+): Promise<void> {
+  await send(c, region, 'compute', 'POST', '/os-keypairs', {
+    keypair: { name, public_key: publicKey },
+  });
+}
+
+export interface ComputeLimits {
+  instances: { max: number; used: number };
+  cores: { max: number; used: number };
+  ram: { max: number; used: number };
+}
+
+/** The project's compute quotas (a max of -1 means unlimited). */
+export async function getComputeLimits(c: CloudConfig, region: string): Promise<ComputeLimits> {
+  const l = ((await get(c, region, 'compute', '/limits')).limits as { absolute?: Json } | undefined)
+    ?.absolute;
+  const n = (k: string): number => Number(l?.[k] ?? -1);
+  return {
+    instances: { max: n('maxTotalInstances'), used: Number(l?.totalInstancesUsed ?? 0) },
+    cores: { max: n('maxTotalCores'), used: Number(l?.totalCoresUsed ?? 0) },
+    ram: { max: n('maxTotalRAMSize'), used: Number(l?.totalRAMUsed ?? 0) },
+  };
+}
+
+/** Listings exposed to the UI, for the "create VM" form. */
 export const READS: Record<string, (c: CloudConfig, region: string) => Promise<unknown[]>> = {
   flavors: (c, r) => listFlavors(c, r),
   volumes: (c, r) => listVolumes(c, r),
@@ -421,6 +579,19 @@ export const READS: Record<string, (c: CloudConfig, region: string) => Promise<u
       name: g.name,
       description: g.description,
     })),
+  images: async (c, r) =>
+    (await getAll(c, r, 'image', '/v2/images?limit=200&status=active&sort=name:asc', 'images')).map(
+      (i) => ({
+        id: i.id,
+        name: i.name,
+        min_disk: i.min_disk,
+        size: i.size,
+        visibility: i.visibility,
+      }),
+    ),
+  // SSH keypairs only: the x509 ones Nova can hold have no public key to use
+  keypairs: async (c, r) =>
+    (await listKeypairs(c, r)).filter((k) => k.publicKey).map((k) => ({ name: k.name })),
   limits: async (c, r) => {
     const l = ((await get(c, r, 'compute', '/limits')).limits as { absolute?: Json } | undefined)
       ?.absolute;

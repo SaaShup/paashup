@@ -22,10 +22,13 @@ import { ValidationError } from '../../errors.js';
 import { SSH_PUBLIC_KEY } from '../../repository/validate.js';
 import { createHash } from 'node:crypto';
 import { META, T } from './meta.js';
+import { emitVm } from './events.js';
 import { journal } from './journal.js';
 import {
   authenticate,
   computeRegions,
+  getImageName,
+  getServer,
   listImageNames,
   listKeypairs,
   listServers,
@@ -73,6 +76,7 @@ const VM_STATUS: Record<string, string> = {
   SHELVED: 'offline',
   SHELVED_OFFLOADED: 'offline',
   ERROR: 'failed',
+  DELETING: 'decommissioning',
 };
 const vmStatus = (openstackStatus: string): string =>
   VM_STATUS[openstackStatus.toUpperCase()] ?? 'offline';
@@ -89,6 +93,92 @@ const messageOf = (e: unknown): string => (e instanceof Error ? e.message : Stri
 
 const running = new Set<number>();
 export const isSyncing = (cloudId: number): boolean => running.has(cloudId);
+
+/**
+ * Run `fn` while no other sync of this cloud runs, waiting for a running one first; a full
+ * sync asked meanwhile is ignored, like when one is already running.
+ */
+async function exclusive<T>(cloudId: number, fn: () => Promise<T>): Promise<T> {
+  for (let i = 0; i < 240 && running.has(cloudId); i++) {
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  if (running.has(cloudId)) {
+    throw new OpenStackError('A synchronization of this cloud is taking too long.');
+  }
+  running.add(cloudId);
+  try {
+    return await fn();
+  } finally {
+    running.delete(cloudId);
+  }
+}
+
+/**
+ * Import (or update) one server as a VM without reading the whole cloud: its interfaces, IPs,
+ * flavor, image and the `managed` mark come out as in a full sync, but nothing else is read
+ * or removed. Returns the VM's id, or null when the server does not exist (any more).
+ * Used to follow a server paasbox creates; volumes are left to the next full sync.
+ */
+export async function importServer(
+  db: Db,
+  cloudId: number,
+  region: string,
+  serverId: string,
+): Promise<number | null> {
+  const cloud = await db.get<CloudRow>(`SELECT * FROM ${T.cloud} WHERE id = ?`, [cloudId]);
+  if (!cloud) return null;
+  const server = await getServer(cloud, region, serverId);
+  if (!server) return null;
+  const imageName = server.imageId
+    ? await getImageName(cloud, region, server.imageId).catch(() => null)
+    : null;
+  return exclusive(cloudId, async () => {
+    const existed = !!(await db.get(
+      `SELECT id FROM ${T.server} WHERE cloud_id = ? AND server_id = ?`,
+      [cloudId, server.id],
+    ));
+    const siteId = await ensureSite(db, cloud, region);
+    const clusterId = await ensureCluster(db, cloud, region, siteId);
+    const { byServer } = await syncServers(
+      db,
+      cloud,
+      region,
+      clusterId,
+      siteId,
+      {
+        servers: [server],
+        imageNames: imageName && server.imageId ? new Map([[server.imageId, imageName]]) : null,
+        volumes: null,
+        keypairs: null,
+        fetchMs: 0,
+      },
+      false,
+    );
+    const vmId = byServer.get(server.id) ?? null;
+    if (vmId != null) await emitVm(db, vmId, existed ? 'updated' : 'created');
+    return vmId;
+  });
+}
+
+/** Remove the VM of a server that is gone from the cloud (with its IPs, interfaces, disks). */
+export async function dropServer(db: Db, cloudId: number, serverId: string): Promise<void> {
+  await exclusive(cloudId, async () => {
+    const link = await db.get<{ virtual_machine_id: number }>(
+      `SELECT virtual_machine_id FROM ${T.server} WHERE cloud_id = ? AND server_id = ?`,
+      [cloudId, serverId],
+    );
+    if (link) {
+      const vmId = Number(link.virtual_machine_id);
+      await removeVm(db, vmId);
+      const left = await db.get(`SELECT id FROM virtualization_virtual_machine WHERE id = ?`, [
+        vmId,
+      ]);
+      await emitVm(db, vmId, left ? 'updated' : 'deleted');
+    }
+    await cleanupTypes(db);
+    await cleanupImages(db);
+  });
+}
 
 /** Push the cloud's current state to the realtime feed so open pages update. */
 async function emit(db: Db, cloudId: number): Promise<void> {
@@ -539,6 +629,7 @@ async function syncServers(
   clusterId: number,
   siteId: number,
   data: RegionData,
+  prune = true,
 ): Promise<{ byServer: Map<string, number> }> {
   const servers = data.servers;
   const links = await db.query<{ server_id: string; virtual_machine_id: number }>(
@@ -622,9 +713,12 @@ async function syncServers(
     await syncAddresses(db, vmId, s);
   }
 
-  // Servers deleted in OpenStack: remove their VM (disks, interfaces and IPs first).
-  for (const [serverId, vmId] of known) {
-    if (!byServer.has(serverId)) await removeVm(db, vmId);
+  // Servers deleted in OpenStack: remove their VM (disks, interfaces and IPs first). Not
+  // when only some of the region's servers were read (see importServer).
+  if (prune) {
+    for (const [serverId, vmId] of known) {
+      if (!byServer.has(serverId)) await removeVm(db, vmId);
+    }
   }
   return { byServer };
 }

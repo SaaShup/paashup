@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { api, ApiError, type Obj } from '../api/client.js';
+import { confirmDialog } from '../composables/confirm.js';
 
 const ENDPOINT = '/api/users/tokens/';
 
@@ -83,12 +84,13 @@ async function copyKey() {
 }
 
 async function revoke(t: TokenRow) {
-  if (
-    !confirm(
-      `Revoke this API key${t.description ? ` ("${t.description}")` : ''}? This cannot be undone.`,
-    )
-  )
-    return;
+  const ok = await confirmDialog({
+    title: 'Revoke API key',
+    message: `Revoke this API key${t.description ? ` ("${t.description}")` : ''}? This cannot be undone.`,
+    confirmLabel: 'Revoke',
+    tone: 'danger',
+  });
+  if (!ok) return;
   try {
     await api.remove(ENDPOINT, t.id);
     if (newKey.value && newKey.value.endsWith(t.last4)) newKey.value = '';

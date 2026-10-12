@@ -18,6 +18,8 @@ import {
 import CollectionTable from '../components/CollectionTable.vue';
 import ObjectForm from '../components/ObjectForm.vue';
 import ContainerLogs from '../components/ContainerLogs.vue';
+import StatusPill from '../components/StatusPill.vue';
+import { pillFor } from '../format.js';
 import ContainerTerminal from '../components/ContainerTerminal.vue';
 
 const ui = useUiStore();
@@ -32,7 +34,11 @@ const title = computed(() => scalarText(get('display') ?? get('name')));
 const host = computed(() => get('host'));
 const image = computed(() => get('image'));
 const scalars = computed(() =>
-  CONTAINER_SCALARS.map((s) => ({ label: s.label, value: scalarText(get(s.key)) })),
+  CONTAINER_SCALARS.map((s) => ({
+    label: s.label,
+    value: scalarText(get(s.key)),
+    pill: pillFor('plugin_docker_container', s.key, get(s.key)),
+  })),
 );
 const rows = (field: string): Obj[] => (container.value ? rowsOf(container.value, field) : []);
 const writable = computed(() => !!resource.value?.writable);
@@ -220,7 +226,10 @@ async function onSaved() {
           </div>
           <div v-for="s in scalars" :key="s.label" class="prop">
             <span class="k">{{ s.label }}</span>
-            <span class="v">{{ s.value }}</span>
+            <span class="v">
+              <StatusPill v-if="s.pill" v-bind="s.pill" />
+              <template v-else>{{ s.value }}</template>
+            </span>
           </div>
         </section>
 

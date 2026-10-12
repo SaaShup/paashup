@@ -160,6 +160,34 @@ test('updating a key to an invalid value is refused; a valid one is stored', asy
   );
 });
 
+test('a new key must have a name OpenStack accepts as a keypair name', async () => {
+  let n = 0;
+  for (const name of ['laptop', 'my_key-2', 'Alice Work Laptop', 'A1']) {
+    const res = await api('POST', KEYS, {
+      name,
+      public_key: ED25519.replace('Jl', `J${String.fromCharCode(97 + n++)}`),
+    });
+    assert.equal(res.status, 201, `${name}: ${JSON.stringify(res.body)}`);
+  }
+  for (const name of ['ana@example.com', 'my.key', ' lead', 'trail ', 'a/b', 'clé']) {
+    const res = await api('POST', KEYS, { name, public_key: ED25519 });
+    assert.equal(res.status, 400, `"${name}" is refused`);
+    assert.match(res.body.name[0], /letters, digits/);
+  }
+});
+
+test('a key that already has such a name can still be edited (imported keys)', async () => {
+  // an import can store a name the form would now refuse (e.g. "@" on a recent Nova)
+  const id = (
+    await db.execute(
+      `INSERT INTO virtualization_ssh_key (name, public_key) VALUES ('imp@example.com', ?)`,
+      [RSA.replace('DhA', 'DhZ')],
+    )
+  ).insertId;
+  const res = await api('PATCH', `${KEYS}${id}/`, { description: 'from the cloud' });
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+});
+
 // ---- where a row comes from -------------------------------------------------------------
 
 test('a row created by hand has no source', async () => {

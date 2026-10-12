@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { api, ApiError, type Obj } from '../api/client.js';
 import { currentUsername } from '../auth/oidc.js';
+import { formLabel } from '../format.js';
+import { useUiStore } from '../stores/ui.js';
 import { formFields, modelEndpoints, getSchemaDoc, type FieldDef } from '../api/schema.js';
 
 const props = defineProps<{
@@ -13,6 +15,9 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ (e: 'saved'): void; (e: 'cancel'): void }>();
 
+const ui = useUiStore();
+// the table of the model being edited: tells which unit a field is in (memory → MB)
+const table = computed(() => ui.resources.find((r) => r.model === props.model)?.table);
 const fields = ref<FieldDef[]>([]);
 const values = ref<Record<string, any>>({});
 const options = ref<Record<string, { id: number; display: string }[]>>({});
@@ -244,7 +249,7 @@ async function submit() {
       <p v-if="general" class="general">{{ general }}</p>
       <form @submit.prevent="submit">
         <div v-for="f in fields" :key="f.name" class="row">
-          <label :class="{ req: f.required }">{{ f.name }}</label>
+          <label :class="{ req: f.required }">{{ formLabel(table, f.name) }}</label>
           <div class="control">
             <input v-if="f.kind === 'boolean'" type="checkbox" v-model="values[f.name]" />
             <select v-else-if="f.kind === 'select'" v-model="values[f.name]">

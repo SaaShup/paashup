@@ -200,7 +200,8 @@ describe('ContainerDetailView', () => {
     await flushPromises();
     const t = w.text();
     expect(t).toContain('web-demo'); // name/title
-    expect(t).toContain('running'); // state
+    expect(t).toContain('Running'); // state, as a pill
+    expect(w.find('.pill.tone-ok').text()).toBe('Running');
     expect(t).toContain('always'); // restart_policy → label, not the {value,label} object
     expect(t).toContain('abc123'); // ContainerID
   });

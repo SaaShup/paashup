@@ -18,6 +18,12 @@ export interface Resource {
   order: number;
 }
 
+/** Resources the UI names differently from their API path. */
+const LABELS: Record<string, string> = {
+  // the extra disks of a VM (its root disk is the VM's own `disk`)
+  virtualization_virtual_disk: 'Volumes',
+};
+
 function titleize(slug: string): string {
   return slug.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -96,7 +102,7 @@ export async function loadResources(): Promise<Resource[]> {
       endpoint: path,
       table,
       section: parts[1] ?? '',
-      label: titleize(parts[parts.length - 1] ?? table),
+      label: LABELS[table] ?? titleize(parts[parts.length - 1] ?? table),
       model,
       writable: !!(ops as any).post,
       order: Number.MAX_SAFE_INTEGER,

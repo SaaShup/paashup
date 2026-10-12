@@ -6,8 +6,13 @@
 //
 // Read-only routes under /clouds/{id}/:
 //   region-status/                       result of the last sync per region (from the database)
-//   flavors|volumes|networks|security-groups|limits/?region=<name>
-//                                        live read from OpenStack, for the future "create VM" form
+//   flavors|images|keypairs|volumes|networks|security-groups|limits/?region=<name>
+//                                        live read from OpenStack, for the "create VM" form
+//
+// Create / delete a VM on OpenStack (see servers.ts):
+//   POST   /clouds/{id}/servers/         boot a server (202); the VM is imported by a sync
+//   GET    /servers/[?virtual_machine_id=]  the OpenStack server behind each VM, managed or not
+//   DELETE /servers/{vm_id}/             delete the server of a VM paasbox created
 import type { Db } from '../../db/types.js';
 import type { PluginRoute } from '../../plugins/types.js';
 import { Repository } from '../../repository/repository.js';
@@ -26,6 +31,7 @@ import {
 } from './openstack.js';
 import { journal } from './journal.js';
 import { isSyncing, purgeCloud, syncCloud } from './sync.js';
+import { deleteManagedVm, launchServer, listLinks, parseCreate } from './servers.js';
 import { META, T } from './meta.js';
 
 type Obj = Record<string, unknown>;
@@ -235,7 +241,54 @@ const readRoutes: PluginRoute[] = Object.keys(READS).map((kind) => ({
   },
 }));
 
+const OPENSTACK_API = '/api/plugins/openstack';
+
+const createServerRoute: PluginRoute = {
+  method: 'POST',
+  path: `${META.cloud.endpoint}{id}/servers/`,
+  handler: async ({ db, params, body }) => {
+    const cloud = await db.get<CloudConfig & { id: number; name: string }>(
+      `SELECT * FROM ${T.cloud} WHERE id = ?`,
+      [Number(params.id)],
+    );
+    if (!cloud) return { status: 404, body: { detail: 'Not found' } };
+    const input = parseCreate(body);
+    try {
+      return { status: 202, body: await launchServer(db, cloud, input) };
+    } catch (e) {
+      if (e instanceof OpenStackError) return fail(e);
+      throw e;
+    }
+  },
+};
+
+const listServersRoute: PluginRoute = {
+  method: 'GET',
+  path: `${OPENSTACK_API}/servers/`,
+  handler: async ({ db, query }) => {
+    const vm = query.get('virtual_machine_id');
+    return { status: 200, body: page(await listLinks(db, vm ? Number(vm) : undefined)) };
+  },
+};
+
+const deleteServerRoute: PluginRoute = {
+  method: 'DELETE',
+  path: `${OPENSTACK_API}/servers/{vm_id}/`,
+  handler: async ({ db, params }) => {
+    try {
+      await deleteManagedVm(db, Number(params.vm_id));
+      return { status: 202, body: { detail: 'Deletion requested on OpenStack.' } };
+    } catch (e) {
+      if (e instanceof OpenStackError) return fail(e);
+      throw e;
+    }
+  },
+};
+
 export const cloudRoutes: PluginRoute[] = [
+  createServerRoute,
+  listServersRoute,
+  deleteServerRoute,
   createRoute,
   ...updateRoutes,
   deleteRoute,

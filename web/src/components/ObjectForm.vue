@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { api, ApiError, type Obj } from '../api/client.js';
 import { currentUsername } from '../auth/oidc.js';
 import { formLabel } from '../format.js';
+import { parseVariables } from '../initScript.js';
 import { useUiStore } from '../stores/ui.js';
 import { formFields, modelEndpoints, getSchemaDoc, type FieldDef } from '../api/schema.js';
 
@@ -25,6 +26,34 @@ const errors = ref<Record<string, unknown>>({});
 const general = ref('');
 const busy = ref(false);
 const isEdit = !!props.object;
+
+// An init script: the variables found in its text as it is typed, and which of them must be
+// shown first in the VM creation form.
+const isScript = props.model === 'InitScript';
+const scriptVars = computed(() =>
+  isScript ? parseVariables(String(values.value.content ?? '')) : [],
+);
+const featured = ref<string[]>(
+  Array.isArray((props.object as { featured_variables?: unknown } | null)?.featured_variables)
+    ? [...((props.object as { featured_variables: string[] }).featured_variables ?? [])]
+    : [],
+);
+const secret = ref<string[]>(
+  Array.isArray((props.object as { secret_variables?: unknown } | null)?.secret_variables)
+    ? [...((props.object as { secret_variables: string[] }).secret_variables ?? [])]
+    : [],
+);
+const fileInput = ref<HTMLInputElement | null>(null);
+/** Put an uploaded file's text in the script field (and name the script after it if unnamed). */
+async function loadFile(e: Event): Promise<void> {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  values.value.content = await file.text();
+  if (!String(values.value.name ?? '').trim()) {
+    values.value.name = file.name.replace(/\.[^.]+$/, '');
+  }
+  (e.target as HTMLInputElement).value = ''; // the same file can be chosen again
+}
 
 /** Readable tag name from a serialized json */
 function tagName(t: unknown): string {
@@ -214,6 +243,11 @@ function buildPayload(): Obj | null {
         out[f.name] = v;
     }
   }
+  if (isScript) {
+    const names = scriptVars.value.map((v) => v.name);
+    out.featured_variables = featured.value.filter((n) => names.includes(n));
+    out.secret_variables = secret.value.filter((n) => names.includes(n));
+  }
   return out;
 }
 
@@ -244,7 +278,7 @@ async function submit() {
 
 <template>
   <div class="overlay" @click.self="emit('cancel')">
-    <div class="panel">
+    <div class="panel" :class="{ wide: isScript }">
       <h3>{{ isEdit ? 'Edit' : 'Add' }} {{ model }}</h3>
       <p v-if="general" class="general">{{ general }}</p>
       <form @submit.prevent="submit">
@@ -302,6 +336,22 @@ async function submit() {
               rows="3"
               placeholder="{ }"
             />
+            <template v-else-if="f.kind === 'textarea' && isScript && f.name === 'content'">
+              <div class="upload">
+                <input ref="fileInput" type="file" hidden @change="loadFile" />
+                <button type="button" class="ghost" @click="fileInput?.click()">
+                  Upload a file…
+                </button>
+                <span class="hint">or type / paste the script below</span>
+              </div>
+              <textarea
+                v-model="values[f.name]"
+                class="script"
+                rows="22"
+                spellcheck="false"
+                placeholder="#!/bin/bash"
+              />
+            </template>
             <textarea
               v-else-if="f.kind === 'textarea'"
               v-model="values[f.name]"
@@ -316,6 +366,30 @@ async function submit() {
               :maxlength="f.maxLength"
             />
             <span v-if="fieldErr(f.name)" class="err">{{ fieldErr(f.name) }}</span>
+          </div>
+        </div>
+        <div v-if="isScript" class="row">
+          <label>variables</label>
+          <div class="control">
+            <span v-if="!scriptVars.length" class="hint">
+              None yet. A variable is written <code>${NAME:-default}</code> in the script.
+            </span>
+            <template v-else>
+              <span class="hint">
+                "First" shows a variable at the top of the VM creation form (the others are folded
+                under "Other variables"). "Secret" masks its value (***) in the VM's journal.
+              </span>
+              <div class="vars">
+                <span class="vh">variable</span>
+                <span class="vh">first</span>
+                <span class="vh">secret</span>
+                <template v-for="v in scriptVars" :key="v.name">
+                  <span class="check-name" :title="`default: ${v.default}`">{{ v.name }}</span>
+                  <input v-model="featured" type="checkbox" :value="v.name" />
+                  <input v-model="secret" type="checkbox" :value="v.name" />
+                </template>
+              </div>
+            </template>
           </div>
         </div>
         <div class="actions">
@@ -483,5 +557,58 @@ button.ghost {
   background: white;
   color: var(--text);
   border-color: var(--border);
+}
+.check {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+  color: var(--text);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.check input {
+  width: auto;
+  flex: none;
+}
+.hint {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.panel.wide {
+  width: 860px;
+}
+.upload {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+textarea.script {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  min-height: 380px;
+  white-space: pre;
+  overflow: auto;
+}
+.vars {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 56px 56px;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 4px;
+}
+.vars .vh {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.vars .check-name {
+  overflow-wrap: anywhere;
+  font-size: 0.85rem;
+}
+.vars input[type='checkbox'] {
+  width: auto;
+  justify-self: start;
 }
 </style>

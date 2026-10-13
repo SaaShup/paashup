@@ -2435,6 +2435,31 @@ export interface SshKeyCreate {
 }
 export type SshKeyUpdate = Partial<SshKeyCreate>;
 
+/** InitScript — `/api/virtualization/init-scripts/` */
+export interface InitScript {
+  id: number;
+  name: string;
+  description: string | null;
+  content: string;
+  variables: Json;
+  featured_variables: Json;
+  secret_variables: Json;
+  custom_fields: Json;
+  created?: string | null;
+  last_updated?: string | null;
+}
+export interface InitScriptCreate {
+  name: string;
+  description?: string | null;
+  content: string;
+  variables?: Json;
+  featured_variables?: Json;
+  secret_variables?: Json;
+  custom_fields?: Json;
+  tags?: RelationInput;
+}
+export type InitScriptUpdate = Partial<InitScriptCreate>;
+
 /** L2VPNTermination — `/api/vpn/l2vpn-terminations/` */
 export interface L2VPNTermination {
   id: number;
@@ -2556,6 +2581,7 @@ export interface TableTypeMap {
   "extras_config_template": { row: ConfigTemplate; create: ConfigTemplateCreate; update: ConfigTemplateUpdate };
   "virtualization_image": { row: Image; create: ImageCreate; update: ImageUpdate };
   "virtualization_ssh_key": { row: SshKey; create: SshKeyCreate; update: SshKeyUpdate };
+  "virtualization_init_script": { row: InitScript; create: InitScriptCreate; update: InitScriptUpdate };
   "vpn_l2_vpntermination": { row: L2VPNTermination; create: L2VPNTerminationCreate; update: L2VPNTerminationUpdate };
   "wireless_wireless_lan": { row: WirelessLAN; create: WirelessLANCreate; update: WirelessLANUpdate };
   "wireless_wireless_link": { row: WirelessLink; create: WirelessLinkCreate; update: WirelessLinkUpdate };

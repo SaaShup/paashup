@@ -481,6 +481,8 @@ export interface NewServer {
   keyName: string;
   /** security group names; empty = the project's default group */
   securityGroups: string[];
+  /** a script run by cloud-init at first boot (sent base64-encoded) */
+  userData?: string;
   metadata: Record<string, string>;
 }
 
@@ -496,6 +498,7 @@ export async function createServer(c: CloudConfig, region: string, s: NewServer)
       ...(s.securityGroups.length
         ? { security_groups: s.securityGroups.map((name) => ({ name })) }
         : {}),
+      ...(s.userData ? { user_data: Buffer.from(s.userData).toString('base64') } : {}),
       metadata: s.metadata,
     },
   });

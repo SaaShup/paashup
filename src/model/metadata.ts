@@ -1970,6 +1970,27 @@ export const tables = {
       { name: "last_updated", column: "last_updated", tsKind: "string", nullable: true, writable: false, required: false },
     ],
   },
+  "virtualization_init_script": {
+    model: "InitScript", table: "virtualization_init_script",
+    section: "virtualization", endpoint: "/api/virtualization/init-scripts/",
+    origin: "external-stub", pk: 'id', pkKind: 'number', readOnly: false,
+    objectType: "virtualization.initscript",
+    relations: [
+      { name: "tags", kind: "tags", target: "Tag", targetTable: "extras_tag" },
+    ],
+    counts: [],
+    columns: [
+      { name: "name", column: "name", tsKind: "string", nullable: false, writable: true, required: true, maxLength: 100 },
+      { name: "description", column: "description", tsKind: "string", nullable: true, writable: true, required: false, maxLength: 200 },
+      { name: "content", column: "content", tsKind: "string", nullable: false, writable: true, required: true },
+      { name: "variables", column: "variables", tsKind: "json", nullable: false, writable: true, required: false, formHidden: true },
+      { name: "featured_variables", column: "featured_variables", tsKind: "json", nullable: false, writable: true, required: false, formHidden: true },
+      { name: "secret_variables", column: "secret_variables", tsKind: "json", nullable: false, writable: true, required: false, formHidden: true },
+      { name: "custom_fields", column: "custom_fields", tsKind: "json", nullable: false, writable: true, required: false },
+      { name: "created", column: "created", tsKind: "string", nullable: true, writable: false, required: false },
+      { name: "last_updated", column: "last_updated", tsKind: "string", nullable: true, writable: false, required: false },
+    ],
+  },
   "vpn_l2_vpntermination": {
     model: "L2VPNTermination", table: "vpn_l2_vpntermination",
     section: "vpn", endpoint: "/api/vpn/l2vpn-terminations/",

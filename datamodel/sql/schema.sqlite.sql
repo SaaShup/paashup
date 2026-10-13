@@ -1481,6 +1481,19 @@ CREATE TABLE virtualization_ssh_key (
     FOREIGN KEY (owner_id) REFERENCES users_user(id) ON DELETE SET NULL
 );
 
+CREATE TABLE virtualization_init_script (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    content TEXT NOT NULL,
+    variables TEXT,
+    featured_variables TEXT,
+    secret_variables TEXT,
+    custom_fields TEXT,
+    created TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    last_updated TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
 CREATE TABLE vpn_l2_vpntermination (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     l2vpn_id INTEGER,
@@ -1700,6 +1713,7 @@ CREATE UNIQUE INDEX uq_users_group_name ON users_group (name);
 CREATE UNIQUE INDEX uq_extras_config_template_name ON extras_config_template (name);
 CREATE UNIQUE INDEX uq_virtualization_image_name ON virtualization_image (name);
 CREATE UNIQUE INDEX uq_virtualization_ssh_key_name ON virtualization_ssh_key (name);
+CREATE UNIQUE INDEX uq_virtualization_init_script_name ON virtualization_init_script (name);
 
 -- ----- constraints enforced in the application layer -----
 -- SKIP unique on dcim_cable_termination (termination_type, termination_id): column not present in model

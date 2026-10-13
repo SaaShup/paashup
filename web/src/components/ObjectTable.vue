@@ -17,6 +17,8 @@ const props = defineProps<{
   extraAction?: string;
   /** Columns to show right after id/name, ahead of the others (the table shows at most 8). */
   preferred?: string[];
+  /** Columns never shown in this table (large text, derived data…). */
+  hidden?: string[];
   /** Render a leading checkbox column for row selection (e.g. Docker containers). */
   selectable?: boolean;
   /** Currently-selected row ids (controlled by the parent). */
@@ -71,7 +73,7 @@ const FIRST = ['id', 'display'];
 const columns = computed(() => {
   const keys = new Set<string>();
   for (const row of props.items.slice(0, 20)) {
-    for (const k of Object.keys(row)) if (!HIDE.has(k)) keys.add(k);
+    for (const k of Object.keys(row)) if (!HIDE.has(k) && !props.hidden?.includes(k)) keys.add(k);
   }
   const front = [...FIRST, ...(props.preferred ?? [])].filter((k) => keys.has(k));
   const rest = [...keys].filter((k) => !front.includes(k));

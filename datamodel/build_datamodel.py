@@ -585,6 +585,27 @@ STUBS = {
             col("last_updated", "datetime", nullable=True, writable=False, read_only=True),
         ],
     },
+    "virtualization/init-scripts": {
+        "section": "virtualization",
+        "model": "InitScript",
+        "endpoint": "/api/virtualization/init-scripts/",
+        "fields": [
+            col("name", "string(100)", max_length=100, required=True, unique=True),
+            col("description", "string(200)", max_length=200, nullable=True),
+            # a shell script run at the VM's first boot; its `${NAME:-default}` are the variables
+            col("content", "string", required=True),
+            # derived from `content` on every write: [{name, default}]
+            col("variables", "json", nullable=False, form_hidden=True),
+            # names of the variables shown first in the VM creation form (the rest are folded away)
+            col("featured_variables", "json", nullable=False, form_hidden=True),
+            # names of the variables whose value is masked (***) in the VM's journal
+            col("secret_variables", "json", nullable=False, form_hidden=True),
+            col("tags", "m2m", "m2m", references="Tag"),
+            col("custom_fields", "json", nullable=False),
+            col("created", "datetime", nullable=True, writable=False, read_only=True),
+            col("last_updated", "datetime", nullable=True, writable=False, read_only=True),
+        ],
+    },
     "vpn/l2vpn-terminations": {
         "section": "vpn",
         "model": "L2VPNTermination",

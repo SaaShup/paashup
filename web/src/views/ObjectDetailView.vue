@@ -11,6 +11,7 @@ import { scalarText } from './containerDetail.js';
 import { fieldLabel, formatUnit, pillFor } from '../format.js';
 import StatusPill from '../components/StatusPill.vue';
 import { useConnectionStore } from '../stores/connection.js';
+import { isValidDefault, setDefault } from '../initScript.js';
 import { briefTarget, DETAIL, LINKABLE_TABLES, type RelatedSection } from './objectDetail.js';
 
 const ui = useUiStore();
@@ -217,6 +218,117 @@ const clusterTo = (row: Obj): Route | null =>
   ui.resources.some((r) => r.table === 'virtualization_cluster') && row.cluster_id
     ? { view: 'detail', table: 'virtualization_cluster', id: Number(row.cluster_id) }
     : null;
+// an init script: its text, and the variables found in it
+interface ScriptVar {
+  name: string;
+  default: string;
+  featured: boolean;
+  secret: boolean;
+}
+const scriptText = computed(() => String(get('content') ?? ''));
+const scriptVars = computed<ScriptVar[]>(() => {
+  const vars = get('variables');
+  const feat = get('featured_variables');
+  const featured = Array.isArray(feat) ? feat : [];
+  const sec = get('secret_variables');
+  const secret = Array.isArray(sec) ? sec : [];
+  return Array.isArray(vars)
+    ? (vars as { name: string; default: string }[]).map((v) => ({
+        ...v,
+        featured: featured.includes(v.name),
+        secret: secret.includes(v.name),
+      }))
+    : [];
+});
+// Editing the variables in place: a default is rewritten in the script's text, "shown first" is
+// the list kept next to it. Both are saved together.
+const draft = ref<Record<string, { default: string; featured: boolean; secret: boolean }>>({});
+const savingVars = ref(false);
+watch(
+  scriptVars,
+  (vars) => {
+    draft.value = Object.fromEntries(
+      vars.map((v) => [v.name, { default: v.default, featured: v.featured, secret: v.secret }]),
+    );
+  },
+  { immediate: true },
+);
+const badDefault = computed(() =>
+  scriptVars.value.find((v) => !isValidDefault(draft.value[v.name]?.default ?? v.default)),
+);
+const varsDirty = computed(() =>
+  scriptVars.value.some((v) => {
+    const d = draft.value[v.name];
+    return !!d && (d.default !== v.default || d.featured !== v.featured || d.secret !== v.secret);
+  }),
+);
+function resetVars(): void {
+  draft.value = Object.fromEntries(
+    scriptVars.value.map((v) => [
+      v.name,
+      { default: v.default, featured: v.featured, secret: v.secret },
+    ]),
+  );
+}
+async function saveVars(): Promise<void> {
+  const r = resource.value;
+  const id = ui.detailId;
+  if (!r || id == null || badDefault.value) return;
+  let content = scriptText.value;
+  for (const v of scriptVars.value) {
+    const d = draft.value[v.name];
+    if (d && d.default !== v.default) content = setDefault(content, v.name, d.default);
+  }
+  savingVars.value = true;
+  error.value = '';
+  try {
+    await api.update(r.endpoint, id, {
+      content,
+      featured_variables: scriptVars.value
+        .filter((v) => draft.value[v.name]?.featured)
+        .map((v) => v.name),
+      secret_variables: scriptVars.value
+        .filter((v) => draft.value[v.name]?.secret)
+        .map((v) => v.name),
+    });
+    await load(true);
+  } catch (e) {
+    const d = (e as { detail?: { content?: unknown } }).detail;
+    error.value = Array.isArray(d?.content) ? d.content.join(' ') : String(e);
+  } finally {
+    savingVars.value = false;
+  }
+}
+// Editing the script's text in the terminal itself.
+const termEditing = ref(false);
+const termDraft = ref('');
+const savingText = ref(false);
+function editText(): void {
+  termDraft.value = scriptText.value;
+  termEditing.value = true;
+}
+async function saveText(): Promise<void> {
+  const r = resource.value;
+  const id = ui.detailId;
+  if (!r || id == null) return;
+  savingText.value = true;
+  error.value = '';
+  try {
+    await api.update(r.endpoint, id, {
+      content: termDraft.value,
+      // the variables the new text still declares keep their "shown first" and "secret" marks
+      featured_variables: scriptVars.value.filter((v) => v.featured).map((v) => v.name),
+      secret_variables: scriptVars.value.filter((v) => v.secret).map((v) => v.name),
+    });
+    termEditing.value = false;
+    await load(true);
+  } catch (e) {
+    const d = (e as { detail?: { content?: unknown } }).detail;
+    error.value = Array.isArray(d?.content) ? d.content.join(' ') : String(e);
+  } finally {
+    savingText.value = false;
+  }
+}
 const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() : '—');
 </script>
 
@@ -248,10 +360,6 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
 
     <p v-if="error" class="error">{{ error }}</p>
     <p v-if="notice" class="muted">{{ notice }}</p>
-    <p v-if="vmServer && !vmServer.managed" class="muted">
-      Server of the OpenStack cloud "{{ vmServer.cloud }}", not created by paasbox: delete it in
-      OpenStack.
-    </p>
     <p v-if="loading" class="muted">Loading…</p>
 
     <template v-if="obj && !loading">
@@ -263,6 +371,106 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
             <RouteLink v-else-if="f.to" class="rowlink" :to="f.to">{{ f.text }}</RouteLink>
             <template v-else>{{ f.text }}</template>
           </span>
+        </div>
+      </section>
+
+      <section v-if="config?.script" class="term">
+        <div class="term-bar">
+          <span class="dot r" /><span class="dot y" /><span class="dot g" />
+          <span class="term-title">{{ title }}</span>
+          <span class="term-meta">
+            {{ (termEditing ? termDraft : scriptText).split('\n').length }} lines
+          </span>
+          <template v-if="resource.writable">
+            <button v-if="!termEditing" class="term-btn" @click="editText">Edit</button>
+            <template v-else>
+              <button class="term-btn" :disabled="savingText" @click="termEditing = false">
+                Cancel
+              </button>
+              <button class="term-btn primary" :disabled="savingText" @click="saveText">
+                {{ savingText ? 'Saving…' : 'Save' }}
+              </button>
+            </template>
+          </template>
+        </div>
+        <textarea
+          v-if="termEditing"
+          v-model="termDraft"
+          class="term-body term-edit"
+          spellcheck="false"
+          :rows="Math.max(termDraft.replace(/\n$/, '').split('\n').length, 1)"
+          wrap="off"
+        />
+        <pre v-else class="term-body">{{ scriptText }}</pre>
+      </section>
+
+      <section v-if="config?.script" class="card cat">
+        <div class="cat-head">
+          <h3>
+            Variables <span class="n">{{ scriptVars.length }}</span>
+          </h3>
+        </div>
+        <p v-if="!scriptVars.length" class="muted empty">
+          No variable: the script is sent as it is.
+        </p>
+        <div v-else class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>name</th>
+                <th>default value</th>
+                <th>first in the VM form</th>
+                <th>secret</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="v in scriptVars" :key="v.name">
+                <td>
+                  <code>{{ v.name }}</code>
+                </td>
+                <td>
+                  <input
+                    v-if="draft[v.name]"
+                    v-model="draft[v.name]!.default"
+                    class="var-input"
+                    :disabled="!resource.writable"
+                    spellcheck="false"
+                  />
+                </td>
+                <td>
+                  <input
+                    v-if="draft[v.name]"
+                    v-model="draft[v.name]!.featured"
+                    type="checkbox"
+                    :disabled="!resource.writable"
+                  />
+                </td>
+                <td>
+                  <input
+                    v-if="draft[v.name]"
+                    v-model="draft[v.name]!.secret"
+                    type="checkbox"
+                    :disabled="!resource.writable"
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p v-if="badDefault" class="error">
+          The default of {{ badDefault.name }} has unbalanced braces.
+        </p>
+        <div v-if="resource.writable && scriptVars.length" class="var-actions">
+          <button class="btn btn-ghost" :disabled="!varsDirty || savingVars" @click="resetVars">
+            Reset
+          </button>
+          <button
+            class="btn"
+            :disabled="!varsDirty || savingVars || !!badDefault"
+            @click="saveVars"
+          >
+            {{ savingVars ? 'Saving…' : 'Save' }}
+          </button>
         </div>
       </section>
 
@@ -442,5 +650,110 @@ td {
 th {
   color: var(--muted);
   font-weight: 600;
+}
+.term {
+  background: #0f172a;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.term-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  background: #1e293b;
+}
+.dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+.dot.r {
+  background: #ef4444;
+}
+.dot.y {
+  background: #f59e0b;
+}
+.dot.g {
+  background: #22c55e;
+}
+.term-title {
+  margin-left: 8px;
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.term-meta {
+  margin-left: auto;
+  margin-right: 6px;
+  color: #64748b;
+  font-size: 0.75rem;
+}
+.term-body {
+  margin: 0;
+  padding: 14px 16px;
+  color: #e2e8f0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  overflow: auto;
+  max-height: 560px;
+  white-space: pre;
+}
+.req-tag {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--warn);
+  border: 1px solid var(--warn);
+}
+.var-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+}
+.var-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+.term-btn {
+  padding: 3px 12px;
+  border-radius: 6px;
+  border: 1px solid #475569;
+  background: transparent;
+  color: #e2e8f0;
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.term-btn:hover:not(:disabled) {
+  background: #334155;
+}
+.term-btn.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+.term-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.term-edit {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  background: #0f172a;
+  border: 0;
+  outline: none;
+  resize: none;
 }
 </style>

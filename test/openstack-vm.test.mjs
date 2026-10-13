@@ -390,3 +390,102 @@ test('the cloud journal keeps what was requested and done', async () => {
   assert.ok(log.some((c) => c.includes('Server "web-1" requested in GRA9')));
   assert.ok(log.some((c) => c.includes('Deletion of server "web-nogroup" requested')));
 });
+
+// ---- init scripts -----------------------------------------------------------------------
+
+const SCRIPTS = '/api/virtualization/init-scripts/';
+const SCRIPT =
+  '#!/bin/bash\nset -e\nDOMAIN="${DOMAIN:-example.org}"\nTOKEN="${TOKEN:-}"\nPORT="${PORT:-80}"\n';
+const userData = (spec) => Buffer.from(spec.user_data, 'base64').toString();
+const addScript = async (extra = {}) =>
+  (await api('POST', SCRIPTS, { name: `script-${Math.random()}`, content: SCRIPT, ...extra })).body;
+const scriptNotes = async (vmId) =>
+  (await journalOf(vmId)).map((e) => e.comments).filter((c) => c.startsWith('Init script'));
+
+test('the init script is sent as the server user_data, with the changed variables exported', async () => {
+  const s = await addScript();
+  const res = await create({
+    name: 'with-script',
+    init_script: { id: s.id, variables: { DOMAIN: 'my.io', PORT: '80' } },
+  });
+  assert.equal(res.status, 202, JSON.stringify(res.body));
+  assert.equal(
+    userData(gra.created.at(-1)),
+    `#!/bin/bash\nexport DOMAIN='my.io'\n${SCRIPT.slice('#!/bin/bash\n'.length)}`,
+    'the script as it is, plus the one value that differs from its default',
+  );
+  const vm = await until(() => vmNamed('with-script'), 'the VM');
+  await until(async () => (await scriptNotes(vm.id)).length, 'the script in the journal');
+  assert.deepEqual(await scriptNotes(vm.id), ['Init script "' + s.name + '" with DOMAIN="my.io".']);
+  await until(async () => (await statusOf(vm.id)) === 'active', 'the VM to be active');
+});
+
+test('a VM launched without a script, or with the defaults, says so', async () => {
+  assert.equal((await create({ name: 'no-script' })).status, 202);
+  assert.equal(gra.created.at(-1).user_data, undefined, 'no user_data without a script');
+  const vm = await until(() => vmNamed('no-script'), 'the VM');
+  assert.deepEqual(await scriptNotes(vm.id), []);
+
+  const s = await addScript();
+  const res = await create({ name: 'default-script', init_script: { id: s.id, variables: {} } });
+  assert.equal(res.status, 202, JSON.stringify(res.body));
+  assert.equal(userData(gra.created.at(-1)), SCRIPT, 'nothing exported');
+  const dvm = await until(() => vmNamed('default-script'), 'the VM');
+  await until(async () => (await scriptNotes(dvm.id)).length, 'the script in the journal');
+  assert.match((await scriptNotes(dvm.id))[0], /with its default values\.$/);
+});
+
+test('a secret variable is masked in the journals, the others are written out', async () => {
+  const s = await addScript({ secret_variables: ['TOKEN'] });
+  const res = await create({
+    name: 'with-secret',
+    init_script: { id: s.id, variables: { DOMAIN: 'my.io', TOKEN: 'hunter2' } },
+  });
+  assert.equal(res.status, 202, JSON.stringify(res.body));
+  assert.ok(userData(gra.created.at(-1)).includes("export TOKEN='hunter2'"), 'the VM gets it');
+  const vm = await until(() => vmNamed('with-secret'), 'the VM');
+  await until(async () => (await statusOf(vm.id)) === 'active', 'the VM to be active');
+  assert.deepEqual(await scriptNotes(vm.id), [
+    `Init script "${s.name}" with DOMAIN="my.io", TOKEN=***.`,
+  ]);
+  const everything = await db.query(`SELECT comments FROM extras_journalentry`);
+  assert.ok(!everything.some((e) => e.comments.includes('hunter2')), 'no journal holds the secret');
+});
+
+test('a script saved before secrets existed (no secret list) still launches a VM', async () => {
+  const s = await addScript();
+  await db.execute(`UPDATE virtualization_init_script SET secret_variables = NULL WHERE id = ?`, [
+    s.id,
+  ]);
+  const res = await create({
+    name: 'old-script',
+    init_script: { id: s.id, variables: { PORT: '8080' } },
+  });
+  assert.equal(res.status, 202, JSON.stringify(res.body));
+  assert.ok(userData(gra.created.at(-1)).includes("export PORT='8080'"));
+});
+
+test('a bad init script is refused before anything is created or uploaded', async () => {
+  const s = await addScript();
+  const key = (
+    await api('POST', KEYS, { name: 'not in region', public_key: RSA.replace('DhA', 'DhD') })
+  ).body;
+  const created = gra.created.length;
+  const keypairs = gra.keypairs.length;
+  const refused = async (init_script, expected) => {
+    const res = await create({
+      name: 'never-script',
+      ssh_key: { source: 'paasbox', id: key.id },
+      init_script,
+    });
+    assert.equal(res.status, 400, JSON.stringify(res.body));
+    assert.match(res.body.init_script[0], expected);
+  };
+  await refused({ id: 99999, variables: {} }, /does not exist/);
+  await refused({ id: s.id, variables: { NOPE: '1' } }, /no variable "NOPE"/);
+  await refused({ id: s.id, variables: { DOMAIN: 'x'.repeat(60000) } }, /too large/);
+  await refused({ id: 'abc' }, /Choose an init script/);
+  await refused({ id: s.id, variables: [] }, /object of name/);
+  assert.equal(gra.created.length, created, 'nothing was created on the cloud');
+  assert.equal(gra.keypairs.length, keypairs, 'the key was not uploaded');
+});

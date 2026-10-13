@@ -1,6 +1,7 @@
 import type { TableMeta } from '../model/meta-types.js';
 import { ValidationError } from '../errors.js';
 import { customFieldsFor } from '../customfields/registry.js';
+import { checkScript, parseVariables } from '../initscripts.js';
 
 /** `<type> <base64> [comment]` on one line, for the key types OpenSSH and OpenStack accept. */
 export const SSH_PUBLIC_KEY =
@@ -123,6 +124,31 @@ export function validateWrite(
       add('public_key', 'Not a valid OpenSSH public key (e.g. "ssh-ed25519 AAAA… comment").');
     } else {
       data.public_key = key; // stored without surrounding whitespace
+    }
+  }
+
+  // An init script's variables are derived from its content, never taken from the client;
+  // the featured and secret ones are kept only if the script declares them.
+  if (meta.table === 'virtualization_init_script') {
+    delete data.variables;
+    let names: string[] | null = null;
+    if (typeof data.content === 'string') {
+      const problem = checkScript(data.content);
+      if (problem) add('content', problem);
+      const vars = parseVariables(data.content);
+      data.variables = vars;
+      names = vars.map((v) => v.name);
+    }
+    for (const field of ['featured_variables', 'secret_variables']) {
+      if (!partial && data[field] === undefined) data[field] = [];
+      const list = data[field];
+      if (list === undefined || list === null) continue;
+      if (!Array.isArray(list) || list.some((n) => typeof n !== 'string')) {
+        add(field, 'Expected a list of variable names.');
+      } else if (names) {
+        // the content decides what the variables are: a name it no longer declares is dropped
+        data[field] = list.filter((n) => names!.includes(n as string));
+      }
     }
   }
 

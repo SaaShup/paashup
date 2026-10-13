@@ -14,6 +14,7 @@ const emit = defineEmits<{
 
 const CLOUDS = '/api/plugins/openstack/clouds/';
 const KEYS = '/api/virtualization/ssh-keys/';
+const SCRIPTS = '/api/virtualization/init-scripts/';
 // what OpenStack accepts as a keypair name; a paasbox key named otherwise cannot be used
 const KEYPAIR_NAME = /^[A-Za-z0-9_-]+(?: [A-Za-z0-9_-]+)*$/;
 
@@ -39,6 +40,7 @@ const networks = ref<Network[]>([]);
 const groups = ref<Named[]>([]);
 const cloudKeys = ref<Named[]>([]);
 const paasboxKeys = ref<Obj[]>([]);
+const scripts = ref<Obj[]>([]);
 
 const cloudId = ref<number | ''>('');
 const region = ref('');
@@ -48,6 +50,8 @@ const imageId = ref('');
 const networkIds = ref<string[]>([]);
 const securityGroups = ref<string[]>([]);
 const sshKey = ref(''); // "cloud:<name>" or "paasbox:<id>"
+const scriptId = ref<number | ''>('');
+const varValues = ref<Record<string, string>>({}); // init script variable → value
 
 const loading = ref(false);
 const busy = ref(false);
@@ -66,6 +70,29 @@ const ready = computed(
 const otherKeys = computed(() =>
   paasboxKeys.value.filter((k) => !cloudKeys.value.some((c) => c.name === k.name)),
 );
+
+interface ScriptVar {
+  name: string;
+  default: string;
+}
+const script = computed(() =>
+  scripts.value.find((x) => (x as { id: number }).id === scriptId.value),
+);
+const scriptVars = computed<ScriptVar[]>(() => {
+  const v = script.value?.variables;
+  return Array.isArray(v) ? (v as ScriptVar[]) : [];
+});
+// the variables the script's author put first are shown as fields; the others keep their
+// default unless the user opens the "other variables" section
+const featuredVars = computed(() => {
+  const names = script.value?.featured_variables;
+  const featured = Array.isArray(names) ? names : [];
+  return scriptVars.value.filter((v) => featured.includes(v.name));
+});
+const otherVars = computed(() => scriptVars.value.filter((v) => !featuredVars.value.includes(v)));
+watch(scriptId, () => {
+  varValues.value = Object.fromEntries(scriptVars.value.map((v) => [v.name, v.default]));
+});
 
 const read = async <T,>(kind: string): Promise<T[]> =>
   (
@@ -128,6 +155,7 @@ onMounted(async () => {
   try {
     clouds.value = (await api.list(CLOUDS, { limit: 200 })).results;
     paasboxKeys.value = (await api.list(KEYS, { limit: 500 })).results;
+    scripts.value = (await api.list(SCRIPTS, { limit: 500 })).results;
     if (clouds.value.length === 1) cloudId.value = (clouds.value[0] as { id: number }).id;
   } catch (e) {
     general.value = String(e);
@@ -200,6 +228,9 @@ async function submit(): Promise<void> {
       network_ids: networkIds.value,
       security_groups: securityGroups.value,
       ssh_key: source === 'cloud' ? { source, name: value } : { source, id: Number(value) },
+      ...(scriptId.value
+        ? { init_script: { id: scriptId.value, variables: varValues.value } }
+        : {}),
     });
     emit('saved', created.vm_id ?? null);
   } catch (e) {
@@ -221,7 +252,7 @@ async function submit(): Promise<void> {
 
 <template>
   <div class="overlay" @click.self="emit('cancel')">
-    <div class="panel">
+    <div class="panel" :class="{ wide: scriptVars.length > 0 }">
       <h3>Add virtual machine — OpenStack</h3>
       <p v-if="general" class="general">{{ general }}</p>
       <form @submit.prevent="submit">
@@ -327,6 +358,30 @@ async function submit(): Promise<void> {
               <span v-for="m in errors.ssh_key" :key="m" class="err">{{ m }}</span>
             </div>
           </div>
+          <div class="row">
+            <label>init script</label>
+            <div class="control">
+              <select v-model="scriptId">
+                <option value="">None</option>
+                <option v-for="x in scripts" :key="(x as any).id" :value="(x as any).id">
+                  {{ x.name }}
+                </option>
+              </select>
+              <span class="hint">Run once, at the VM's first boot.</span>
+              <span v-for="m in errors.init_script" :key="m" class="err">{{ m }}</span>
+            </div>
+          </div>
+          <div v-for="v in featuredVars" :key="v.name" class="row">
+            <label>{{ v.name }}</label>
+            <input v-model="varValues[v.name]" />
+          </div>
+          <details v-if="otherVars.length" class="others">
+            <summary>Other variables ({{ otherVars.length }})</summary>
+            <div v-for="v in otherVars" :key="v.name" class="row">
+              <label>{{ v.name }}</label>
+              <input v-model="varValues[v.name]" />
+            </div>
+          </details>
           <p class="billing">
             ⚠ Creating a VM is billed by the cloud provider until the VM is deleted.
           </p>
@@ -356,6 +411,9 @@ async function submit(): Promise<void> {
   padding: 5vh 0;
   overflow: auto;
 }
+.panel.wide {
+  width: 760px;
+}
 .panel {
   background: white;
   border-radius: 10px;
@@ -368,7 +426,7 @@ h3 {
 }
 .row {
   display: grid;
-  grid-template-columns: 160px 1fr;
+  grid-template-columns: 160px minmax(0, 1fr);
   gap: 10px;
   align-items: start;
   margin-bottom: 8px;
@@ -380,6 +438,7 @@ h3 {
   }
 }
 label {
+  overflow-wrap: anywhere;
   font-size: 0.85rem;
   color: #555;
   padding-top: 6px;
@@ -435,6 +494,15 @@ select:focus {
 .general {
   color: var(--danger);
   font-size: 0.85rem;
+}
+.others {
+  margin: 4px 0 8px;
+  font-size: 0.85rem;
+}
+.others summary {
+  cursor: pointer;
+  color: var(--muted);
+  margin-bottom: 8px;
 }
 .billing {
   margin: 12px 0 0;

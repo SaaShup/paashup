@@ -62,6 +62,7 @@ const SECTION_GROUPS: Record<string, SubGroup[]> = {
     { label: 'Interfaces', match: ['interface'] },
     { label: 'Images', match: ['image'] },
     { label: 'SSH Keys', match: ['ssh-key'] },
+    { label: 'Init Scripts', match: ['init-script'] },
   ],
   tenancy: [{ label: 'Tenants', match: ['tenant'] }],
   users: [
@@ -160,10 +161,12 @@ export function subgroupsFor(
       const label = titleize(p.plugin);
       (byPlugin.get(label) ?? byPlugin.set(label, []).get(label)!).push(p);
     }
-    return [...byPlugin.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([label, items]) => ({
-      label,
-      items: items.sort(compareNav),
-    }));
+    return [...byPlugin.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([label, items]) => ({
+        label,
+        items: items.sort(compareNav),
+      }));
   }
 
   const cfg = SECTION_GROUPS[section];

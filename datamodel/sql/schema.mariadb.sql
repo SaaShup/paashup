@@ -1480,6 +1480,19 @@ CREATE TABLE virtualization_ssh_key (
     FOREIGN KEY (owner_id) REFERENCES users_user(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE virtualization_init_script (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description VARCHAR(200),
+    content TEXT NOT NULL,
+    variables JSON,
+    featured_variables JSON,
+    secret_variables JSON,
+    custom_fields JSON,
+    created DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6),
+    last_updated DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE vpn_l2_vpntermination (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     l2vpn_id BIGINT,
@@ -1686,6 +1699,7 @@ CREATE UNIQUE INDEX uq_users_group_name ON users_group (name);
 CREATE UNIQUE INDEX uq_extras_config_template_name ON extras_config_template (name);
 CREATE UNIQUE INDEX uq_virtualization_image_name ON virtualization_image (name);
 CREATE UNIQUE INDEX uq_virtualization_ssh_key_name ON virtualization_ssh_key (name);
+CREATE UNIQUE INDEX uq_virtualization_init_script_name ON virtualization_init_script (name);
 
 -- ----- constraints enforced in the application layer -----
 -- SKIP unique on dcim_cable_termination (termination_type, termination_id): column not present in model

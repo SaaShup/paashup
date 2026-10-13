@@ -66,6 +66,11 @@ const PREFERRED_COLUMNS: Record<string, string[]> = {
   ],
   virtualization_ssh_key: ['name', 'public_key', 'owner', 'source', 'description'],
   virtualization_image: ['name', 'source', 'description'],
+  virtualization_init_script: ['name', 'description', 'created'],
+};
+// Columns a list leaves out: an init script is listed by name, description and date only.
+const HIDDEN_COLUMNS: Record<string, string[]> = {
+  virtualization_init_script: ['id', 'content', 'variables', 'required_variables', 'last_updated'],
 };
 const slot = computed(() => (resource.value ? objects.byTable[resource.value.table] : undefined));
 const isVm = computed(() => resource.value?.table === 'virtualization_virtual_machine');
@@ -378,6 +383,7 @@ function onAction(row: Obj) {
         :items="slot.items"
         :table="resource.table"
         :preferred="PREFERRED_COLUMNS[resource.table]"
+        :hidden="HIDDEN_COLUMNS[resource.table]"
         :editable="resource.writable"
         :extra-action="
           isContainer

@@ -6,7 +6,7 @@ Each entity below maps to one API collection endpoint and is intended as a datab
 
 > Foreign keys (`→`) are stored as the referenced row's integer `id`. Many-to-many (`⇄`) relations need a join table. `slug` columns are unique. Other unique constraints (e.g. `name` scoped to a parent) follow NetBox's models and are noted where derivable.
 
-**84 entities**, **1503 fields** total.
+**85 entities**, **1513 fields** total.
 
 
 > **Generic relations.** Where NetBox uses a polymorphic FK, this model stores a pair of columns: `<rel>_type` (a content-type reference such as `dcim.interface`) plus `<rel>_id` (the target row id). Affected: `Prefix.scope_*`, `Cluster.scope_*`, `IPAddress.assigned_object_*`, `Service.*`, `FHRPGroupAssignment.*`, `MACAddress.assigned_object_*`, etc.
@@ -1919,7 +1919,7 @@ _18 entities._
 
 ## Virtualization
 
-_9 entities._
+_10 entities._
 
 
 ### ClusterGroup
@@ -2167,6 +2167,26 @@ _9 entities._
 | `owner` | integer (fk) | ✓ |  |  | → **User** (FK) |
 | `source_type` | string (content-type) | ✓ |  |  | generic relation (content-type + id) |
 | `source_id` | integer | ✓ |  |  | generic relation (content-type + id) |
+| `tags` | m2m |  |  |  | ⇄ **Tag** (M2M) |
+| `custom_fields` | json |  |  |  |  |
+| `created` | datetime | ✓ |  | ✓ |  |
+| `last_updated` | datetime | ✓ |  | ✓ |  |
+
+
+### InitScript _(external, stub)_
+
+- **Table:** `virtualization_init_script`
+- **Endpoint:** `/api/virtualization/init-scripts/`
+- **Read schema:** `(hand-defined stub)` · **Write schema:** `(read-only / stub)`
+
+| Field | Type | Null | Req | RO | Relationship / Notes |
+|-------|------|:----:|:---:|:--:|----------------------|
+| `name` | string(100) |  | ✓ |  | unique |
+| `description` | string(200) | ✓ |  |  |  |
+| `content` | string |  | ✓ |  |  |
+| `variables` | json |  |  |  |  |
+| `featured_variables` | json |  |  |  |  |
+| `secret_variables` | json |  |  |  |  |
 | `tags` | m2m |  |  |  | ⇄ **Tag** (M2M) |
 | `custom_fields` | json |  |  |  |  |
 | `created` | datetime | ✓ |  | ✓ |  |

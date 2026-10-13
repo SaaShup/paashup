@@ -19883,6 +19883,123 @@
       ],
       "counts": []
     },
+    "virtualization/init-scripts": {
+      "section": "virtualization",
+      "model": "InitScript",
+      "endpoint": "/api/virtualization/init-scripts/",
+      "fields": [
+        {
+          "name": "name",
+          "type": "string(100)",
+          "kind": "scalar",
+          "nullable": false,
+          "required_on_create": true,
+          "writable": true,
+          "read_only": false,
+          "max_length": 100,
+          "unique": true
+        },
+        {
+          "name": "description",
+          "type": "string(200)",
+          "kind": "scalar",
+          "nullable": true,
+          "required_on_create": false,
+          "writable": true,
+          "read_only": false,
+          "max_length": 200
+        },
+        {
+          "name": "content",
+          "type": "string",
+          "kind": "scalar",
+          "nullable": false,
+          "required_on_create": true,
+          "writable": true,
+          "read_only": false
+        },
+        {
+          "name": "variables",
+          "type": "json",
+          "kind": "scalar",
+          "nullable": false,
+          "required_on_create": false,
+          "writable": true,
+          "read_only": false,
+          "form_hidden": true
+        },
+        {
+          "name": "featured_variables",
+          "type": "json",
+          "kind": "scalar",
+          "nullable": false,
+          "required_on_create": false,
+          "writable": true,
+          "read_only": false,
+          "form_hidden": true
+        },
+        {
+          "name": "secret_variables",
+          "type": "json",
+          "kind": "scalar",
+          "nullable": false,
+          "required_on_create": false,
+          "writable": true,
+          "read_only": false,
+          "form_hidden": true
+        },
+        {
+          "name": "tags",
+          "type": "m2m",
+          "kind": "m2m",
+          "nullable": false,
+          "required_on_create": false,
+          "writable": true,
+          "read_only": false,
+          "references": "Tag"
+        },
+        {
+          "name": "custom_fields",
+          "type": "json",
+          "kind": "scalar",
+          "nullable": false,
+          "required_on_create": false,
+          "writable": true,
+          "read_only": false
+        },
+        {
+          "name": "created",
+          "type": "datetime",
+          "kind": "scalar",
+          "nullable": true,
+          "required_on_create": false,
+          "writable": false,
+          "read_only": true
+        },
+        {
+          "name": "last_updated",
+          "type": "datetime",
+          "kind": "scalar",
+          "nullable": true,
+          "required_on_create": false,
+          "writable": false,
+          "read_only": true
+        }
+      ],
+      "read_schema": null,
+      "write_schema": null,
+      "origin": "external-stub",
+      "object_type": "virtualization.initscript",
+      "relations": [
+        {
+          "name": "tags",
+          "kind": "tags",
+          "target": "Tag",
+          "target_table": "extras_tag"
+        }
+      ],
+      "counts": []
+    },
     "vpn/l2vpn-terminations": {
       "section": "vpn",
       "model": "L2VPNTermination",

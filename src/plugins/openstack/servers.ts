@@ -8,6 +8,7 @@
 // "decommissioning", and it is removed once Nova no longer has the server.
 import type { Db } from '../../db/types.js';
 import { ApiError, ValidationError } from '../../errors.js';
+import { checkScript, renderScript } from '../../initscripts.js';
 import { NOVA_KEYPAIR_NAME } from '../../repository/validate.js';
 import {
   authenticate,
@@ -41,6 +42,8 @@ export interface CreateInput {
   networkIds: string[];
   securityGroups: string[];
   sshKey: SshKeyChoice;
+  /** an init script of the library, with the values given to its variables */
+  script?: { id: number; variables: Record<string, string> };
 }
 
 const POLL_MS = Number(process.env.PB_OPENSTACK_POLL_MS) || 5000;
@@ -82,6 +85,27 @@ export function parseCreate(body: unknown): CreateInput {
   }
   need('ssh_key', !!sshKey, 'Choose the SSH key to launch the VM with.');
 
+  let script: CreateInput['script'];
+  const sc = b.init_script;
+  if (sc != null) {
+    const o = (typeof sc === 'object' ? sc : {}) as Record<string, unknown>;
+    const vars = (o.variables ?? {}) as Record<string, unknown>;
+    if (!Number.isInteger(Number(o.id)) || Number(o.id) <= 0) {
+      errors.init_script = ['Choose an init script.'];
+    } else if (typeof vars !== 'object' || Array.isArray(vars)) {
+      errors.init_script = ['Variables must be an object of name → value.'];
+    } else {
+      script = {
+        id: Number(o.id),
+        variables: Object.fromEntries(
+          Object.entries(vars)
+            .filter(([, v]) => v != null)
+            .map(([k, v]) => [k, String(v)]),
+        ),
+      };
+    }
+  }
+
   if (Object.keys(errors).length || !sshKey) throw new ValidationError('Invalid request', errors);
   return {
     region,
@@ -91,7 +115,41 @@ export function parseCreate(body: unknown): CreateInput {
     networkIds,
     securityGroups: strings(b.security_groups),
     sshKey,
+    script,
   };
+}
+
+interface ResolvedScript {
+  name: string;
+  /** the script with the changed variables exported, ready to be the server's user_data */
+  userData: string;
+  /** the variables whose value differs from the script's default */
+  changed: Record<string, string>;
+  /** the variables marked secret: their values are never written to a journal */
+  secret: string[];
+}
+
+/** The chosen init script rendered with its variables, or the field-level 400. */
+async function resolveScript(
+  db: Db,
+  choice: NonNullable<CreateInput['script']>,
+): Promise<ResolvedScript> {
+  const row = await db.get<{ name: string; content: string; secret_variables: unknown }>(
+    `SELECT name, content, secret_variables FROM virtualization_init_script WHERE id = ?`,
+    [choice.id],
+  );
+  if (!row) throw fieldError('init_script', 'This init script does not exist.');
+  let rendered: ReturnType<typeof renderScript>;
+  try {
+    rendered = renderScript(row.content, choice.variables);
+  } catch (e) {
+    throw fieldError('init_script', messageOf(e));
+  }
+  const problem = checkScript(rendered.script);
+  if (problem) throw fieldError('init_script', problem);
+  const raw = row.secret_variables; // JSON text (SQLite) or already parsed (MariaDB); NULL before any is set
+  const secret: string[] = (typeof raw === 'string' ? JSON.parse(raw) : raw) ?? [];
+  return { name: row.name, userData: rendered.script, changed: rendered.changed, secret };
 }
 
 const samePublicKey = (a: string, b: string): boolean => {
@@ -188,6 +246,7 @@ export async function launchServer(db: Db, cloud: CloudRow, input: CreateInput):
   const flavor = (await listFlavors(cloud, input.region)).find((f) => f.id === input.flavorId);
   if (!flavor) throw fieldError('flavor_id', 'This flavor does not exist in the region.');
 
+  const script = input.script ? await resolveScript(db, input.script) : null;
   await checkQuota(cloud, input.region, flavor);
   const key = await resolveKey(db, cloud, input.region, input.sshKey);
 
@@ -198,6 +257,7 @@ export async function launchServer(db: Db, cloud: CloudRow, input: CreateInput):
     networkIds: input.networkIds,
     keyName: key.name,
     securityGroups: input.securityGroups,
+    userData: script?.userData,
     metadata: { [MANAGED_BY.key]: MANAGED_BY.value },
   });
   await journal(
@@ -211,7 +271,10 @@ export async function launchServer(db: Db, cloud: CloudRow, input: CreateInput):
   let vmId: number | null = null;
   try {
     vmId = await importServer(db, cloud.id, input.region, serverId);
-    if (vmId != null) await journalVm(db, vmId, 'info', launchedWith(cloud, input.region, key));
+    if (vmId != null) {
+      await journalVm(db, vmId, 'info', launchedWith(cloud, input.region, key));
+      if (script) await journalVm(db, vmId, 'info', scriptNote(script));
+    }
   } catch (e) {
     await journal(
       db,
@@ -227,6 +290,17 @@ export async function launchServer(db: Db, cloud: CloudRow, input: CreateInput):
 /** The permanent record of what a VM was launched with: the key's name and the whole key. */
 const launchedWith = (cloud: CloudRow, region: string, key: ResolvedKey): string =>
   `Launched through paasbox on OpenStack cloud "${cloud.name}" (region ${region}) with SSH key "${key.name}":\n${key.publicKey}`;
+
+/**
+ * What a VM's journal says of its init script: its name and the variables that were changed,
+ * a secret one as *** instead of its value.
+ */
+const scriptNote = (s: ResolvedScript): string => {
+  const changed = Object.entries(s.changed).map(
+    ([k, v]) => `${k}=${s.secret.includes(k) ? '***' : JSON.stringify(v)}`,
+  );
+  return `Init script "${s.name}"${changed.length ? ` with ${changed.join(', ')}` : ' with its default values'}.`;
+};
 
 async function followCreate(
   db: Db,

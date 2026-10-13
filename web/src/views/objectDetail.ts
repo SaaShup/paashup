@@ -20,6 +20,8 @@ export interface DetailConfig {
   refresh?: boolean;
   /** Show the cloud's per-region synchronisation status. */
   regionStatus?: boolean;
+  /** Show the object's `content` as a terminal, with the script's variables (init script). */
+  script?: boolean;
 }
 
 const byFk = (param: string) => async (endpoint: string, id: number) =>
@@ -121,6 +123,11 @@ export const DETAIL: Record<string, DetailConfig> = {
   virtualization_cluster: { sections: [VMS('cluster_id')] },
   virtualization_virtual_machine_type: { sections: [VMS('virtual_machine_type_id')] },
   virtualization_image: { sections: [VMS('image_id')] },
+  virtualization_init_script: {
+    hide: ['content', 'variables', 'featured_variables'],
+    script: true,
+    sections: [],
+  },
   plugin_openstack_cloud: {
     hide: ['password'],
     refresh: true,

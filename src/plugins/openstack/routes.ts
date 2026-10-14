@@ -13,6 +13,7 @@
 //   POST   /clouds/{id}/servers/         boot a server (202); the VM is imported by a sync
 //   GET    /servers/[?virtual_machine_id=]  the OpenStack server behind each VM, managed or not
 //   DELETE /servers/{vm_id}/             delete the server of a VM paasbox created
+//   GET|PUT /servers/{vm_id}/metadata/   read / edit the metadata of the server behind a VM
 import type { Db } from '../../db/types.js';
 import type { PluginRoute } from '../../plugins/types.js';
 import { Repository } from '../../repository/repository.js';
@@ -31,7 +32,14 @@ import {
 } from './openstack.js';
 import { journal } from './journal.js';
 import { isSyncing, purgeCloud, syncCloud } from './sync.js';
-import { deleteManagedVm, launchServer, listLinks, parseCreate } from './servers.js';
+import {
+  deleteManagedVm,
+  launchServer,
+  listLinks,
+  parseCreate,
+  readVmMetadata,
+  writeVmMetadata,
+} from './servers.js';
 import { META, T } from './meta.js';
 
 type Obj = Record<string, unknown>;
@@ -285,7 +293,36 @@ const deleteServerRoute: PluginRoute = {
   },
 };
 
+const getMetadataRoute: PluginRoute = {
+  method: 'GET',
+  path: `${OPENSTACK_API}/servers/{vm_id}/metadata/`,
+  handler: async ({ db, params }) => {
+    try {
+      return { status: 200, body: await readVmMetadata(db, Number(params.vm_id)) };
+    } catch (e) {
+      if (e instanceof OpenStackError) return fail(e);
+      throw e;
+    }
+  },
+};
+
+const putMetadataRoute: PluginRoute = {
+  method: 'PUT',
+  path: `${OPENSTACK_API}/servers/{vm_id}/metadata/`,
+  handler: async ({ db, params, body }) => {
+    try {
+      const wanted = ((body ?? {}) as { metadata?: unknown }).metadata;
+      return { status: 200, body: await writeVmMetadata(db, Number(params.vm_id), wanted) };
+    } catch (e) {
+      if (e instanceof OpenStackError) return fail(e);
+      throw e;
+    }
+  },
+};
+
 export const cloudRoutes: PluginRoute[] = [
+  getMetadataRoute,
+  putMetadataRoute,
   createServerRoute,
   listServersRoute,
   deleteServerRoute,

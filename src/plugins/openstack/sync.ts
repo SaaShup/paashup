@@ -704,11 +704,26 @@ async function syncServers(
         ).insertId,
       );
     }
+    const metadata = JSON.stringify(s.metadata ?? {});
     if (!known.has(s.id)) {
       await db.execute(
-        `INSERT INTO ${T.server} (cloud_id, region, server_id, virtual_machine_id, managed) VALUES (?, ?, ?, ?, ?)`,
-        [cloud.id, region, s.id, vmId, s.metadata[MANAGED_BY.key] === MANAGED_BY.value ? 1 : 0],
+        `INSERT INTO ${T.server} (cloud_id, region, server_id, virtual_machine_id, managed, metadata) VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          cloud.id,
+          region,
+          s.id,
+          vmId,
+          s.metadata[MANAGED_BY.key] === MANAGED_BY.value ? 1 : 0,
+          metadata,
+        ],
       );
+    } else {
+      // metadata can change in OpenStack at any time: keep what was last seen
+      await db.execute(`UPDATE ${T.server} SET metadata = ? WHERE cloud_id = ? AND server_id = ?`, [
+        metadata,
+        cloud.id,
+        s.id,
+      ]);
     }
     byServer.set(s.id, vmId);
     await syncAddresses(db, vmId, s);

@@ -489,3 +489,156 @@ test('a bad init script is refused before anything is created or uploaded', asyn
   assert.equal(gra.created.length, created, 'nothing was created on the cloud');
   assert.equal(gra.keypairs.length, keypairs, 'the key was not uploaded');
 });
+
+// ---- metadata ---------------------------------------------------------------------------
+
+const metaUrl = (vmId) => `${SERVERS}${vmId}/metadata/`;
+const storedMeta = async (vmId) =>
+  JSON.parse(
+    (
+      await db.get(`SELECT metadata FROM plugin_openstack_server WHERE virtual_machine_id = ?`, [
+        vmId,
+      ])
+    ).metadata,
+  );
+const novaMeta = (serverId) => gra.servers.find((s) => s.id === serverId).metadata;
+const metaNotes = async (vmId) =>
+  (await journalOf(vmId)).map((e) => e.comments).filter((c) => c.startsWith('Metadata'));
+
+test('the metadata of a request go to the server, next to the one paasbox adds', async () => {
+  const res = await create({ name: 'tagged', metadata: { env: 'prod', owner: 'ana' } });
+  assert.equal(res.status, 202, JSON.stringify(res.body));
+  assert.deepEqual(gra.created.at(-1).metadata, {
+    env: 'prod',
+    owner: 'ana',
+    'managed-by': 'paasbox',
+  });
+  const vm = await until(() => vmNamed('tagged'), 'the VM');
+  await until(async () => (await metaNotes(vm.id)).length, 'the metadata in the journal');
+  assert.deepEqual(await metaNotes(vm.id), ['Metadata set: env, owner.'], 'names only, no values');
+  assert.deepEqual(await storedMeta(vm.id), { env: 'prod', owner: 'ana', 'managed-by': 'paasbox' });
+  await until(async () => (await statusOf(vm.id)) === 'active', 'the VM to be active');
+});
+
+test('a request without metadata still carries managed-by', async () => {
+  assert.equal((await create({ name: 'untagged' })).status, 202);
+  assert.deepEqual(gra.created.at(-1).metadata, { 'managed-by': 'paasbox' });
+  const vm = await until(() => vmNamed('untagged'), 'the VM');
+  assert.deepEqual(await metaNotes(vm.id), []);
+});
+
+test('bad metadata is refused before anything is created', async () => {
+  const created = gra.created.length;
+  const refused = async (metadata, expected) => {
+    const res = await create({ name: 'never-meta', metadata });
+    assert.equal(res.status, 400, JSON.stringify(metadata));
+    assert.match(res.body.metadata[0], expected);
+  };
+  await refused({ 'managed-by': 'x' }, /set by paasbox/);
+  await refused(['a'], /object of key/);
+  await refused({ ' env': 'x' }, /cannot be empty or start or end with a space/);
+  await refused({ '': 'x' }, /cannot be empty/);
+  await refused({ ['k'.repeat(256)]: 'x' }, /longer than 255/);
+  await refused({ env: 'v'.repeat(256) }, /longer than 255/);
+  await refused({ env: { nested: 1 } }, /must be text/);
+  await refused(
+    Object.fromEntries(Array.from({ length: 101 }, (_, i) => [`k${i}`, 'v'])),
+    /At most 100/,
+  );
+  assert.equal(gra.created.length, created, 'nothing was created on the cloud');
+});
+
+test('numbers and booleans are kept as text, and a null value is empty text', async () => {
+  assert.equal((await create({ name: 'typed', metadata: { n: 5, b: true, z: null } })).status, 202);
+  assert.deepEqual(gra.created.at(-1).metadata, {
+    n: '5',
+    b: 'true',
+    z: '',
+    'managed-by': 'paasbox',
+  });
+});
+
+test('the metadata of a VM are read from what was stored, with the key paasbox keeps', async () => {
+  const vm = await vmNamed('tagged');
+  const res = await api('GET', metaUrl(vm.id));
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body.metadata, { env: 'prod', owner: 'ana', 'managed-by': 'paasbox' });
+  assert.deepEqual(res.body.reserved, ['managed-by']);
+
+  // not read from the cloud each time: a change made there waits for the next import
+  novaMeta(vm.server_id).env = 'changed-in-nova';
+  assert.equal((await api('GET', metaUrl(vm.id))).body.metadata.env, 'prod');
+
+  const legacy = await vmNamed('legacy');
+  assert.deepEqual((await api('GET', metaUrl(legacy.id))).body.metadata, {});
+  const listed = (await api('GET', `${SERVERS}?virtual_machine_id=${vm.id}`)).body.results[0];
+  assert.equal(listed.metadata.env, 'prod', 'the servers list carries them too');
+  novaMeta(vm.server_id).env = 'prod';
+});
+
+test('editing sets, updates and deletes keys on the server, and stores the result', async () => {
+  const vm = await vmNamed('tagged');
+  const res = await api('PUT', metaUrl(vm.id), { metadata: { env: 'staging', cost: '42' } });
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  // owner was left out: deleted; managed-by is never touched
+  assert.deepEqual(novaMeta(vm.server_id), { env: 'staging', cost: '42', 'managed-by': 'paasbox' });
+  assert.deepEqual(res.body.metadata, novaMeta(vm.server_id));
+  assert.deepEqual(await storedMeta(vm.id), novaMeta(vm.server_id));
+  assert.deepEqual((await api('GET', metaUrl(vm.id))).body.metadata, novaMeta(vm.server_id));
+  assert.deepEqual(
+    (await metaNotes(vm.id)).at(-1),
+    'Metadata updated: set env, cost; removed owner.',
+  );
+  const everything = (await db.query(`SELECT comments FROM extras_journalentry`)).map(
+    (e) => e.comments,
+  );
+  assert.ok(!everything.some((c) => c.includes('staging')), 'no value is written to a journal');
+});
+
+test('sending the same metadata again changes nothing and journals nothing', async () => {
+  const vm = await vmNamed('tagged');
+  const notes = (await metaNotes(vm.id)).length;
+  const res = await api('PUT', metaUrl(vm.id), { metadata: { env: 'staging', cost: '42' } });
+  assert.equal(res.status, 200);
+  assert.equal((await metaNotes(vm.id)).length, notes);
+});
+
+test('managed-by cannot be changed, and may be sent back as it is', async () => {
+  const vm = await vmNamed('tagged');
+  const refused = await api('PUT', metaUrl(vm.id), { metadata: { 'managed-by': 'someone' } });
+  assert.equal(refused.status, 400);
+  assert.match(refused.body.metadata[0], /set by paasbox/);
+  assert.equal(novaMeta(vm.server_id)['managed-by'], 'paasbox');
+
+  const same = await api('PUT', metaUrl(vm.id), {
+    metadata: { env: 'staging', cost: '42', 'managed-by': 'paasbox' },
+  });
+  assert.equal(same.status, 200, JSON.stringify(same.body));
+
+  // an empty list removes every key but managed-by
+  const emptied = await api('PUT', metaUrl(vm.id), { metadata: {} });
+  assert.equal(emptied.status, 200);
+  assert.deepEqual(novaMeta(vm.server_id), { 'managed-by': 'paasbox' });
+  assert.equal(
+    (await api('PUT', metaUrl(vm.id), {})).status,
+    200,
+    'a missing list is an empty one',
+  );
+});
+
+test('bad metadata in an edit is refused and nothing is changed on the server', async () => {
+  const vm = await vmNamed('tagged');
+  await api('PUT', metaUrl(vm.id), { metadata: { keep: 'me' } });
+  const refused = await api('PUT', metaUrl(vm.id), { metadata: { keep: 'v'.repeat(256) } });
+  assert.equal(refused.status, 400);
+  assert.deepEqual(novaMeta(vm.server_id), { keep: 'me', 'managed-by': 'paasbox' });
+});
+
+test('the metadata of a VM imported from the cloud can be edited too', async () => {
+  const legacy = await vmNamed('legacy');
+  const res = await api('PUT', metaUrl(legacy.id), { metadata: { team: 'ops' } });
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.deepEqual(novaMeta(legacy.server_id), { team: 'ops' });
+  assert.deepEqual(res.body.metadata, { team: 'ops' });
+  assert.equal(!!(await vmNamed('legacy')).managed, false, 'it does not become a managed VM');
+});

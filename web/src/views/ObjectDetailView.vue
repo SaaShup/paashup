@@ -10,6 +10,8 @@ import { confirmDialog } from '../composables/confirm.js';
 import { scalarText } from './containerDetail.js';
 import { fieldLabel, formatUnit, pillFor } from '../format.js';
 import StatusPill from '../components/StatusPill.vue';
+import KeyValueEditor from '../components/KeyValueEditor.vue';
+import { fromPairs, toPairs, type Pair } from '../keyValue.js';
 import { useConnectionStore } from '../stores/connection.js';
 import { isValidDefault, setDefault } from '../initScript.js';
 import { briefTarget, DETAIL, LINKABLE_TABLES, type RelatedSection } from './objectDetail.js';
@@ -31,6 +33,15 @@ const refreshing = ref(false);
 const OPENSTACK_SERVERS = '/api/plugins/openstack/servers/';
 const vmServer = ref<{ managed: boolean; cloud: string } | null>(null);
 const notice = ref('');
+// The metadata of that server (key → value), read from OpenStack and editable in place.
+const metaRows = ref<Pair[]>([]);
+const metaSaved = ref<Pair[]>([]);
+const metaFixed = ref<Pair[]>([]); // set by paasbox (managed-by): shown, never edited
+const metaError = ref('');
+const savingMeta = ref(false);
+const metaDirty = computed(
+  () => JSON.stringify(metaRows.value) !== JSON.stringify(metaSaved.value),
+);
 const deleting = ref(false);
 
 const HIDE = new Set(['id', 'url', 'display_url', 'display', 'custom_fields', 'tags']);
@@ -83,6 +94,8 @@ async function load(quiet = false): Promise<void> {
     if (!quiet) {
       lists.value = {};
       regionStatus.value = [];
+      metaRows.value = metaSaved.value = metaFixed.value = [];
+      metaError.value = '';
     }
     await Promise.all([
       ...sections.value.map(async (s) => {
@@ -109,10 +122,71 @@ async function loadVmServer(table: string, id: number): Promise<void> {
   if (table !== 'virtualization_virtual_machine') return;
   try {
     const row = (await api.list(OPENSTACK_SERVERS, { virtual_machine_id: id })).results[0];
-    if (row) vmServer.value = { managed: !!row.managed, cloud: String(row.cloud) };
+    if (row) {
+      vmServer.value = { managed: !!row.managed, cloud: String(row.cloud) };
+      void loadMetadata(id); // a live call to the cloud: the page does not wait for it
+    }
   } catch {
     /* no OpenStack plugin: a plain VM */
   }
+}
+
+interface MetadataReply {
+  metadata: Record<string, string>;
+  reserved: string[];
+}
+function applyMetadata(r: MetadataReply): void {
+  const rest = Object.fromEntries(
+    Object.entries(r.metadata).filter(([k]) => !r.reserved.includes(k)),
+  );
+  metaFixed.value = r.reserved
+    .filter((k) => k in r.metadata)
+    .map((key) => ({ key, value: r.metadata[key]! }));
+  metaSaved.value = toPairs(rest);
+  metaRows.value = toPairs(rest);
+}
+async function loadMetadata(id: number): Promise<void> {
+  try {
+    const r = await api.get<MetadataReply>(`${OPENSTACK_SERVERS}${id}/metadata/`);
+    if (ui.detailId !== id) return; // the page moved on meanwhile
+    if (!metaDirty.value) applyMetadata(r); // a live update never overwrites what is being typed
+  } catch (e) {
+    metaError.value = `Metadata unavailable: ${errorText(e)}`;
+  }
+}
+function discardMetadata(): void {
+  metaRows.value = metaSaved.value.map((p) => ({ ...p }));
+  metaError.value = '';
+}
+async function saveMetadata(): Promise<void> {
+  const id = ui.detailId;
+  if (id == null) return;
+  const meta = fromPairs(metaRows.value);
+  if (meta.error) {
+    metaError.value = meta.error;
+    return;
+  }
+  savingMeta.value = true;
+  metaError.value = '';
+  try {
+    applyMetadata(
+      await api.put<MetadataReply>(`${OPENSTACK_SERVERS}${id}/metadata/`, { metadata: meta.value }),
+    );
+  } catch (e) {
+    metaError.value = errorText(e);
+  } finally {
+    savingMeta.value = false;
+  }
+}
+/** The message an API error carries (a field error or `detail`), else its text. */
+function errorText(e: unknown): string {
+  const d = (e as { detail?: Record<string, unknown> }).detail;
+  if (d && typeof d === 'object') {
+    if (typeof d.detail === 'string') return d.detail;
+    for (const v of Object.values(d))
+      if (Array.isArray(v) && v.length) return v.map(String).join(' ');
+  }
+  return String(e);
 }
 
 /** Delete the VM's server on OpenStack, then follow the VM until it is gone. */
@@ -372,6 +446,44 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
             <template v-else>{{ f.text }}</template>
           </span>
         </div>
+      </section>
+
+      <section v-if="vmServer" class="card cat">
+        <div class="cat-head">
+          <h3>
+            Metadata <span class="n">{{ metaFixed.length + metaRows.length }}</span>
+          </h3>
+          <span class="spacer" />
+          <template v-if="resource.writable">
+            <button class="btn btn-ghost sm" @click="metaRows.push({ key: '', value: '' })">
+              + Add
+            </button>
+            <button
+              class="btn btn-ok sm"
+              :disabled="!metaDirty || savingMeta"
+              @click="saveMetadata"
+            >
+              {{ savingMeta ? 'Saving…' : 'Save' }}
+            </button>
+            <button
+              class="btn btn-ghost sm"
+              :disabled="!metaDirty || savingMeta"
+              @click="discardMetadata"
+            >
+              Discard
+            </button>
+          </template>
+        </div>
+        <p v-if="metaError" class="error">{{ metaError }}</p>
+        <KeyValueEditor v-if="resource.writable" v-model="metaRows" :fixed="metaFixed" no-add />
+        <table v-else-if="metaFixed.length || metaRows.length" class="meta-ro">
+          <tr v-for="p in [...metaFixed, ...metaRows]" :key="p.key">
+            <td>
+              <code>{{ p.key }}</code>
+            </td>
+            <td>{{ p.value }}</td>
+          </tr>
+        </table>
       </section>
 
       <section v-if="config?.script" class="term">
@@ -755,5 +867,13 @@ th {
   border: 0;
   outline: none;
   resize: none;
+}
+.btn.sm {
+  padding: 3px 10px;
+  font-size: 0.8rem;
+}
+.meta-ro td {
+  padding: 3px 14px 3px 0;
+  overflow-wrap: anywhere;
 }
 </style>

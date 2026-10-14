@@ -118,7 +118,8 @@ export interface PluginRoute {
   readonly handler: (ctx: PluginRouteContext) => Promise<PluginRouteResult> | PluginRouteResult;
 }
 
-export type HookEvent = 'created' | 'updated' | 'deleted';
+/** `deleting` fires just before a delete, while the row and what references it still exist. */
+export type HookEvent = 'created' | 'updated' | 'deleting' | 'deleted';
 
 /** React to a write on a table (fired by the API after a successful change). */
 export interface Hook {

@@ -122,7 +122,7 @@ async function deleteOnOpenStack(): Promise<void> {
   if (!r || id == null || !vmServer.value) return;
   const ok = await confirmDialog({
     title: 'Delete on OpenStack',
-    message: `Delete "${title.value}" on OpenStack (cloud "${vmServer.value.cloud}")?\n\nThe server and its disk are destroyed and this cannot be undone.`,
+    message: `Delete "${title.value}" on OpenStack (cloud "${vmServer.value.cloud}")?\n\nThe server and its disk are destroyed, a Docker host registered on this VM is deleted too, and this cannot be undone.`,
     confirmLabel: 'Delete',
     tone: 'danger',
   });

@@ -135,35 +135,43 @@ const updateRoutes: PluginRoute[] = (['PUT', 'PATCH'] as const).map((method): Pl
   },
 }));
 
+/**
+ * Delete a host with what it discovered, revoke its token and tell the realtime feed and
+ * the webhooks. False when there is no such host.
+ */
+export async function deleteHost(db: Db, id: number): Promise<boolean> {
+  const repo = new Repository<Row>(db, getTable(T.host)!);
+  const existing = await repo.retrieve(id);
+  if (!existing) return false;
+  // token_id isn't a serialized column — read it directly so we can revoke it.
+  const tok = await db.get<{ token_id: number | null }>(
+    `SELECT token_id FROM ${ident(T.host)} WHERE id = ?`,
+    [id],
+  );
+  const prechange = await serializeHost(db, existing); // for the "[Docker] Delete host" webhook
+  await db.transaction(async (tx) => {
+    await purgeHostResources(tx, id);
+    await new Repository<Row>(tx, getTable(T.host)!).destroy(id);
+  });
+  if (tok?.token_id) {
+    try {
+      await db.execute('DELETE FROM auth_token WHERE id = ?', [tok.token_id]);
+    } catch {
+      /* auth_token table absent → nothing to revoke */
+    }
+  }
+  await fireHooks(db, T.host, 'deleted', id);
+  emitHost(db, 'deleted', id, prechange);
+  return true;
+}
+
 const deleteRoute: PluginRoute = {
   method: 'DELETE',
   path: `${META.host.endpoint}{id}/`,
-  handler: async ({ db, params }) => {
-    const id = Number(params.id);
-    const repo = new Repository<Row>(db, getTable(T.host)!);
-    const existing = await repo.retrieve(id);
-    if (!existing) return { status: 404, body: { detail: 'Not found' } };
-    // token_id isn't a serialized column — read it directly so we can revoke it.
-    const tok = await db.get<{ token_id: number | null }>(
-      `SELECT token_id FROM ${ident(T.host)} WHERE id = ?`,
-      [id],
-    );
-    const prechange = await serializeHost(db, existing); // for the "[Docker] Delete host" webhook
-    await db.transaction(async (tx) => {
-      await purgeHostResources(tx, id);
-      await new Repository<Row>(tx, getTable(T.host)!).destroy(id);
-    });
-    if (tok?.token_id) {
-      try {
-        await db.execute('DELETE FROM auth_token WHERE id = ?', [tok.token_id]);
-      } catch {
-        /* auth_token table absent → nothing to revoke */
-      }
-    }
-    await fireHooks(db, T.host, 'deleted', id);
-    emitHost(db, 'deleted', id, prechange);
-    return { status: 204 };
-  },
+  handler: async ({ db, params }) =>
+    (await deleteHost(db, Number(params.id)))
+      ? { status: 204 }
+      : { status: 404, body: { detail: 'Not found' } },
 };
 
 export const hostWriteRoutes: PluginRoute[] = [createRoute, ...updateRoutes, deleteRoute];

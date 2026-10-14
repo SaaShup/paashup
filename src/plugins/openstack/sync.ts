@@ -18,6 +18,7 @@ import { Repository } from '../../repository/repository.js';
 import { getTable } from '../../model/registry.js';
 import { Serializer } from '../../api/serializer.js';
 import { broadcast } from '../../realtime.js';
+import { fireHooks } from '../runtime.js';
 import { ValidationError } from '../../errors.js';
 import { SSH_PUBLIC_KEY } from '../../repository/validate.js';
 import { createHash } from 'node:crypto';
@@ -169,7 +170,7 @@ export async function dropServer(db: Db, cloudId: number, serverId: string): Pro
     );
     if (link) {
       const vmId = Number(link.virtual_machine_id);
-      await removeVm(db, vmId);
+      await removeVm(db, vmId, true);
       const left = await db.get(`SELECT id FROM virtualization_virtual_machine WHERE id = ?`, [
         vmId,
       ]);
@@ -888,9 +889,15 @@ export async function deleteVm(tx: Db, vmId: number): Promise<void> {
   await tx.execute(`DELETE FROM virtualization_virtual_machine WHERE id = ?`, [vmId]);
 }
 
-/** Delete a VM that no longer exists in OpenStack; if something still references it, mark it offline. */
-async function removeVm(db: Db, vmId: number): Promise<void> {
+/**
+ * Delete a VM that no longer exists in OpenStack; if something still references it, mark it
+ * offline. With `withHosts`, the Docker host on it is deleted first.
+ */
+async function removeVm(db: Db, vmId: number, withHosts = false): Promise<void> {
   try {
+    // a VM deleted from paasbox takes its Docker host with it; one that merely disappeared
+    // from the cloud (a sync) keeps the host, which just loses its link
+    if (withHosts) await fireHooks(db, 'virtualization_virtual_machine', 'deleting', vmId);
     await db.transaction((tx) => deleteVm(tx, vmId));
   } catch {
     await db.execute(`UPDATE virtualization_virtual_machine SET status = 'offline' WHERE id = ?`, [

@@ -221,3 +221,79 @@ test('when the VM disappears from OpenStack the link is cleared and the host sta
   assert.equal(row.vm, null);
   assert.equal((await api('GET', `${HOSTS}${host}/`)).status, 200);
 });
+
+// ---- deleting a VM deletes the Docker host on it ------------------------------------------
+
+const hostId = async (name) =>
+  (await db.get('SELECT id FROM plugin_docker_host WHERE name = ?', [name]))?.id;
+const until = async (fn, what) => {
+  for (let i = 0; i < 300; i++) {
+    const v = await fn();
+    if (v) return v;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  throw new Error(`timed out waiting for ${what}`);
+};
+
+const plainVm = async (name) =>
+  (await api('POST', '/api/virtualization/virtual-machines/', { name, status: 'active' })).body.id;
+
+test('deleting a VM deletes its Docker host with what it discovered, and only that host', async () => {
+  const doomed = await plainVm('doomed');
+  const keeper = await plainVm('keeper');
+  const host = await createHost('h-doomed', 'http://10.20.0.1:1880', { virtual_machine: doomed });
+  const other = await createHost('h-keeper', 'http://10.20.0.2:1880', { virtual_machine: keeper });
+  const free = await createHost('h-free', 'http://10.20.0.99:1880');
+  const volume = await api('POST', '/api/plugins/docker/volumes/', { host, name: 'data' });
+  assert.equal(volume.status, 201, JSON.stringify(volume.body));
+
+  assert.equal(
+    (await api('DELETE', `/api/virtualization/virtual-machines/${doomed}/`)).status,
+    204,
+  );
+
+  assert.equal((await api('GET', `${HOSTS}${host}/`)).status, 404, 'the host went with its VM');
+  assert.equal(
+    (await api('GET', `/api/plugins/docker/volumes/${volume.body.id}/`)).status,
+    404,
+    'what the host discovered went too',
+  );
+  assert.equal((await api('GET', `${HOSTS}${other}/`)).status, 200, 'the other VM keeps its host');
+  assert.equal(await linkOf(other), keeper);
+  assert.equal((await api('GET', `${HOSTS}${free}/`)).status, 200, 'a host with no VM is left');
+});
+
+test('deleting a VM paasbox created on OpenStack deletes its Docker host too', async () => {
+  const gra = region({
+    images: [{ id: 'img-ubuntu', name: 'Ubuntu 24.04' }],
+    keypairs: [
+      {
+        name: 'laptop',
+        public_key:
+          'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl me@host',
+      },
+    ],
+    servers: [],
+  });
+  os.state.regions = { GRA9: gra };
+  const cloud = await cloudRow();
+  const created = await api('POST', `/api/plugins/openstack/clouds/${cloud.id}/servers/`, {
+    region: 'GRA9',
+    name: 'built',
+    flavor_id: 'fl-1',
+    image_id: 'img-ubuntu',
+    network_ids: ['net-ext'],
+    ssh_key: { source: 'cloud', name: 'laptop' },
+  });
+  assert.equal(created.status, 202, JSON.stringify(created.body));
+  const vm = created.body.vm_id;
+  const host = await createHost('h-built', 'http://10.30.0.1:1880', { virtual_machine: vm });
+  const bystander = await createHost('h-bystander', 'http://10.30.0.2:1880');
+  assert.equal(await linkOf(host), vm);
+
+  const res = await api('DELETE', `/api/plugins/openstack/servers/${vm}/`);
+  assert.equal(res.status, 202, JSON.stringify(res.body));
+  await until(async () => !(await vmId('built')), 'the VM to be removed');
+  assert.equal(await hostId('h-built'), undefined, 'its Docker host is deleted with it');
+  assert.equal((await api('GET', `${HOSTS}${bystander}/`)).status, 200);
+});

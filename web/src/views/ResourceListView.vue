@@ -203,7 +203,7 @@ async function del(id: number) {
     }
     const ok = await confirmDialog({
       title: 'Delete on OpenStack',
-      message: `Delete "${name}" on OpenStack (cloud "${server.cloud}")?\n\nThe server and its disk are destroyed and this cannot be undone.`,
+      message: `Delete "${name}" on OpenStack (cloud "${server.cloud}")?\n\nThe server and its disk are destroyed, a Docker host registered on this VM is deleted too, and this cannot be undone.`,
       confirmLabel: 'Delete',
       tone: 'danger',
     });

@@ -758,6 +758,7 @@ export function createApiServer(opts: ServerOptions): http.Server {
       if (method === 'DELETE') {
         const before = await repo.retrieve(rid);
         const prechange = before ? await serializeRow(db, ser, route.table, before) : null;
+        if (before) await fireHooks(db, route.table, 'deleting', rid);
         const ok = await repo.destroy(rid);
         if (!ok) throw new ApiError(404, 'Not found');
         await fireHooks(db, route.table, 'deleted', rid);

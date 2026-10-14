@@ -3,8 +3,21 @@
 // write — which is why host create is left on the generic path (see routes/crud.ts).
 import type { Hook } from '../../plugins/types.js';
 import { T } from './meta.js';
+import { deleteHost } from './routes/hosts.js';
 
 export const hooks: Hook[] = [
+  // a host lives on a machine: when its VM is deleted, the host goes with it
+  {
+    table: 'virtualization_virtual_machine',
+    event: 'deleting',
+    handler: async ({ db, id }) => {
+      const hosts = await db.query<{ id: number }>(
+        `SELECT id FROM ${T.host} WHERE virtual_machine_id = ?`,
+        [id],
+      );
+      for (const h of hosts) await deleteHost(db, Number(h.id));
+    },
+  },
   {
     table: T.host,
     event: 'created',

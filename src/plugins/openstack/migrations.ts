@@ -149,3 +149,11 @@ export const REGIONS_MIGRATION: PluginMigration = {
   sqlite: sqlite2,
   mariadb: mariadb2,
 };
+
+// 0003: the metadata (key → value, as JSON text) of each server, as Nova last reported it. Filled
+// by every import; rows imported before this migration get theirs at the next sync.
+export const METADATA_MIGRATION: PluginMigration = {
+  version: '0003_server_metadata',
+  sqlite: `ALTER TABLE plugin_openstack_server ADD COLUMN metadata TEXT;`,
+  mariadb: `ALTER TABLE plugin_openstack_server ADD COLUMN metadata LONGTEXT NULL;`,
+};

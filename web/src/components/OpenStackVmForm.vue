@@ -5,6 +5,8 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { api, ApiError, type Obj, type Page } from '../api/client.js';
 import { confirmDialog } from '../composables/confirm.js';
+import KeyValueEditor from './KeyValueEditor.vue';
+import { fromPairs, type Pair } from '../keyValue.js';
 
 const emit = defineEmits<{
   (e: 'saved', vmId: number | null): void;
@@ -50,6 +52,7 @@ const imageId = ref('');
 const networkIds = ref<string[]>([]);
 const securityGroups = ref<string[]>([]);
 const sshKey = ref(''); // "cloud:<name>" or "paasbox:<id>"
+const metadata = ref<Pair[]>([]);
 const scriptId = ref<number | ''>('');
 const varValues = ref<Record<string, string>>({}); // init script variable → value
 
@@ -208,6 +211,11 @@ function detailOf(e: ApiError): string {
 async function submit(): Promise<void> {
   errors.value = {};
   general.value = '';
+  const meta = fromPairs(metadata.value);
+  if (meta.error) {
+    errors.value = { metadata: [meta.error] };
+    return;
+  }
   const ok = await confirmDialog({
     title: 'Create a billable VM',
     message:
@@ -228,6 +236,7 @@ async function submit(): Promise<void> {
       network_ids: networkIds.value,
       security_groups: securityGroups.value,
       ssh_key: source === 'cloud' ? { source, name: value } : { source, id: Number(value) },
+      metadata: meta.value,
       ...(scriptId.value
         ? { init_script: { id: scriptId.value, variables: varValues.value } }
         : {}),
@@ -356,6 +365,13 @@ async function submit(): Promise<void> {
                 </optgroup>
               </select>
               <span v-for="m in errors.ssh_key" :key="m" class="err">{{ m }}</span>
+            </div>
+          </div>
+          <div class="row">
+            <label>metadata</label>
+            <div class="control">
+              <KeyValueEditor v-model="metadata" key-label="key" value-label="value" />
+              <span v-for="m in errors.metadata" :key="m" class="err">{{ m }}</span>
             </div>
           </div>
           <div class="row">

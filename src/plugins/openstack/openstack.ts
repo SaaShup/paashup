@@ -517,6 +517,36 @@ export async function deleteServer(c: CloudConfig, region: string, id: string): 
   }
 }
 
+/** The metadata (key → value) of a server. */
+export async function getServerMetadata(
+  c: CloudConfig,
+  region: string,
+  id: string,
+): Promise<Record<string, string>> {
+  const res = await get(c, region, 'compute', `/servers/${encodeURIComponent(id)}/metadata`);
+  const meta = (res.metadata as Json | undefined) ?? {};
+  return Object.fromEntries(Object.entries(meta).map(([k, v]) => [k, String(v)]));
+}
+
+/** Add or update the keys of `set`, then delete the keys of `remove`; the others are left alone. */
+export async function updateServerMetadata(
+  c: CloudConfig,
+  region: string,
+  id: string,
+  set: Record<string, string>,
+  remove: string[],
+): Promise<void> {
+  const base = `/servers/${encodeURIComponent(id)}/metadata`;
+  if (Object.keys(set).length) await send(c, region, 'compute', 'POST', base, { metadata: set });
+  for (const key of remove) {
+    try {
+      await send(c, region, 'compute', 'DELETE', `${base}/${encodeURIComponent(key)}`);
+    } catch (e) {
+      if (!(e instanceof OpenStackError) || e.status !== 404) throw e; // already gone
+    }
+  }
+}
+
 /** A server's status and, when it failed, why; null once it no longer exists. */
 export async function getServerState(
   c: CloudConfig,

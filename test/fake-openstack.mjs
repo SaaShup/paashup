@@ -150,6 +150,22 @@ export async function startFakeOpenStack() {
           }
           return send(200, { server: found });
         }
+        // server metadata: GET reads, POST adds / updates, DELETE /<key> removes one
+        const meta = rest.match(/^\/servers\/([^/]+)\/metadata(?:\/([^/]+))?$/);
+        if (meta) {
+          const found = r.servers.find((x) => x.id === meta[1]);
+          if (!found)
+            return send(404, { itemNotFound: { message: 'Instance could not be found' } });
+          found.metadata ??= {};
+          if (req.method === 'POST') Object.assign(found.metadata, JSON.parse(raw).metadata);
+          if (req.method === 'DELETE' && meta[2]) {
+            if (!(meta[2] in found.metadata))
+              return send(404, { itemNotFound: { message: 'Metadata item not found' } });
+            delete found.metadata[meta[2]];
+            return send(204, {});
+          }
+          return send(200, { metadata: found.metadata });
+        }
         if (req.method === 'POST' && rest === '/os-keypairs') {
           const k = JSON.parse(raw).keypair;
           r.keypairs.push({ name: k.name, public_key: k.public_key });

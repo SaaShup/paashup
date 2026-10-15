@@ -116,7 +116,9 @@ async function saveCollection(c: CollectionDef) {
   error.value = '';
   try {
     // replaces this one child collection
-    await api.update(r.endpoint, id, { [c.field]: collectionPayload(c, drafts.value[c.field] ?? []) });
+    await api.update(r.endpoint, id, {
+      [c.field]: collectionPayload(c, drafts.value[c.field] ?? []),
+    });
     await load(); // re-fetch (re-inits the drafts)
   } catch (e) {
     error.value = String(e);
@@ -162,7 +164,10 @@ const actionPath = (action: 'logs' | 'exec' | 'ws'): string | null => {
   const id = ui.detailId;
   return r && id != null ? `${r.endpoint}${id}/${action}/` : null;
 };
-watch(() => ui.detailId, () => (tab.value = 'container')); // another container: fresh start
+watch(
+  () => ui.detailId,
+  () => (tab.value = 'container'),
+); // another container: fresh start
 
 const backTo = computed<Route | null>(() =>
   resource.value ? { view: 'list', table: resource.value.table } : null,
@@ -320,11 +325,7 @@ async function onSaved() {
         </template>
       </template>
 
-      <ContainerLogs
-        v-if="tab === 'logs'"
-        :path="actionPath('logs')"
-        :container-id="containerId"
-      />
+      <ContainerLogs v-if="tab === 'logs'" :path="actionPath('logs')" :container-id="containerId" />
       <ContainerTerminal
         v-show="tab === 'terminal'"
         :key="ui.detailId ?? 0"

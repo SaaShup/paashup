@@ -236,7 +236,9 @@ async function bulkOp(op: string) {
         <div v-if="machine" class="prop">
           <span class="k">{{ machine.label }}</span>
           <span class="v">
-            <RouteLink v-if="machine.to" class="vmlink" :to="machine.to">{{ machine.text }}</RouteLink>
+            <RouteLink v-if="machine.to" class="vmlink" :to="machine.to">{{
+              machine.text
+            }}</RouteLink>
             <template v-else>{{ machine.text }}</template>
           </span>
         </div>

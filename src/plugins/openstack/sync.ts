@@ -59,9 +59,6 @@ interface RegionResult {
   fetchMs: number;
 }
 
-/** Metadata key/value PaaSbox stamps on the servers it creates (see the create flow). */
-export const MANAGED_BY = { key: 'managed-by', value: 'paasbox' } as const;
-
 const VM_STATUS: Record<string, string> = {
   ACTIVE: 'active',
   BUILD: 'planned',
@@ -116,7 +113,7 @@ async function exclusive<T>(cloudId: number, fn: () => Promise<T>): Promise<T> {
 
 /**
  * Import (or update) one server as a VM without reading the whole cloud: its interfaces, IPs,
- * flavor, image and the `managed` mark come out as in a full sync, but nothing else is read
+ * flavor and image come out as in a full sync, but nothing else is read
  * or removed. Returns the VM's id, or null when the server does not exist (any more).
  * Used to follow a server paasbox creates; volumes are left to the next full sync.
  */
@@ -707,15 +704,8 @@ async function syncServers(
     const metadata = JSON.stringify(s.metadata ?? {});
     if (!known.has(s.id)) {
       await db.execute(
-        `INSERT INTO ${T.server} (cloud_id, region, server_id, virtual_machine_id, managed, metadata) VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          cloud.id,
-          region,
-          s.id,
-          vmId,
-          s.metadata[MANAGED_BY.key] === MANAGED_BY.value ? 1 : 0,
-          metadata,
-        ],
+        `INSERT INTO ${T.server} (cloud_id, region, server_id, virtual_machine_id, metadata) VALUES (?, ?, ?, ?, ?)`,
+        [cloud.id, region, s.id, vmId, metadata],
       );
     } else {
       // metadata can change in OpenStack at any time: keep what was last seen

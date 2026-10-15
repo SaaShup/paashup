@@ -74,20 +74,17 @@ const HIDDEN_COLUMNS: Record<string, string[]> = {
 };
 const slot = computed(() => (resource.value ? objects.byTable[resource.value.table] : undefined));
 const isVm = computed(() => resource.value?.table === 'virtualization_virtual_machine');
-// The OpenStack server behind each VM of the page (VM id → link): only a VM paasbox created
-// ("managed") can be deleted, and deleting it deletes the server on OpenStack.
+// The OpenStack server behind each VM of the page (VM id → link): deleting such a VM deletes
+// the server on OpenStack.
 const OPENSTACK_SERVERS = '/api/plugins/openstack/servers/';
-const vmServers = ref<Record<number, { managed: boolean; cloud: string }>>({});
+const vmServers = ref<Record<number, { cloud: string }>>({});
 async function loadVmServers() {
   vmServers.value = {};
   if (!isVm.value) return;
   try {
     const rows = (await api.list(OPENSTACK_SERVERS, { limit: 5000 })).results;
     vmServers.value = Object.fromEntries(
-      rows.map((r) => [
-        Number(r.virtual_machine_id),
-        { managed: !!r.managed, cloud: String(r.cloud) },
-      ]),
+      rows.map((r) => [Number(r.virtual_machine_id), { cloud: String(r.cloud) }]),
     );
   } catch {
     /* no OpenStack plugin: every VM is deleted as a plain record */
@@ -197,10 +194,6 @@ async function del(id: number) {
   if (server) {
     const row = slot.value?.items.find((r) => idOf(r) === id);
     const name = String(row?.name ?? `#${id}`);
-    if (!server.managed) {
-      error.value = `"${name}" is a server of the OpenStack cloud "${server.cloud}" that paasbox did not create: delete it in OpenStack.`;
-      return;
-    }
     const ok = await confirmDialog({
       title: 'Delete on OpenStack',
       message: `Delete "${name}" on OpenStack (cloud "${server.cloud}")?\n\nThe server and its disk are destroyed, a Docker host registered on this VM is deleted too, and this cannot be undone.`,

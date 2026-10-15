@@ -1,11 +1,10 @@
 <script setup lang="ts">
 // Rows of key / value inputs, like the environment variables of a Docker container: add a row,
-// remove one. `fixed` rows (set by the system) are shown first and cannot be edited.
+// remove one.
 import type { Pair } from '../keyValue.js';
 
 const model = defineModel<Pair[]>({ required: true });
 defineProps<{
-  fixed?: Pair[];
   keyLabel?: string;
   valueLabel?: string;
   /** hide the "+ Add" button when the page puts its own in its header */
@@ -18,7 +17,7 @@ const remove = (i: number) => model.value.splice(i, 1);
 
 <template>
   <div class="kv">
-    <table v-if="model.length || fixed?.length" class="kv-table">
+    <table v-if="model.length" class="kv-table">
       <thead>
         <tr>
           <th>{{ keyLabel ?? 'key' }}</th>
@@ -27,17 +26,6 @@ const remove = (i: number) => model.value.splice(i, 1);
         </tr>
       </thead>
       <tbody>
-        <tr v-for="p in fixed" :key="`fixed-${p.key}`" class="fixed">
-          <td>
-            <input :value="p.key" disabled />
-          </td>
-          <td>
-            <input :value="p.value" disabled />
-          </td>
-          <td class="tight">
-            <span class="lock" title="Set by paasbox">🔒</span>
-          </td>
-        </tr>
         <tr v-for="(p, i) in model" :key="i">
           <td>
             <input v-model="p.key" :placeholder="keyLabel ?? 'key'" spellcheck="false" />
@@ -95,10 +83,6 @@ const remove = (i: number) => model.value.splice(i, 1);
   color: var(--danger);
   cursor: pointer;
   font-size: 0.9rem;
-}
-.lock {
-  font-size: 0.8rem;
-  opacity: 0.6;
 }
 .add {
   margin-top: 6px;

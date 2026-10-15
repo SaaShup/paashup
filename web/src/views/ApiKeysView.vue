@@ -156,36 +156,38 @@ onMounted(load);
         <h3>Your keys</h3>
         <p v-if="loading" class="muted">Loading…</p>
         <p v-else-if="!tokens.length" class="muted">No API keys yet.</p>
-        <div v-else class="table-wrap"><table class="grid">
-          <thead>
-            <tr>
-              <th>Description</th>
-              <th>Key</th>
-              <th>Access</th>
-              <th>Created</th>
-              <th>Last used</th>
-              <th>Expires</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="t in tokens" :key="t.id">
-              <td>{{ t.description || '—' }}</td>
-              <td>
-                <code class="masked">{{ t.key }}</code>
-              </td>
-              <td>
-                <span class="badge" :class="t.write_enabled ? 'rw' : 'ro'">
-                  {{ t.write_enabled ? 'Read-write' : 'Read-only' }}
-                </span>
-              </td>
-              <td>{{ fmt(t.created) }}</td>
-              <td>{{ fmt(t.last_used) }}</td>
-              <td>{{ fmt(t.expires) }}</td>
-              <td><button class="btn ghost danger" @click="revoke(t)">Revoke</button></td>
-            </tr>
-          </tbody>
-        </table></div>
+        <div v-else class="table-wrap">
+          <table class="grid">
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th>Key</th>
+                <th>Access</th>
+                <th>Created</th>
+                <th>Last used</th>
+                <th>Expires</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="t in tokens" :key="t.id">
+                <td>{{ t.description || '—' }}</td>
+                <td>
+                  <code class="masked">{{ t.key }}</code>
+                </td>
+                <td>
+                  <span class="badge" :class="t.write_enabled ? 'rw' : 'ro'">
+                    {{ t.write_enabled ? 'Read-write' : 'Read-only' }}
+                  </span>
+                </td>
+                <td>{{ fmt(t.created) }}</td>
+                <td>{{ fmt(t.last_used) }}</td>
+                <td>{{ fmt(t.expires) }}</td>
+                <td><button class="btn ghost danger" @click="revoke(t)">Revoke</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </template>
   </div>

@@ -28,15 +28,13 @@ const loading = ref(false);
 const error = ref('');
 const editing = ref(false);
 const refreshing = ref(false);
-// A VM that is a server of an OpenStack cloud: "managed" ones (created by paasbox) can be
-// deleted here, which deletes the server on OpenStack.
+// A VM that is a server of an OpenStack cloud: deleting it here deletes the server on OpenStack.
 const OPENSTACK_SERVERS = '/api/plugins/openstack/servers/';
-const vmServer = ref<{ managed: boolean; cloud: string } | null>(null);
+const vmServer = ref<{ cloud: string } | null>(null);
 const notice = ref('');
 // The metadata of that server (key → value), read from OpenStack and editable in place.
 const metaRows = ref<Pair[]>([]);
 const metaSaved = ref<Pair[]>([]);
-const metaFixed = ref<Pair[]>([]); // set by paasbox (managed-by): shown, never edited
 const metaError = ref('');
 const savingMeta = ref(false);
 const metaDirty = computed(
@@ -90,11 +88,12 @@ async function load(quiet = false): Promise<void> {
   error.value = '';
   try {
     obj.value = await api.retrieve<Obj>(r.endpoint, id);
+    if (!quiet) vmServer.value = null;
     await loadVmServer(r.table, id);
     if (!quiet) {
       lists.value = {};
       regionStatus.value = [];
-      metaRows.value = metaSaved.value = metaFixed.value = [];
+      metaRows.value = metaSaved.value = [];
       metaError.value = '';
     }
     await Promise.all([
@@ -118,32 +117,30 @@ async function load(quiet = false): Promise<void> {
 }
 
 async function loadVmServer(table: string, id: number): Promise<void> {
-  vmServer.value = null;
-  if (table !== 'virtualization_virtual_machine') return;
+  // not reset to null first: the Metadata card would disappear and come back on every reload
+  if (table !== 'virtualization_virtual_machine') {
+    vmServer.value = null;
+    return;
+  }
   try {
     const row = (await api.list(OPENSTACK_SERVERS, { virtual_machine_id: id })).results[0];
     if (row) {
-      vmServer.value = { managed: !!row.managed, cloud: String(row.cloud) };
+      vmServer.value = { cloud: String(row.cloud) };
       void loadMetadata(id); // a live call to the cloud: the page does not wait for it
+    } else {
+      vmServer.value = null;
     }
   } catch {
-    /* no OpenStack plugin: a plain VM */
+    vmServer.value = null; // no OpenStack plugin: a plain VM
   }
 }
 
 interface MetadataReply {
   metadata: Record<string, string>;
-  reserved: string[];
 }
 function applyMetadata(r: MetadataReply): void {
-  const rest = Object.fromEntries(
-    Object.entries(r.metadata).filter(([k]) => !r.reserved.includes(k)),
-  );
-  metaFixed.value = r.reserved
-    .filter((k) => k in r.metadata)
-    .map((key) => ({ key, value: r.metadata[key]! }));
-  metaSaved.value = toPairs(rest);
-  metaRows.value = toPairs(rest);
+  metaSaved.value = toPairs(r.metadata);
+  metaRows.value = toPairs(r.metadata);
 }
 async function loadMetadata(id: number): Promise<void> {
   try {
@@ -176,6 +173,7 @@ async function saveMetadata(): Promise<void> {
     metaError.value = errorText(e);
   } finally {
     savingMeta.value = false;
+    ignoreLiveUntil = Date.now() + 1500; // the change feed echoes our own save
   }
 }
 /** The message an API error carries (a field error or `detail`), else its text. */
@@ -270,6 +268,7 @@ watch(
 // "planned" to "active", its address, a journal entry…), reload it in place. If it was
 // deleted, go back to the list.
 let liveTimer: ReturnType<typeof setTimeout> | undefined;
+let ignoreLiveUntil = 0;
 watch(
   () => connection.log[0],
   (e) => {
@@ -280,6 +279,8 @@ watch(
       applyRoute(ui, { view: 'list', table: r.table });
       return;
     }
+    // the page just saved its own metadata: it already shows the result, a reload would flash
+    if (savingMeta.value || Date.now() < ignoreLiveUntil) return;
     clearTimeout(liveTimer);
     liveTimer = setTimeout(() => void load(true), 250);
   },
@@ -422,7 +423,7 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
         Edit
       </button>
       <button
-        v-if="vmServer?.managed && resource.writable"
+        v-if="vmServer && resource.writable"
         class="btn btn-danger"
         :disabled="deleting"
         title="Delete the server on OpenStack"
@@ -451,7 +452,7 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
       <section v-if="vmServer" class="card cat">
         <div class="cat-head">
           <h3>
-            Metadata <span class="n">{{ metaFixed.length + metaRows.length }}</span>
+            Metadata <span class="n">{{ metaRows.length }}</span>
           </h3>
           <span class="spacer" />
           <template v-if="resource.writable">
@@ -475,9 +476,9 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
           </template>
         </div>
         <p v-if="metaError" class="error">{{ metaError }}</p>
-        <KeyValueEditor v-if="resource.writable" v-model="metaRows" :fixed="metaFixed" no-add />
-        <table v-else-if="metaFixed.length || metaRows.length" class="meta-ro">
-          <tr v-for="p in [...metaFixed, ...metaRows]" :key="p.key">
+        <KeyValueEditor v-if="resource.writable" v-model="metaRows" no-add />
+        <table v-else-if="metaRows.length" class="meta-ro">
+          <tr v-for="p in metaRows" :key="p.key">
             <td>
               <code>{{ p.key }}</code>
             </td>

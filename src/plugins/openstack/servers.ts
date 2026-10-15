@@ -1,10 +1,9 @@
 // Create and delete VMs on OpenStack from paasbox.
 //
 // Create: validate the request, check the quotas, make sure the chosen SSH key exists as a
-// Nova keypair of the region or uploaded, then boot the server from an image, stamped
-// with the `managed-by=paasbox` metadata.
+// Nova keypair of the region or uploaded, then boot the server from an image.
 //
-// Delete: only for VMs paasbox created. The server is deleted on OpenStack, the VM is marked
+// Delete: any VM of a cloud. The server is deleted on OpenStack, the VM is marked
 // "decommissioning", and it is removed once Nova no longer has the server.
 import type { Db } from '../../db/types.js';
 import { ApiError, ValidationError } from '../../errors.js';
@@ -27,7 +26,7 @@ import {
 import { emitVm } from './events.js';
 import { journal, journalVm } from './journal.js';
 import { T } from './meta.js';
-import { dropServer, importServer, MANAGED_BY } from './sync.js';
+import { dropServer, importServer } from './sync.js';
 
 interface CloudRow extends CloudConfig {
   id: number;
@@ -44,7 +43,7 @@ export interface CreateInput {
   networkIds: string[];
   securityGroups: string[];
   sshKey: SshKeyChoice;
-  /** extra metadata (key → value) of the server, besides the one paasbox adds itself */
+  /** metadata (key → value) of the server */
   metadata: Record<string, string>;
   /** an init script of the library, with the values given to its variables */
   script?: { id: number; variables: Record<string, string> };
@@ -64,10 +63,7 @@ const strings = (v: unknown): string[] =>
 const METADATA_MAX = 255;
 const METADATA_ITEMS = 100;
 
-/**
- * The metadata of a request as key → value, or the field-level 400. The key paasbox keeps for
- * itself (`managed-by`) cannot be set: a VM would otherwise pass for one paasbox may delete.
- */
+/** The metadata of a request as key → value, or the field-level 400. */
 export function parseMetadata(raw: unknown): Record<string, string> {
   if (raw == null) return {};
   if (typeof raw !== 'object' || Array.isArray(raw)) {
@@ -87,9 +83,6 @@ export function parseMetadata(raw: unknown): Record<string, string> {
         'metadata',
         `Key "${key.slice(0, 20)}…" is longer than ${METADATA_MAX} characters.`,
       );
-    }
-    if (key === MANAGED_BY.key) {
-      throw fieldError('metadata', `"${MANAGED_BY.key}" is set by paasbox and cannot be changed.`);
     }
     if (value != null && typeof value === 'object') {
       throw fieldError('metadata', `The value of "${key}" must be text.`);
@@ -317,7 +310,7 @@ export async function launchServer(db: Db, cloud: CloudRow, input: CreateInput):
     keyName: key.name,
     securityGroups: input.securityGroups,
     userData: script?.userData,
-    metadata: { ...input.metadata, [MANAGED_BY.key]: MANAGED_BY.value },
+    metadata: input.metadata,
   });
   await journal(
     db,
@@ -424,7 +417,6 @@ interface Link {
   cloud_id: number;
   region: string;
   server_id: string;
-  managed: number | boolean;
   metadata?: unknown;
   name: string;
 }
@@ -432,7 +424,7 @@ interface Link {
 /** The OpenStack server behind a VM and its cloud, or the 404 when there is none. */
 async function serverOfVm(db: Db, vmId: number): Promise<{ link: Link; cloud: CloudRow }> {
   const link = await db.get<Link>(
-    `SELECT s.cloud_id, s.region, s.server_id, s.managed, s.metadata, v.name
+    `SELECT s.cloud_id, s.region, s.server_id, s.metadata, v.name
        FROM ${T.server} s JOIN virtualization_virtual_machine v ON v.id = s.virtual_machine_id
       WHERE s.virtual_machine_id = ?`,
     [vmId],
@@ -466,34 +458,26 @@ const saveMetadata = (db: Db, vmId: number, metadata: Record<string, string>): P
 export async function readVmMetadata(
   db: Db,
   vmId: number,
-): Promise<{ metadata: Record<string, string>; reserved: string[] }> {
+): Promise<{ metadata: Record<string, string> }> {
   const { link } = await serverOfVm(db, vmId);
-  return { metadata: storedMetadata(link.metadata) ?? {}, reserved: [MANAGED_BY.key] };
+  return { metadata: storedMetadata(link.metadata) ?? {} };
 }
 
 /**
  * Make the metadata of the server behind a VM what `wanted` says: keys that differ are set,
- * keys that are missing are deleted. `managed-by` is never changed or deleted (a request that
- * tries to change it is refused). What OpenStack then holds is stored, and the VM's open pages
+ * keys that are missing are deleted. What OpenStack then holds is stored, and the VM's open pages
  * are told. Only the key names go to the VM's journal.
  */
 export async function writeVmMetadata(
   db: Db,
   vmId: number,
   raw: unknown,
-): Promise<{ metadata: Record<string, string>; reserved: string[] }> {
+): Promise<{ metadata: Record<string, string> }> {
   const { link, cloud } = await serverOfVm(db, vmId);
-  const given = { ...((raw ?? {}) as Record<string, unknown>) };
   const current = await getServerMetadata(cloud, link.region, link.server_id);
-  if (MANAGED_BY.key in given) {
-    if (given[MANAGED_BY.key] !== current[MANAGED_BY.key]) {
-      throw fieldError('metadata', `"${MANAGED_BY.key}" is set by paasbox and cannot be changed.`);
-    }
-    delete given[MANAGED_BY.key];
-  }
-  const wanted = parseMetadata(given);
+  const wanted = parseMetadata(raw);
   const set = Object.fromEntries(Object.entries(wanted).filter(([k, v]) => current[k] !== v));
-  const remove = Object.keys(current).filter((k) => k !== MANAGED_BY.key && !(k in wanted));
+  const remove = Object.keys(current).filter((k) => !(k in wanted));
   if (Object.keys(set).length || remove.length) {
     await updateServerMetadata(cloud, link.region, link.server_id, set, remove);
     const parts = [
@@ -505,21 +489,15 @@ export async function writeVmMetadata(
   const metadata = await getServerMetadata(cloud, link.region, link.server_id);
   await saveMetadata(db, vmId, metadata);
   await emitVm(db, vmId, 'updated');
-  return { metadata, reserved: [MANAGED_BY.key] };
+  return { metadata };
 }
 
 /**
- * Delete the OpenStack server behind a VM. Only a VM paasbox created may be deleted this
- * way; the others are refused (403), and a VM with no server behind it is a 404.
+ * Delete the OpenStack server behind a VM, whoever created it. A VM with no server behind it
+ * is a 404.
  */
-export async function deleteManagedVm(db: Db, vmId: number): Promise<void> {
+export async function deleteVm(db: Db, vmId: number): Promise<void> {
   const { link, cloud } = await serverOfVm(db, vmId);
-  if (!link.managed) {
-    throw new ApiError(
-      403,
-      'Only VMs created by paasbox can be deleted from here. This one already existed on the cloud: delete it in OpenStack.',
-    );
-  }
 
   await deleteServer(cloud, link.region, link.server_id);
   await db.execute(
@@ -568,14 +546,14 @@ async function followDelete(db: Db, cloud: CloudRow, link: Link): Promise<void> 
   }
 }
 
-/** The OpenStack server behind each VM (or one VM's), for the UI to tell managed VMs apart. */
+/** The OpenStack server behind each VM (or one VM's), for the UI. */
 export async function listLinks(db: Db, vmId?: number): Promise<Record<string, unknown>[]> {
   const rows = await db.query<Record<string, unknown>>(
-    `SELECT s.virtual_machine_id, s.cloud_id, c.name AS cloud, s.region, s.server_id, s.managed,
+    `SELECT s.virtual_machine_id, s.cloud_id, c.name AS cloud, s.region, s.server_id,
             s.metadata
        FROM ${T.server} s JOIN ${T.cloud} c ON c.id = s.cloud_id
       ${vmId != null ? 'WHERE s.virtual_machine_id = ?' : ''} ORDER BY s.id`,
     vmId != null ? [vmId] : [],
   );
-  return rows.map((r) => ({ ...r, managed: !!r.managed, metadata: storedMetadata(r.metadata) }));
+  return rows.map((r) => ({ ...r, metadata: storedMetadata(r.metadata) }));
 }

@@ -157,3 +157,11 @@ export const METADATA_MIGRATION: PluginMigration = {
   sqlite: `ALTER TABLE plugin_openstack_server ADD COLUMN metadata TEXT;`,
   mariadb: `ALTER TABLE plugin_openstack_server ADD COLUMN metadata LONGTEXT NULL;`,
 };
+
+// 0004: a VM of a cloud is deleted from paasbox whoever created it, so the `managed` mark
+// (set on the servers paasbox created) is no longer used.
+export const DROP_MANAGED_MIGRATION: PluginMigration = {
+  version: '0004_drop_managed',
+  sqlite: `ALTER TABLE plugin_openstack_server DROP COLUMN managed;`,
+  mariadb: `ALTER TABLE plugin_openstack_server DROP COLUMN managed;`,
+};

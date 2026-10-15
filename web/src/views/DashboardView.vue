@@ -33,11 +33,13 @@ async function loadUsage(force = false) {
   try {
     // Counts live in the UI store (shared with the sidebar item badges + cached).
     await ui.loadCounts(ui.resources, force);
-    const counts = ui.resources.filter((r) => !isHiddenResource(r)).map((r) => ({
-      section: r.section,
-      endpoint: r.endpoint,
-      count: ui.counts[r.table] ?? 0,
-    }));
+    const counts = ui.resources
+      .filter((r) => !isHiddenResource(r))
+      .map((r) => ({
+        section: r.section,
+        endpoint: r.endpoint,
+        count: ui.counts[r.table] ?? 0,
+      }));
     // aggregate per section
     const by = new Map<string, SectionUsage>();
     for (const c of counts) {

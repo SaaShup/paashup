@@ -34,7 +34,9 @@ const frameStyle = computed(() => {
       <span class="pptitle">{{ page.label }}</span>
       <span class="spacer" />
       <div class="zoom">
-        <button class="zbtn" :disabled="pct <= ZMIN" title="Zoom out" @click="zoomBy(-10)">−</button>
+        <button class="zbtn" :disabled="pct <= ZMIN" title="Zoom out" @click="zoomBy(-10)">
+          −
+        </button>
         <input
           class="zrange"
           type="range"

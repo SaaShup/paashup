@@ -644,7 +644,7 @@ test('docker resources appear in the OpenAPI schema', async () => {
   }
 });
 
-test('host operation=refresh marks state refreshing and purges resources', async () => {
+test('host operation=refresh marks state refreshing; the agent clears resources via bulk DELETE', async () => {
   // self-contained host with a full set of resources
   const h = (await api('POST', '/api/plugins/docker/hosts/', { endpoint: 'http://r', name: 'rh' }))
     .body;
@@ -677,11 +677,27 @@ test('host operation=refresh marks state refreshing and purges resources', async
   assert.equal(upd.status, 200, JSON.stringify(upd.body));
   assert.equal(upd.body.state, 'refreshing'); // set before storing
   assert.equal(upd.body.operation, 'refresh');
-  assert.equal(await counts(), '0,0,0,0'); // all discovered resources purged
+  // like NetBox, paasbox keeps the discovered resources: the agent deletes them itself
+  assert.equal(await counts(), '1,1,1,1');
+
+  // the agent clears each inventory with a bulk DELETE (containers first: RESTRICT refs)
+  const ids = async (r) =>
+    (await api('GET', `/api/plugins/docker/${r}/?host_id=${h.id}`)).body.results.map((x) => ({
+      id: x.id,
+    }));
+  for (const r of ['containers', 'images', 'volumes', 'networks']) {
+    const del = await api('DELETE', `/api/plugins/docker/${r}/`, await ids(r));
+    assert.equal(del.status, 204, `${r}: ${JSON.stringify(del.body)}`);
+  }
+  assert.equal(await counts(), '0,0,0,0');
+  // already-purged ids and an empty list are tolerated (never 404)
+  const again = await api('DELETE', `/api/plugins/docker/containers/`, [{ id: 999999 }]);
+  assert.equal(again.status, 204);
+  assert.equal((await api('DELETE', `/api/plugins/docker/images/`, [])).status, 204);
   // registries survive a refresh
   assert.equal((await api('GET', `/api/plugins/docker/registries/?host_id=${h.id}`)).body.count, 1);
 
-  // a normal update doesn't purge
+  // a normal update doesn't touch the resources
   await api('POST', '/api/plugins/docker/images/', { host: h.id, registry: reg, name: 'redis' });
   const ren = await api('PATCH', `/api/plugins/docker/hosts/${h.id}/`, { name: 'rh2' });
   assert.equal(ren.body.name, 'rh2');

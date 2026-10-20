@@ -1,6 +1,6 @@
 {
   "name": "paas2box",
-  "version": "1.21.1",
+  "version": "1.21.2",
   "private": true,
   "description": "NetBox-compatible API (DCIM/IPAM/Virtualization) — no-ORM data layer over SQLite/MariaDB",
   "type": "module",

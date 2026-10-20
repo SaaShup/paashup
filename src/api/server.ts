@@ -382,7 +382,10 @@ export function createApiServer(opts: ServerOptions): http.Server {
     const method = req.method ?? 'GET';
     // HTTP metrics: record method / normalized-route / status + duration on completion.
     const startNs = process.hrtime.bigint();
+    const requestUrl = req.url ?? '/'; // req.url is rewritten below when a mount prefix is stripped
     res.on('finish', () => {
+      if (process.env.PB_ACCESS_LOG)
+        console.log(`${new Date().toISOString()} "${method} ${requestUrl}" ${res.statusCode}`);
       const raw = (req.url ?? '/').split('?')[0]!;
       recordHttp(
         method,
@@ -731,6 +734,37 @@ export function createApiServer(opts: ServerOptions): http.Server {
               ...evt({ prechange: null, postchange: o }),
             });
           return send(res, 200, out);
+        }
+        // NetBox-style bulk delete: DELETE a list of objects (each carrying its id).
+        // Lenient on purpose: ids that no longer exist are skipped (a client such as the
+        // Docker agent clears rows paasbox may already have purged), so it never 404s.
+        if (method === 'DELETE') {
+          const body = await readBody(req);
+          if (!Array.isArray(body)) {
+            throw new ApiError(400, 'Bulk delete expects a list of objects (each with an id).');
+          }
+          for (const item of body as Record<string, unknown>[]) {
+            const raw = item?.[meta.pk];
+            if (raw === undefined || raw === null) {
+              throw new ApiError(400, `Each item must include "${meta.pk}".`);
+            }
+            const itemId: number | string = meta.pkKind === 'string' ? String(raw) : Number(raw);
+            const before = await repo.retrieve(itemId);
+            if (!before) continue;
+            const prechange = await serializeRow(db, ser, route.table, before);
+            await fireHooks(db, route.table, 'deleting', itemId);
+            if (!(await repo.destroy(itemId))) continue;
+            await fireHooks(db, route.table, 'deleted', itemId);
+            emitChange(
+              db,
+              meta,
+              'deleted',
+              itemId,
+              undefined,
+              evt({ prechange, postchange: null }),
+            );
+          }
+          return send(res, 204);
         }
         throw new ApiError(405, `Method ${method} not allowed`);
       }

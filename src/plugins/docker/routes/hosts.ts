@@ -3,8 +3,8 @@
 //  - POST: mint a static API token for the host's agent and attach it, so the
 //    "[Docker] Add host" webhook can transmit it. The token is included only in the
 //    create response/webhook (never on plain reads). Also seeds the default registry.
-//  - PUT/PATCH: a refresh (operation="refresh") marks the host "refreshing" and purges
-//    its discovered resources (containers/images/volumes/networks) before storing.
+//  - PUT/PATCH: a refresh (operation="refresh") marks the host "refreshing". Like NetBox,
+//    the agent then clears the stale resources itself (bulk DELETE) and re-sends its inventory.
 //  - DELETE: revoke the host's token so it can't outlive the host.
 import type { Db } from '../../../db/types.js';
 import type { PluginRoute } from '../../../plugins/types.js';
@@ -117,16 +117,10 @@ const updateRoutes: PluginRoute[] = (['PUT', 'PATCH'] as const).map((method): Pl
     if (!(await repo.retrieve(id))) return { status: 404, body: { detail: 'Not found' } };
 
     const data: Row = { ...((body ?? {}) as Row) };
-    // Asking the host to refresh resets its view: mark it "refreshing" and clear
-    // the resources it discovered, both before storing the change.
-    const refreshing = data.operation === 'refresh';
-    await db.transaction(async (tx) => {
-      if (refreshing) {
-        data.state = 'refreshing';
-        await purgeHostResources(tx, id);
-      }
-      await new Repository<Row>(tx, getTable(T.host)!).update(id, data);
-    });
+    // Asking the host to refresh marks it "refreshing". The resources it discovered are
+    // kept: the agent receives them in the webhook and deletes them itself, like on NetBox.
+    if (data.operation === 'refresh') data.state = 'refreshing';
+    await repo.update(id, data);
 
     const out = await serializeHost(db, (await repo.retrieve(id))!);
     emitHost(db, 'updated', id, out);

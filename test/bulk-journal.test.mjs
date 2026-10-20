@@ -1,5 +1,6 @@
 // NetBox-compatibility additions used by clients like the Docker agent:
 //   - bulk update: PATCH/PUT a collection with a list of objects (each with an id)
+//   - bulk delete: DELETE a collection with a list of objects (each with an id)
 //   - lenient sync: extra/nested fields (e.g. an FK sent as an object) are ignored
 //   - /api/extras/journal-entries/ (a permissive journal entity)
 // Run: node --test test/bulk-journal.test.mjs
@@ -72,6 +73,31 @@ test('bulk update is lenient: nested FK objects + unknown fields are ignored', a
 test('bulk update requires an id per item', async () => {
   const r = await api('PATCH', '/api/dcim/manufacturers/', [{ description: 'no id' }]);
   assert.equal(r.status, 400);
+});
+
+test('bulk DELETE a collection removes each object by id', async () => {
+  const a = await api('POST', '/api/dcim/manufacturers/', { name: 'DA', slug: 'da' });
+  const b = await api('POST', '/api/dcim/manufacturers/', { name: 'DB', slug: 'db' });
+  const keep = await api('POST', '/api/dcim/manufacturers/', { name: 'DK', slug: 'dk' });
+  const r = await api('DELETE', '/api/dcim/manufacturers/', [{ id: a.body.id }, { id: b.body.id }]);
+  assert.equal(r.status, 204, JSON.stringify(r.body));
+  assert.equal((await api('GET', `/api/dcim/manufacturers/${a.body.id}/`)).status, 404);
+  assert.equal((await api('GET', `/api/dcim/manufacturers/${b.body.id}/`)).status, 404);
+  assert.equal((await api('GET', `/api/dcim/manufacturers/${keep.body.id}/`)).status, 200);
+});
+
+test('bulk DELETE is lenient: missing ids and an empty list are a 204', async () => {
+  const missing = await api('DELETE', '/api/dcim/manufacturers/', [{ id: 987654 }]);
+  assert.equal(missing.status, 204);
+  const empty = await api('DELETE', '/api/dcim/manufacturers/', []);
+  assert.equal(empty.status, 204);
+});
+
+test('bulk DELETE requires a list and an id per item', async () => {
+  const notList = await api('DELETE', '/api/dcim/manufacturers/', { id: 1 });
+  assert.equal(notList.status, 400);
+  const noId = await api('DELETE', '/api/dcim/manufacturers/', [{ name: 'no id' }]);
+  assert.equal(noId.status, 400);
 });
 
 test('journal entries can be created and listed', async () => {

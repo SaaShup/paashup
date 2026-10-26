@@ -28,6 +28,7 @@ const RESOURCES = [
   res('/api/virtualization/ssh-keys/', 'virtualization_ssh_key', 'virtualization', 'Ssh Keys'),
   res('/api/plugins/openstack/clouds/', 'plugin_openstack_cloud', 'plugins', 'Clouds'),
   res('/api/plugins/docker/hosts/', 'plugin_docker_host', 'plugins', 'Hosts'),
+  res('/api/plugins/docker/vm-ssh-keys/', 'plugin_docker_vm_ssh_key', 'plugins', 'Vm Ssh Keys'),
 ];
 
 describe('sidebar', () => {
@@ -54,6 +55,12 @@ describe('sidebar', () => {
     expect(group('Images')).toEqual(['Images']);
     expect(group('SSH Keys')).toEqual(['Ssh Keys']);
     expect(group('Virtual Machines')).toEqual(['Virtual Machines']);
+  });
+
+  it('keeps the SSH keys found on VMs out of the menu, but known to the pages', () => {
+    // shown on the SSH key and VM pages, not as a list of their own
+    expect(labelsOf('docker')).toEqual(['Hosts']);
+    expect(useUiStore().resources.some((r) => r.table === 'plugin_docker_vm_ssh_key')).toBe(true);
   });
 
   it('gives the OpenStack plugin its own top-level section', () => {
@@ -108,6 +115,7 @@ describe('links between objects (briefTarget)', () => {
       'dcim_region',
       'dcim_site',
       'plugin_openstack_cloud',
+      'virtualization_ssh_key', // where its VMs are managed
     ]) {
       expect(DETAIL_TABLES.has(t)).toBe(true);
     }

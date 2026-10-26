@@ -4,16 +4,23 @@
 // CRUD), ships dual-dialect DDL, overrides GET to embed the source's nested arrays,
 // adds custom container write routes (inline nested children + cross-host validation),
 // custom image write routes (cross-host validation),
-// and the Docker-agent proxy actions, and seeds a default registry on host creation.
+// the Docker-agent proxy actions and the VM SSH keys (authorized_keys through the agent),
+// and seeds a default registry on host creation.
 import type { Plugin } from '../../plugins/types.js';
 import { ENTITY_METAS, META, T } from './meta.js';
-import { INITIAL_MIGRATION, HOST_SCOPE_MIGRATION, HOST_TOKEN_MIGRATION } from './migrations.js';
+import {
+  INITIAL_MIGRATION,
+  HOST_SCOPE_MIGRATION,
+  HOST_TOKEN_MIGRATION,
+  VM_SSH_KEY_MIGRATION,
+} from './migrations.js';
 import { readRoutes } from './routes/crud.js';
 import { containerWriteRoutes } from './routes/containers.js';
 import { imageWriteRoutes } from './routes/images.js';
 import { hostWriteRoutes } from './routes/hosts.js';
 import { actionRoutes } from './routes/actions.js';
 import { terminalWebSockets } from './routes/terminal.js';
+import { serializeCatalogKey, sshKeyRoutes } from './sshkeys.js';
 import { hooks } from './hooks.js';
 import { DOCKER_WEBHOOKS } from './webhooks.js';
 import {
@@ -35,12 +42,14 @@ registerSerializer(T.volume, serializeVolume);
 registerSerializer(T.network, serializeNetwork);
 registerSerializer(T.registry, serializeRegistry);
 registerSerializer(T.container, serializeContainer);
+// SSH keys of the catalog: where each comes from (paasbox, a cloud, an agent) and on how many VMs
+registerSerializer('virtualization_ssh_key', serializeCatalogKey);
 
 const dockerPlugin: Plugin = {
   name: 'docker',
   version: '0.1.0',
   entities: ENTITY_METAS.map((meta) => ({ meta })),
-  migrations: [INITIAL_MIGRATION, HOST_SCOPE_MIGRATION, HOST_TOKEN_MIGRATION],
+  migrations: [INITIAL_MIGRATION, HOST_SCOPE_MIGRATION, HOST_TOKEN_MIGRATION, VM_SSH_KEY_MIGRATION],
   routes: [
     // GET list/detail overrides that embed the source's nested arrays.
     ...readRoutes(T.host, META.host.endpoint, serializeHost),
@@ -57,6 +66,8 @@ const dockerPlugin: Plugin = {
     ...containerWriteRoutes,
     // Docker-agent proxy actions (force_pull / logs / exec).
     ...actionRoutes,
+    // VM SSH keys: added/removed through the agent, the stored copy re-read after.
+    ...sshKeyRoutes,
   ],
   // Interactive container terminal: browser ⇄ paasbox ⇄ agent exec stream.
   websockets: terminalWebSockets,

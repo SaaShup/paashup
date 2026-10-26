@@ -262,6 +262,7 @@ export async function syncCloud(db: Db, cloudId: number): Promise<void> {
       await cleanupImages(db);
       await cleanupGeography(db);
       await linkDockerHosts(db);
+      await fireHooks(db, T.cloud, 'synced', cloudId);
       await setState(db, cloudId, 'connected', failed.length ? failed.join(' | ') : null, true);
       await journal(db, cloudId, failed.length ? 'warning' : 'success', summary(done, failed));
     } catch (e) {

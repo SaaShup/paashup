@@ -414,3 +414,51 @@ export const HOST_TOKEN_MIGRATION: PluginMigration = {
   sqlite: tokenSqlite,
   mariadb: tokenMariadb,
 };
+
+// The public keys found in the authorized_keys file the agent of a VM manages: what paasbox
+// last read from the agent, not a desired state. A key matching an SSH key of the catalog
+// (same fingerprint) points to it; the others ("unknown", added on the machine) don't.
+const sshKeySqlite = `
+CREATE TABLE IF NOT EXISTS plugin_docker_vm_ssh_key (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  virtual_machine_id INTEGER NOT NULL REFERENCES virtualization_virtual_machine(id) ON DELETE CASCADE,
+  ssh_key_id INTEGER REFERENCES virtualization_ssh_key(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  account TEXT,
+  key_type TEXT NOT NULL,
+  fingerprint TEXT NOT NULL,
+  comment TEXT,
+  options TEXT,
+  public_key TEXT NOT NULL,
+  custom_fields TEXT,
+  created TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  last_updated TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  UNIQUE (virtual_machine_id, fingerprint)
+)
+`;
+const sshKeyMariadb = `
+CREATE TABLE IF NOT EXISTS plugin_docker_vm_ssh_key (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  virtual_machine_id BIGINT NOT NULL,
+  ssh_key_id BIGINT NULL,
+  name VARCHAR(255) NOT NULL,
+  account VARCHAR(255),
+  key_type VARCHAR(64) NOT NULL,
+  fingerprint VARCHAR(128) NOT NULL,
+  comment VARCHAR(1024),
+  options TEXT,
+  public_key TEXT NOT NULL,
+  custom_fields JSON,
+  created DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6),
+  last_updated DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  UNIQUE (virtual_machine_id, fingerprint),
+  FOREIGN KEY (virtual_machine_id) REFERENCES virtualization_virtual_machine(id) ON DELETE CASCADE,
+  FOREIGN KEY (ssh_key_id) REFERENCES virtualization_ssh_key(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+`;
+
+export const VM_SSH_KEY_MIGRATION: PluginMigration = {
+  version: '0004_vm_ssh_key',
+  sqlite: sshKeySqlite,
+  mariadb: sshKeyMariadb,
+};

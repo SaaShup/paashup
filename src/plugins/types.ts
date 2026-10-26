@@ -118,8 +118,11 @@ export interface PluginRoute {
   readonly handler: (ctx: PluginRouteContext) => Promise<PluginRouteResult> | PluginRouteResult;
 }
 
-/** `deleting` fires just before a delete, while the row and what references it still exist. */
-export type HookEvent = 'created' | 'updated' | 'deleting' | 'deleted';
+/**
+ * `deleting` fires just before a delete, while the row and what references it still exist.
+ * `synced` fires once a synchronisation (an OpenStack cloud's) has written its rows.
+ */
+export type HookEvent = 'created' | 'updated' | 'deleting' | 'deleted' | 'synced';
 
 /** React to a write on a table (fired by the API after a successful change). */
 export interface Hook {

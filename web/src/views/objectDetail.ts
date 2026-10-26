@@ -123,6 +123,8 @@ export const DETAIL: Record<string, DetailConfig> = {
   virtualization_cluster: { sections: [VMS('cluster_id')] },
   virtualization_virtual_machine_type: { sections: [VMS('virtual_machine_type_id')] },
   virtualization_image: { sections: [VMS('image_id')] },
+  // the VMs it is on: a section of its own (SshKeyDeployments), to deploy / remove it
+  virtualization_ssh_key: { sections: [] },
   virtualization_init_script: {
     hide: ['content', 'variables', 'featured_variables'],
     script: true,

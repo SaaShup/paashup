@@ -26,6 +26,7 @@ export const T = {
   networkSetting: 'plugin_docker_network_setting',
   device: 'plugin_docker_device',
   sysctl: 'plugin_docker_sysctl',
+  vmSshKey: 'plugin_docker_vm_ssh_key',
 } as const;
 
 const TAGS = { name: 'tags', kind: 'tags', target: 'Tag', targetTable: 'extras_tag' } as const;
@@ -634,7 +635,70 @@ const containerMeta: TableMeta = {
   ],
 };
 
-/** The six entities paasbox registers (auto-CRUD + schema + FK-brief resolution). */
+const ro = (name: string, maxLength?: number): ColumnMeta => ({
+  name,
+  column: name,
+  tsKind: 'string',
+  nullable: true,
+  writable: false,
+  required: false,
+  ...(maxLength ? { maxLength } : {}),
+});
+
+/**
+ * A public key of the authorized_keys file the agent of a VM manages, as last read from
+ * the agent. Created and deleted through the agent (see sshkeys.ts), never edited: POST
+ * takes a catalog `ssh_key` or a pasted `public_key`, the rest comes from the agent.
+ */
+const vmSshKeyMeta: TableMeta = {
+  model: 'DockerVmSshKey',
+  table: T.vmSshKey,
+  section: 'plugins',
+  endpoint: '/api/plugins/docker/vm-ssh-keys/',
+  origin: 'plugin',
+  pk: 'id',
+  objectType: 'plugins.dockervmsshkey',
+  readOnly: false,
+  relations: [],
+  counts: [],
+  columns: [
+    {
+      name: 'virtual_machine',
+      column: 'virtual_machine_id',
+      tsKind: 'number',
+      nullable: false,
+      writable: true,
+      required: true,
+      references: 'VirtualMachine',
+    },
+    {
+      name: 'ssh_key',
+      column: 'ssh_key_id',
+      tsKind: 'number',
+      nullable: true,
+      writable: true,
+      required: false,
+      references: 'SshKey',
+    },
+    {
+      name: 'public_key',
+      column: 'public_key',
+      tsKind: 'string',
+      nullable: true,
+      writable: true,
+      required: false,
+    },
+    ro('name', 255),
+    ro('account', 255),
+    ro('key_type', 64),
+    ro('fingerprint', 128),
+    ro('comment', 1024),
+    ro('options'),
+    ...NETBOX_COLS,
+  ],
+};
+
+/** The entities paasbox registers (auto-CRUD + schema + FK-brief resolution). */
 export const ENTITY_METAS: TableMeta[] = [
   hostMeta,
   registryMeta,
@@ -642,6 +706,7 @@ export const ENTITY_METAS: TableMeta[] = [
   volumeMeta,
   networkMeta,
   containerMeta,
+  vmSshKeyMeta,
 ];
 
 /** Convenience map for the routes/serializer. */
@@ -652,6 +717,7 @@ export const META = {
   volume: volumeMeta,
   network: networkMeta,
   container: containerMeta,
+  vmSshKey: vmSshKeyMeta,
 } as const;
 
 /**

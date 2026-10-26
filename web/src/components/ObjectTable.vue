@@ -53,6 +53,9 @@ function briefRoute(value: unknown): Route | null {
 }
 
 const idOf = (row: Obj): number => (row as { id: number }).id;
+// Rows that are added and removed but never edited (a VM's SSH key goes through its agent).
+const NO_EDIT_TABLES = new Set(['plugin_docker_vm_ssh_key']);
+const canEdit = computed(() => props.editable && !NO_EDIT_TABLES.has(props.table ?? ''));
 const selectedSet = computed(() => new Set(props.selected ?? []));
 const allSelected = computed(
   () => props.items.length > 0 && props.items.every((r) => selectedSet.value.has(idOf(r))),
@@ -212,7 +215,7 @@ function cell(value: unknown): string {
             title="Open this object's API endpoint"
             >API</a
           >
-          <button v-if="editable" class="edit" title="Edit" @click="emit('edit', row)">✎</button>
+          <button v-if="canEdit" class="edit" title="Edit" @click="emit('edit', row)">✎</button>
           <button
             v-if="editable"
             class="del"

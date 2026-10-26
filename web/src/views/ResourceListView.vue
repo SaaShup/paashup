@@ -64,7 +64,7 @@ const PREFERRED_COLUMNS: Record<string, string[]> = {
     'vcpus',
     'memory',
   ],
-  virtualization_ssh_key: ['name', 'public_key', 'owner', 'source', 'description'],
+  virtualization_ssh_key: ['name', 'origin', 'deployed_on', 'owner', 'source', 'description'],
   virtualization_image: ['name', 'source', 'description'],
   virtualization_init_script: ['name', 'description', 'created'],
 };
@@ -209,6 +209,22 @@ async function del(id: number) {
       error.value = errorText(e);
     }
     return;
+  }
+  // an SSH key still on VMs: deleting it here leaves it there (and an agent's comes back)
+  const row = slot.value?.items.find((r) => idOf(r) === id) as
+    (Obj & { name?: string; deployed_on?: number; origin?: string }) | undefined;
+  if (resource.value.table === 'virtualization_ssh_key' && row?.deployed_on) {
+    const ok = await confirmDialog({
+      title: 'Delete SSH key',
+      message:
+        `Delete "${row.name}" from paasbox? It stays on the ${row.deployed_on} VM(s) it is deployed on: remove it from them on its page first.` +
+        (row.origin === 'agent'
+          ? '\n\nFound by an agent, it is listed again at the next sync of its cloud.'
+          : ''),
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
   }
   await objects.remove(resource.value.table, id);
 }

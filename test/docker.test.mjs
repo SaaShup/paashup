@@ -81,6 +81,7 @@ test('plugin loads and registers its migration once', async () => {
       'plugin:docker:0001_initial',
       'plugin:docker:0002_host_scope',
       'plugin:docker:0003_host_token',
+      'plugin:docker:0004_vm_ssh_key',
     ],
   );
 });

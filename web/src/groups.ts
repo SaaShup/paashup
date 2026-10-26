@@ -86,8 +86,10 @@ export const isHiddenSection = (section: string): boolean => HIDDEN_SECTIONS.has
 // DCIM is on its way out: only these resources (by endpoint slug) stay in the menu. The
 // tables and API are untouched.
 const VISIBLE_DCIM = new Set(['regions', 'sites']);
+// Resources shown inside another page rather than in the menu (VM SSH keys: on SSH keys).
+const EMBEDDED_TABLES = new Set(['plugin_docker_vm_ssh_key']);
 export const isHiddenResource = (r: Resource): boolean =>
-  r.section === 'dcim' && !VISIBLE_DCIM.has(resourceSlug(r));
+  (r.section === 'dcim' && !VISIBLE_DCIM.has(resourceSlug(r))) || EMBEDDED_TABLES.has(r.table);
 
 export const sectionOf = (r: Resource): string =>
   r.section === 'plugins' ? effectiveSection(r.section, pluginNameOf(r.endpoint)) : r.section;

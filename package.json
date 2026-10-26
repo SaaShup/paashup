@@ -1,6 +1,6 @@
 {
   "name": "paas2box",
-  "version": "1.21.2",
+  "version": "1.22.0",
   "private": true,
   "description": "NetBox-compatible API (DCIM/IPAM/Virtualization) — no-ORM data layer over SQLite/MariaDB",
   "type": "module",
@@ -26,7 +26,7 @@
     "format": "prettier --write \"src/**/*.ts\" \"scripts/**/*.mjs\" \"test/**/*.mjs\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"scripts/**/*.mjs\" \"test/**/*.mjs\"",
     "pretest": "tsc",
-    "test": "node --test test/smoke.mjs test/api.test.mjs test/batching.test.mjs test/relations.test.mjs test/validation.test.mjs test/generic-relations.test.mjs test/computed.test.mjs test/auth.test.mjs test/contract.test.mjs test/plugins.test.mjs test/customfields.test.mjs test/openapi.test.mjs test/realtime.test.mjs test/static.test.mjs test/webhooks.test.mjs test/api-keys.test.mjs test/iprange-gateway.test.mjs test/iprange-migration.test.mjs test/device-uuid.test.mjs test/docker.test.mjs test/docker-webhooks.test.mjs test/docker-webhook-full-entity.test.mjs test/docker-webhook-seed.test.mjs test/docker-agent.test.mjs test/docker-terminal.test.mjs test/bulk-journal.test.mjs test/configcontext.test.mjs test/webhook-coverage.test.mjs test/webhook-credentials.test.mjs test/webhook-templates.test.mjs test/oidc.test.mjs test/oidc-bff.test.mjs test/cloudflare.test.mjs test/keycloak.test.mjs test/netbox-migrate.test.mjs test/openstack.test.mjs test/images-ssh-keys.test.mjs test/openstack-vm.test.mjs test/init-scripts.test.mjs test/docker-vm-link.test.mjs test/status.test.mjs test/host-netbox-base-url.test.mjs test/metrics.test.mjs",
+    "test": "node --test test/smoke.mjs test/api.test.mjs test/batching.test.mjs test/relations.test.mjs test/validation.test.mjs test/generic-relations.test.mjs test/computed.test.mjs test/auth.test.mjs test/contract.test.mjs test/plugins.test.mjs test/customfields.test.mjs test/openapi.test.mjs test/realtime.test.mjs test/static.test.mjs test/webhooks.test.mjs test/api-keys.test.mjs test/iprange-gateway.test.mjs test/iprange-migration.test.mjs test/device-uuid.test.mjs test/docker.test.mjs test/docker-webhooks.test.mjs test/docker-webhook-full-entity.test.mjs test/docker-webhook-seed.test.mjs test/docker-agent.test.mjs test/docker-terminal.test.mjs test/bulk-journal.test.mjs test/configcontext.test.mjs test/webhook-coverage.test.mjs test/webhook-credentials.test.mjs test/webhook-templates.test.mjs test/oidc.test.mjs test/oidc-bff.test.mjs test/cloudflare.test.mjs test/keycloak.test.mjs test/netbox-migrate.test.mjs test/openstack.test.mjs test/images-ssh-keys.test.mjs test/openstack-vm.test.mjs test/init-scripts.test.mjs test/docker-vm-link.test.mjs test/vm-ssh-keys.test.mjs test/status.test.mjs test/host-netbox-base-url.test.mjs test/metrics.test.mjs",
     "test:mariadb": "node --test test/smoke-mariadb.mjs"
   },
   "dependencies": {

@@ -4,6 +4,7 @@
 import type { Hook } from '../../plugins/types.js';
 import { T } from './meta.js';
 import { deleteHost } from './routes/hosts.js';
+import { pruneAgentKeys, relinkCatalogKey, scanCloud } from './sshkeys.js';
 
 export const hooks: Hook[] = [
   // a host lives on a machine: when its VM is deleted, the host goes with it
@@ -28,4 +29,22 @@ export const hooks: Hook[] = [
       );
     },
   },
+  // a VM deleted (its SSH keys with it): drop the agent keys no VM has any more
+  {
+    table: 'virtualization_virtual_machine',
+    event: 'deleted',
+    handler: ({ db }) => pruneAgentKeys(db),
+  },
+  // an OpenStack cloud synced: read the SSH keys of its VMs, in the background
+  {
+    table: 'plugin_openstack_cloud',
+    event: 'synced',
+    handler: ({ db, id }) => void scanCloud(db, Number(id)),
+  },
+  // a catalog key saved: the host keys with its fingerprint now point to it
+  ...(['created', 'updated'] as const).map((event): Hook => ({
+    table: 'virtualization_ssh_key',
+    event,
+    handler: ({ db, id }) => relinkCatalogKey(db, Number(id)),
+  })),
 ];

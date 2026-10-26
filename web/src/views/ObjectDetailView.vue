@@ -11,6 +11,7 @@ import { scalarText } from './containerDetail.js';
 import { fieldLabel, formatUnit, pillFor } from '../format.js';
 import StatusPill from '../components/StatusPill.vue';
 import KeyValueEditor from '../components/KeyValueEditor.vue';
+import SshKeyDeployments from '../components/SshKeyDeployments.vue';
 import { fromPairs, toPairs, type Pair } from '../keyValue.js';
 import { useConnectionStore } from '../stores/connection.js';
 import { isValidDefault, setDefault } from '../initScript.js';
@@ -627,6 +628,17 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
           </table>
         </div>
       </section>
+
+      <!-- an SSH key of the catalog: the VMs it is on, deployed / removed through their agent -->
+      <SshKeyDeployments
+        v-if="resource.table === 'virtualization_ssh_key' && ui.detailId != null"
+        :ssh-key-id="ui.detailId"
+      />
+      <!-- a VM: its SSH keys, added / removed through its agent -->
+      <SshKeyDeployments
+        v-if="resource.table === 'virtualization_virtual_machine' && ui.detailId != null"
+        :vm-id="ui.detailId"
+      />
 
       <section v-for="s in sections" :key="s.title" class="cat card">
         <div class="cat-head">

@@ -57,7 +57,7 @@ jobs:
           cache: npm
       - uses: actions/setup-python@v7
         with:
-          python-version: '3.12'
+          python-version: '3.15'
       - run: npm ci
       - run: npm run build
       - name: Install migration driver
@@ -80,7 +80,7 @@ jobs:
           cache: npm
       - uses: actions/setup-python@v7
         with:
-          python-version: '3.12'
+          python-version: '3.15'
       - run: npm ci
       - name: Prettier (format check)
         run: npm run format:check

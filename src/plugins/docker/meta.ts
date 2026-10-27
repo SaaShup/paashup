@@ -459,6 +459,7 @@ const networkMeta: TableMeta = {
       writable: true,
       required: false,
       ...NETWORK_DRIVER,
+      plainValue: true,
     },
     {
       name: 'NetworkID',
@@ -621,6 +622,7 @@ const containerMeta: TableMeta = {
       required: false,
       enum: ['host'],
       enumLabels: { host: 'host' },
+      plainValue: true,
     },
     {
       name: 'extra_hosts',

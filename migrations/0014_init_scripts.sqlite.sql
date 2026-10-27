@@ -1,4 +1,4 @@
--- Init scripts (paas2box extension): shell scripts run at a new VM's first boot. The
+-- Init scripts (paashup extension): shell scripts run at a new VM's first boot. The
 -- adjustable `${NAME:-default}` variables are derived from `content` on every write;
 -- `featured_variables` lists the ones shown first in the VM creation form, `secret_variables`
 -- the ones whose value is masked (***) in the VM's journal.

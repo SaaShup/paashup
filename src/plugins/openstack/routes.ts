@@ -12,7 +12,7 @@
 // Create / delete a VM on OpenStack (see servers.ts):
 //   POST   /clouds/{id}/servers/         boot a server (202); the VM is imported by a sync
 //   GET    /servers/[?virtual_machine_id=]  the OpenStack server behind each VM
-//   DELETE /servers/{vm_id}/             delete the server of a VM paasbox created
+//   DELETE /servers/{vm_id}/             delete the server of a VM paashup created
 //   GET|PUT /servers/{vm_id}/metadata/   read / edit the metadata of the server behind a VM
 import type { Db } from '../../db/types.js';
 import type { PluginRoute } from '../../plugins/types.js';

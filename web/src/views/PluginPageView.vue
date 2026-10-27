@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Hosts a plugin-contributed page (declared via the plugin's /ui/ manifest) in an
-// embedded frame. The page is served by the plugin's own static assets; paas2box only
+// embedded frame. The page is served by the plugin's own static assets; paashup only
 // frames it so it appears inside the app shell. A zoom control lets the user enlarge
 // the embedded content (e.g. a visualization whose blocks are too small).
 import { ref, computed } from 'vue';

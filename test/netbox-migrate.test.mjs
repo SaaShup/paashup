@@ -1,4 +1,4 @@
-// NetBox -> paasbox migration. A local server stands in for NetBox (token-authed,
+// NetBox -> paashup migration. A local server stands in for NetBox (token-authed,
 // NetBox-shaped responses). Verifies the engine: dependency ordering, FK id remapping,
 // self-reference resolution (region.parent), choice fields, and the UUID-pk device.
 // Run: node --test test/netbox-migrate.test.mjs

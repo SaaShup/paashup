@@ -29,7 +29,7 @@ let db, server, base, kc, kcBase;
 
 const POST_LOGOUT_ATTR = 'post.logout.redirect.uris';
 
-// Mutable stand-in Keycloak state: writes from paasbox update it, reads serve it.
+// Mutable stand-in Keycloak state: writes from paashup update it, reads serve it.
 let uuidSeq = 0;
 const kcState = {
   realms: ['master', 'curioo'],

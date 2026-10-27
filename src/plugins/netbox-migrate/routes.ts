@@ -8,7 +8,7 @@ import { nbStatus } from './netbox.js';
 import { UI_PREFIX } from './ui.js';
 
 const USAGE = {
-  detail: 'Migrate core objects from a NetBox instance into paasbox via its REST API.',
+  detail: 'Migrate core objects from a NetBox instance into paashup via its REST API.',
   endpoints: {
     run: 'POST /api/plugins/netbox-migrate/run/',
     progress: 'GET /api/plugins/netbox-migrate/progress/',
@@ -59,7 +59,7 @@ export const routes: PluginRoute[] = [
     handler: () => ({ status: 200, body: snapshot(live) }),
   },
   {
-    // Sidebar manifest: paasbox renders this as a menu entry opening the UI page.
+    // Sidebar manifest: paashup renders this as a menu entry opening the UI page.
     method: 'GET',
     path: '/api/plugins/netbox-migrate/ui/',
     handler: () => ({

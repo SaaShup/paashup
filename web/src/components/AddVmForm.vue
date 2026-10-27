@@ -10,7 +10,7 @@ const emit = defineEmits<{ (e: 'saved', vmId?: number | null): void; (e: 'cancel
 
 const STACKS = [
   { id: 'openstack', label: 'OpenStack' },
-  // a VM only described in paasbox (nothing is created anywhere)
+  // a VM only described in paashup (nothing is created anywhere)
   { id: 'manual', label: 'No cloud (record only)' },
 ] as const;
 const stack = ref<(typeof STACKS)[number]['id'] | ''>('');
@@ -66,6 +66,7 @@ const stack = ref<(typeof STACKS)[number]['id'] | ''>('');
   padding: 20px 24px;
   width: 520px;
   max-width: 92vw;
+  margin: auto 0; /* vertically centred; top-aligned (and scrollable) when taller than the screen */
 }
 h3 {
   margin-top: 0;

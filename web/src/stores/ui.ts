@@ -57,18 +57,15 @@ export const useUiStore = defineStore('ui', {
     // accordion: everything collapsed by default; user expands by clicking.
     expandedSections: {} as Record<string, boolean>,
     expandedGroups: {} as Record<string, boolean>,
-    search: '',
     /** Record count per table (sidebar item badges); kept live via the change-feed. */
     counts: {} as Record<string, number>,
   }),
   getters: {
-    /** Sections → functional sub-groups → resources, filtered by the top-bar search. */
+    /** Sections → functional sub-groups → resources. */
     grouped(state): { section: string; groups: SubGroupView[] }[] {
-      const q = state.search.trim().toLowerCase();
       const by = new Map<string, Resource[]>();
       for (const r of state.resources) {
         if (isHiddenSection(r.section) || isHiddenResource(r)) continue; // e.g. vpn, wireless, most of dcim
-        if (q && !`${r.section} ${r.label} ${r.table}`.toLowerCase().includes(q)) continue;
         // promote configured plugins (e.g. docker) to their own top-level section
         const sec = sectionOf(r);
         (by.get(sec) ?? by.set(sec, []).get(sec)!).push(r);
@@ -76,7 +73,6 @@ export const useUiStore = defineStore('ui', {
       // plugin-contributed pages, bucketed by their (possibly promoted) section
       const pagesBySection = new Map<string, typeof state.pluginMenus>();
       for (const p of state.pluginMenus) {
-        if (q && !`${p.plugin} ${p.label}`.toLowerCase().includes(q)) continue;
         const sec = effectiveSection('plugins', p.plugin);
         (pagesBySection.get(sec) ?? pagesBySection.set(sec, []).get(sec)!).push(p);
         if (!by.has(sec)) by.set(sec, []);

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Deploy-time bootstrap: insert an API token into a paas2box SQLite database, so a
+// Deploy-time bootstrap: insert an API token into a paashup SQLite database, so a
 // secure-by-default instance (PB_AUTH_REQUIRED=1) has a usable credential. Idempotent:
 // re-running with the same key is a no-op. The owning user is find-or-created.
 //
@@ -8,7 +8,7 @@
 //
 // Usage:
 //   node scripts/seed-token.mjs <db-file> [--user NAME] [--key KEY] [--read-only]
-//   PB_SQLITE_FILE=./paas2box.db node scripts/seed-token.mjs
+//   PB_SQLITE_FILE=./paashup.db node scripts/seed-token.mjs
 //
 // Prints the token key once (generated if --key is omitted).
 import { DatabaseSync } from 'node:sqlite';

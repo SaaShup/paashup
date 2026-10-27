@@ -1,7 +1,7 @@
 // Generic plugin-contributed sidebar entries. A plugin may expose
 // `GET /api/plugins/<name>/ui/` returning `{ menu: [{ label, url, icon? }] }`; each item
 // becomes a sidebar entry that opens the plugin's own page (an embedded frame). The page
-// itself is shipped + served by the plugin — paas2box only renders the entry and frame.
+// itself is shipped + served by the plugin — paashup only renders the entry and frame.
 import { api } from './client.js';
 import type { Resource } from './resources.js';
 

@@ -1,4 +1,4 @@
-// IP range gateway field (paas2box extension): an optional IP that must fall within
+// IP range gateway field (paashup extension): an optional IP that must fall within
 // the range. Run: node --test test/iprange-gateway.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';

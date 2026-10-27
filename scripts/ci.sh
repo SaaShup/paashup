@@ -27,7 +27,7 @@ stage() { local name="$1"; shift; banner "$name"; if run "$@"; then pass "$name"
 WANT="${*:-lint test security build web test-mariadb}"
 wants() { case " $WANT " in *" $1 "*) return 0;; *) return 1;; esac; }
 
-cleanup() { docker rm -f paas2box-ci-app paas2box-ci-maria >/dev/null 2>&1 || true; }
+cleanup() { docker rm -f paashup-ci-app paashup-ci-maria >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
 # ---------- ensure deps ----------
@@ -68,13 +68,13 @@ if wants build; then
   elif ! have docker; then skip "docker-image" "docker not installed"
   else
     banner "docker image"
-    if run docker build -t paas2box:ci-local .; then
-      docker rm -f paas2box-ci-app >/dev/null 2>&1 || true
+    if run docker build -t paashup:ci-local .; then
+      docker rm -f paashup-ci-app >/dev/null 2>&1 || true
       # The image is secure by default (PB_AUTH_REQUIRED=1): seed a token on boot
       # and authenticate the smoke calls — same approach as the GitHub workflow.
       CI_TOKEN=$(head -c 20 /dev/urandom | od -An -tx1 | tr -d ' \n')
-      docker run -d --name paas2box-ci-app -e PB_MIGRATE=1 -e PB_SEED_TOKEN="$CI_TOKEN" \
-        -p 18000:8000 paas2box:ci-local >/dev/null
+      docker run -d --name paashup-ci-app -e PB_MIGRATE=1 -e PB_SEED_TOKEN="$CI_TOKEN" \
+        -p 18000:8000 paashup:ci-local >/dev/null
       auth="Authorization: Token $CI_TOKEN"
       ok=""
       for _ in $(seq 1 30); do
@@ -86,9 +86,9 @@ if wants build; then
         && curl -sf -H "$auth" 'localhost:18000/api/dcim/manufacturers/?limit=1' | grep -q '"count":1'; then
         pass "docker-image"
       else
-        docker logs paas2box-ci-app 2>&1 | tail -20; fail "docker-image"
+        docker logs paashup-ci-app 2>&1 | tail -20; fail "docker-image"
       fi
-      docker rm -f paas2box-ci-app >/dev/null 2>&1 || true
+      docker rm -f paashup-ci-app >/dev/null 2>&1 || true
     else
       fail "docker-image"
     fi
@@ -112,21 +112,21 @@ if wants test-mariadb; then
   elif ! have docker; then skip "test (mariadb)" "docker not installed"
   else
     banner "test (mariadb)"
-    docker rm -f paas2box-ci-maria >/dev/null 2>&1 || true
-    docker run -d --name paas2box-ci-maria -p 13306:3306 \
-      -e MARIADB_ROOT_PASSWORD=root -e MARIADB_DATABASE=paas2box mariadb:11 >/dev/null
+    docker rm -f paashup-ci-maria >/dev/null 2>&1 || true
+    docker run -d --name paashup-ci-maria -p 13306:3306 \
+      -e MARIADB_ROOT_PASSWORD=root -e MARIADB_DATABASE=paashup mariadb:11 >/dev/null
     ready=""
     for _ in $(seq 1 60); do
-      docker exec paas2box-ci-maria mariadb -uroot -proot -e "SELECT 1" >/dev/null 2>&1 && { ready=1; break; }
+      docker exec paashup-ci-maria mariadb -uroot -proot -e "SELECT 1" >/dev/null 2>&1 && { ready=1; break; }
       sleep 1
     done
     if [ -z "$ready" ]; then fail "test (mariadb)"; else
-      docker exec -i paas2box-ci-maria mariadb -uroot -proot paas2box < migrations/0001_initial.mariadb.sql
-      docker exec -i paas2box-ci-maria mariadb -uroot -proot paas2box < migrations/0002_auth_token.mariadb.sql
-      if DB_HOST=127.0.0.1 DB_PORT=13306 DB_USER=root DB_PASSWORD=root DB_NAME=paas2box \
+      docker exec -i paashup-ci-maria mariadb -uroot -proot paashup < migrations/0001_initial.mariadb.sql
+      docker exec -i paashup-ci-maria mariadb -uroot -proot paashup < migrations/0002_auth_token.mariadb.sql
+      if DB_HOST=127.0.0.1 DB_PORT=13306 DB_USER=root DB_PASSWORD=root DB_NAME=paashup \
            run npm run test:mariadb; then pass "test (mariadb)"; else fail "test (mariadb)"; fi
     fi
-    docker rm -f paas2box-ci-maria >/dev/null 2>&1 || true
+    docker rm -f paashup-ci-maria >/dev/null 2>&1 || true
   fi
 fi
 

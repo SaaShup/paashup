@@ -1,4 +1,4 @@
-// Docker plugin features are driven by webhooks: a Docker object CRUD'd in paasbox
+// Docker plugin features are driven by webhooks: a Docker object CRUD'd in paashup
 // fires a webhook that the external Docker agent consumes to perform the real
 // operation. Per feature this verifies:
 //   - TRUE POSITIVE : the change fires the correct webhook (agent receives it).

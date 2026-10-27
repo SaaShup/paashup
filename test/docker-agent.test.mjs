@@ -1,8 +1,8 @@
 // End-to-end with a Docker AGENT in the loop. There is no real dockerd here; the
 // stub agent stands in for SaaShup/netbox-docker-agent and models a fake engine:
-//   paasbox  --(webhook: container created)-->  agent  --(provision in fake engine)
+//   paashup  --(webhook: container created)-->  agent  --(provision in fake engine)
 //           <--(callback: PATCH ContainerID)--  agent
-// It also serves the /api/engine/* endpoints paasbox proxies (force_pull).
+// It also serves the /api/engine/* endpoints paashup proxies (force_pull).
 // Run: PB_WEBHOOK_BACKOFF_MS=50 node --test test/docker-agent.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,7 +17,7 @@ import dockerPlugin from '../dist/plugins/docker/index.js';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const DB = join(ROOT, 'test', '.docker-agent.sqlite');
-let db, server, base, agent, agentBase, paasboxBase;
+let db, server, base, agent, agentBase, paashupBase;
 let hostId, registryId, imageId;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -47,15 +47,15 @@ function startAgent() {
           if (body.model === 'plugins.dockercontainer' && body.event === 'created') {
             const cid = `cid-${body.object_id}`;
             engine.containers.set(cid, body.data?.name); // "docker run"
-            // report state back to paasbox (like the real agent updates the record)
-            await api(paasboxBase, 'PATCH', `/api/plugins/docker/containers/${body.object_id}/`, {
+            // report state back to paashup (like the real agent updates the record)
+            await api(paashupBase, 'PATCH', `/api/plugins/docker/containers/${body.object_id}/`, {
               ContainerID: cid,
             });
           }
           res.writeHead(200);
           return res.end('ok');
         }
-        // 2) engine proxy endpoints paasbox calls for actions
+        // 2) engine proxy endpoints paashup calls for actions
         if (req.url === '/api/engine/images') {
           engine.pulls.push(body);
           res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -85,7 +85,7 @@ before(async () => {
   server = createApiServer({ db });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${server.address().port}`;
-  paasboxBase = base;
+  paashupBase = base;
 
   // wire the agent's webhook feed: container created -> agent
   await pb('POST', '/api/extras/webhooks/', {

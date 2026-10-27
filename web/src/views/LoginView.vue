@@ -3,7 +3,6 @@ import { ref, onMounted } from 'vue';
 import { login, loadProviders, type Provider } from '../auth/oidc.js';
 
 const busy = ref(false);
-const logoOk = ref(true);
 const providers = ref<Provider[]>([]);
 
 onMounted(async () => {
@@ -18,14 +17,7 @@ async function signIn(id: string) {
 <template>
   <div class="login">
     <div class="card">
-      <img
-        v-show="logoOk"
-        class="logo"
-        src="/paas2box-logo.png"
-        alt="paas2box"
-        @error="logoOk = false"
-      />
-      <h1><span class="bar">▌</span> paas2box</h1>
+      <img class="logo" src="/paashup-logo.svg" alt="paashup" />
       <p class="sub">Sign in with your organization account to continue.</p>
       <div class="providers">
         <button
@@ -50,38 +42,33 @@ async function signIn(id: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg);
+  padding: 16px;
+  background: var(--surface);
   position: relative;
+  overflow: hidden;
 }
 .card {
   position: relative;
   z-index: 1;
   background: #fff;
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 36px 40px;
-  width: 360px;
-  max-width: 90vw;
+  border-radius: 18px;
+  padding: 32px 40px 36px;
+  width: 380px;
+  max-width: 100%;
   text-align: center;
-  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--shadow-lg);
 }
 .logo {
-  height: 56px;
-  width: auto;
-  margin-bottom: 8px;
-}
-h1 {
-  margin: 6px 0 2px;
-  font-size: 1.5rem;
-  color: var(--text);
-}
-.bar {
-  color: var(--secondary);
+  width: 190px;
+  height: auto;
+  margin: 0 auto 4px;
+  display: block;
 }
 .sub {
   color: var(--muted);
   font-size: 0.9rem;
-  margin: 8px 0 22px;
+  margin: 4px 0 24px;
 }
 .providers {
   display: flex;
@@ -91,13 +78,15 @@ h1 {
 .btn {
   width: 100%;
   border: none;
+  justify-content: center;
   background: var(--primary);
   color: #fff;
   font-size: 0.95rem;
   font-weight: 600;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 11px 16px;
   cursor: pointer;
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.1);
 }
 .btn:hover {
   background: var(--primary-d);
@@ -111,7 +100,7 @@ h1 {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  opacity: 0.05;
-  background: url('/paas2box-logo.png') center / min(560px, 55vw) no-repeat;
+  opacity: 0.04;
+  background: url('/paashup-mark.svg') right -80px bottom -60px / min(520px, 60vw) no-repeat;
 }
 </style>

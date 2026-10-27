@@ -339,7 +339,7 @@ def build_fields(ent, S=None):
 for ent in entities.values():
     ent["fields"] = build_fields(ent)
 
-# ---- paas2box extensions ----------------------------------------------------
+# ---- paashup extensions ----------------------------------------------------
 # Extra fields added to core entities beyond the NetBox spec. Inserted after the
 # named anchor field (or appended). Keeps the data model reproducible across regens.
 EXTRA_FIELDS = {
@@ -354,7 +354,7 @@ EXTRA_FIELDS = {
                 "required_on_create": False,
                 "writable": True,
                 "read_only": False,
-                "paas2box_extra": True,
+                "paashup_extra": True,
             },
         ),
         (
@@ -367,7 +367,7 @@ EXTRA_FIELDS = {
                 "required_on_create": False,
                 "writable": True,
                 "read_only": False,
-                "paas2box_extra": True,
+                "paashup_extra": True,
             },
         ),
     ],
@@ -385,7 +385,7 @@ EXTRA_FIELDS["virtualization/virtual-machines"] = [
             "required_on_create": False,
             "writable": True,
             "read_only": False,
-            "paas2box_extra": True,
+            "paashup_extra": True,
         },
     ),
 ]
@@ -410,7 +410,7 @@ for key, extras in EXTRA_FIELDS.items():
         else:
             ent["fields"].insert(idx + 1, field)
 
-# paas2box overrides to existing (NetBox-derived) fields, e.g. relaxing required-ness.
+# paashup overrides to existing (NetBox-derived) fields, e.g. relaxing required-ness.
 FIELD_OVERRIDES = {
     "dcim/devices": {"role": {"nullable": True, "required_on_create": False}},
 }
@@ -534,7 +534,7 @@ STUBS = {
             col("template_code", "string", "scalar", nullable=True),
         ],
     },
-    # paas2box entities (no NetBox equivalent): provider-neutral, filled by whichever
+    # paashup entities (no NetBox equivalent): provider-neutral, filled by whichever
     # cloud/hypervisor plugin is in use (OpenStack today, Proxmox... later).
     "virtualization/images": {
         "section": "virtualization",
@@ -544,7 +544,7 @@ STUBS = {
             col("name", "string(255)", max_length=255, required=True, unique=True),
             col("description", "string(200)", max_length=200, nullable=True),
             # where the row was imported from (a generic relation, e.g. an OpenStack cloud);
-            # empty = created in paas2box. Set by plugins, hidden from the forms.
+            # empty = created in paashup. Set by plugins, hidden from the forms.
             col(
                 "source_type",
                 "string (content-type)",
@@ -567,10 +567,10 @@ STUBS = {
             col("name", "string(100)", max_length=100, required=True, unique=True),
             col("public_key", "string", required=True),  # public half only, never a private key
             col("description", "string(200)", max_length=200, nullable=True),
-            # the paasbox user this key belongs to (matched by name on import, editable)
+            # the paashup user this key belongs to (matched by name on import, editable)
             col("owner", "integer (fk)", "fk", nullable=True, references="User"),
             # where the row was imported from (a generic relation, e.g. an OpenStack cloud);
-            # empty = created in paas2box. Set by plugins, hidden from the forms.
+            # empty = created in paashup. Set by plugins, hidden from the forms.
             col(
                 "source_type",
                 "string (content-type)",
@@ -867,9 +867,9 @@ md.append(
 )
 
 
-# Entities defined by paas2box itself (no NetBox equivalent), registered as stubs only
+# Entities defined by paashup itself (no NetBox equivalent), registered as stubs only
 # because that is how the generator takes hand-written entities.
-PAAS2BOX_MODELS = {"Image", "SshKey"}
+PAASHUP_MODELS = {"Image", "SshKey"}
 
 
 def emit_section(section):
@@ -883,16 +883,16 @@ def emit_section(section):
             "external-full": " _(external, full)_",
             "external-stub": " _(external, stub)_",
         }.get(origin, "")
-        own = ent["model"] in PAAS2BOX_MODELS
+        own = ent["model"] in PAASHUP_MODELS
         if own:
-            tag = " _(paas2box)_"
+            tag = " _(paashup)_"
         md.append(f"\n### {ent['model']}{tag}\n")
         md.append(f"- **Table:** `{model_table[ent['model']]}`")
         md.append(f"- **Endpoint:** `{ent['endpoint']}`")
-        rs = ent.get("read_schema") or ("(paas2box entity)" if own else "(hand-defined stub)")
+        rs = ent.get("read_schema") or ("(paashup entity)" if own else "(hand-defined stub)")
         md.append(
             f"- **Read schema:** `{rs}` · "
-            f"**Write schema:** `{ent['write_schema'] or ('(paas2box entity)' if own else '(read-only / stub)')}`\n"
+            f"**Write schema:** `{ent['write_schema'] or ('(paashup entity)' if own else '(read-only / stub)')}`\n"
         )
         md.append(md_table(ent))
         md.append("")

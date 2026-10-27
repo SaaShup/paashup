@@ -1,6 +1,6 @@
 // Dual-dialect DDL for the Cloudflare plugin, ported from the Django models of
 // netbox_cloudflare_plugin. Applied (and tracked in `schema_migrations` as
-// `plugin:cloudflare:0001_initial`) by paasbox's `loadPlugins`.
+// `plugin:cloudflare:0001_initial`) by paashup's `loadPlugins`.
 import type { PluginMigration } from '../../plugins/types.js';
 
 const sqlite = `

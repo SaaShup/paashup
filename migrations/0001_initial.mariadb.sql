@@ -1,4 +1,4 @@
--- paas2box initial schema (mariadb) — generated from data-model.json
+-- paashup initial schema (mariadb) — generated from data-model.json
 -- NetBox 4.6.2 (4.6) compatible. Do not edit by hand; run datamodel/build_schema.py.
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;

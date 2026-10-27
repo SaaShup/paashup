@@ -1,7 +1,7 @@
 // Browser-side OIDC login via a Backend-for-Frontend. The SPA only does the PKCE
 // redirect and receives an authorization `code`; it posts that to the backend
 // (`/api/auth/oidc/exchange/`), which holds any client secret, verifies the id_token,
-// applies authorization, and returns a **paas2box token**. The SPA stores that token
+// applies authorization, and returns a **paashup token**. The SPA stores that token
 // (as the existing `pb_token`) and uses it for every API/WS call — so it never touches
 // provider secrets or provider tokens, and works for any provider (Keycloak, Google, …).
 import { withBase } from '../base.js';
@@ -21,7 +21,7 @@ interface ProvidersResponse {
 }
 
 const LS = {
-  token: 'pb_token', // paas2box token (also used by the REST client + WS)
+  token: 'pb_token', // paashup token (also used by the REST client + WS)
   username: 'pb_username',
   tokenId: 'pb_token_id',
   expires: 'pb_token_expires', // ISO string
@@ -107,7 +107,7 @@ export async function login(providerId?: string): Promise<void> {
 
 /**
  * If the URL carries an auth code (post-redirect), hand it to the backend to exchange
- * for a paas2box token, store it, and clean the URL. Returns true if sign-in completed.
+ * for a paashup token, store it, and clean the URL. Returns true if sign-in completed.
  */
 export async function handleRedirectCallback(): Promise<boolean> {
   const params = new URLSearchParams(location.search);
@@ -166,7 +166,7 @@ export async function establishSession(): Promise<void> {
   }
 }
 
-/** Sign out: revoke the paas2box token + clear the session cookie (best-effort), then local state. */
+/** Sign out: revoke the paashup token + clear the session cookie (best-effort), then local state. */
 export async function logout(): Promise<void> {
   const id = localStorage.getItem(LS.tokenId);
   const token = getToken();

@@ -39,8 +39,8 @@ defineProps<{ label: string; tone: StatusTone; busy?: boolean }>();
   color: #92400e;
 }
 .tone-info {
-  background: #e0f2fe;
-  color: #075985;
+  background: var(--primary-soft);
+  color: var(--primary-d);
 }
 .tone-muted {
   background: #f1f5f9;

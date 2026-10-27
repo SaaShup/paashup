@@ -5,7 +5,7 @@
 import * as client from 'prom-client';
 import { timingSafeEqual } from 'node:crypto';
 
-const PREFIX = 'paas2box_';
+const PREFIX = 'paashup_';
 export const registry = new client.Registry();
 
 // Default Node runtime metrics: GC, event-loop lag, active handles/requests, version.

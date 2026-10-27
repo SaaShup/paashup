@@ -1,5 +1,5 @@
-// paasbox-plugin-netbox-migrate — one-shot migration of core objects from a NetBox
-// instance into paasbox over the REST API. Because paasbox is NetBox-API-compatible,
+// paashup-plugin-netbox-migrate — one-shot migration of core objects from a NetBox
+// instance into paashup over the REST API. Because paashup is NetBox-API-compatible,
 // each entity is read from the same endpoint on NetBox and written locally, with
 // dependency ordering + id remapping handled by the engine (see migrate.ts).
 //

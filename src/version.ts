@@ -1,18 +1,18 @@
 // Single source of truth for version strings.
-//  - NETBOX_VERSION: the NetBox REST API version paas2box targets for compatibility.
+//  - NETBOX_VERSION: the NetBox REST API version paashup targets for compatibility.
 //    Used in the OpenAPI doc (`info.version`) and the `/api/status/` endpoint so NetBox
 //    clients can gate behavior on it.
-//  - appVersion(): paas2box's own product version, read from package.json at runtime.
+//  - appVersion(): paashup's own product version, read from package.json at runtime.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-/** NetBox REST API version paas2box mirrors. */
+/** NetBox REST API version paashup mirrors. */
 export const NETBOX_VERSION = '4.6.2';
 
 let cached: string | undefined;
 
 /**
- * paas2box product version from package.json. Returns "unknown" if it can't be read.
+ * paashup product version from package.json. Returns "unknown" if it can't be read.
  * `pkgUrl` is an injectable override for tests (bypasses the cache).
  */
 export function appVersion(pkgUrl?: URL): string {

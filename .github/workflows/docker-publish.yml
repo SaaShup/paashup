@@ -37,7 +37,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ${{ vars.DOCKERHUB_IMAGE || format('{0}/paasbox', secrets.DOCKERHUB_USERNAME) }}
+          images: ${{ vars.DOCKERHUB_IMAGE || format('{0}/paashup', secrets.DOCKERHUB_USERNAME) }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -75,7 +75,7 @@ jobs:
       - name: Notify upgrade webhook
         env:
           WEBHOOK_URL: https://${{ vars.WEBHOOK_DOMAIN }}${{ secrets.WEBHOOK_PATH }}
-          IMAGE: ${{ vars.DOCKERHUB_IMAGE || format('{0}/paasbox', secrets.DOCKERHUB_USERNAME) }}
+          IMAGE: ${{ vars.DOCKERHUB_IMAGE || format('{0}/paashup', secrets.DOCKERHUB_USERNAME) }}
           TAG: ${{ github.ref_name }}
         run: |
           curl -fsS -X POST "$WEBHOOK_URL" \

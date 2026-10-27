@@ -246,6 +246,8 @@ table {
   font: inherit;
   font-weight: 600;
   text-align: left;
+}
+.rowlink:hover {
   text-decoration: underline;
 }
 .rowlink:hover {
@@ -287,7 +289,10 @@ td {
 thead th {
   background: var(--surface);
   color: var(--muted);
-  font-weight: 600;
+  font-size: 0.74rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   position: sticky;
   top: 0;
 }

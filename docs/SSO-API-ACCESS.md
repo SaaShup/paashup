@@ -1,13 +1,13 @@
 # Consuming the API when SSO is active (no frontend)
 
-When paas2box runs with **SSO via OIDC/Keycloak** enabled (`PB_OIDC_ISSUER` set), you can
+When paashup runs with **SSO via OIDC/Keycloak** enabled (`PB_OIDC_ISSUER` set), you can
 still call the REST API headlessly. `authenticate()`
 ([src/auth.ts](../src/auth.ts)) accepts **two** credential types, and the static-token
 path runs *before* the OIDC check — so static API tokens keep working regardless of SSO:
 
 | Credential | Header | Issued by | Lifetime | Best for |
 |------------|--------|-----------|----------|----------|
-| **Static API token** | `Authorization: Token <40-hex>` | paas2box (`POST /api/users/tokens/`) | long-lived (optional `expires`) | scripts / CI |
+| **Static API token** | `Authorization: Token <40-hex>` | paashup (`POST /api/users/tokens/`) | long-lived (optional `expires`) | scripts / CI |
 | **OIDC bearer JWT** | `Authorization: Bearer <jwt>` | Keycloak (token endpoint) | short (~5 min) | central credential/role lifecycle |
 
 > The two are independent. A static token never touches Keycloak; a bearer JWT is verified
@@ -17,26 +17,26 @@ path runs *before* the OIDC check — so static API tokens keep working regardle
 > Providers with opaque access tokens (e.g. Google) can't be used this way — for those,
 > interactive **browser** login goes through the server-side exchange
 > (`GET /api/auth/providers/` then `POST /api/auth/oidc/exchange/`), which returns a
-> **static paas2box token** you then use as in Option 1. So for headless/automation,
+> **static paashup token** you then use as in Option 1. So for headless/automation,
 > prefer a static token regardless of provider.
 
 ---
 
 ## Option 1 — Static API token (recommended for machine-to-machine)
 
-The token is issued **by paas2box** and stored in its own DB; Keycloak plays no part in
+The token is issued **by paashup** and stored in its own DB; Keycloak plays no part in
 *using* it. Creating one requires an authenticated, write-enabled caller — so you bootstrap
 it once with a bearer JWT (Option 2), then reuse the static key forever:
 
 ```bash
 # one-time: bootstrap with a Keycloak token, mint a static key
-curl -s -X POST "$PAASBOX_URL/api/users/tokens/" \
+curl -s -X POST "$PAASHUP_URL/api/users/tokens/" \
   -H "Authorization: Bearer $JWT" -H 'Content-Type: application/json' \
   -d '{"description":"ci-bot","write_enabled":true}'
 # → {"id":7,"key":"a1b2…(40 hex, shown once)","write_enabled":true, …}
 
 # from then on — no Keycloak in the loop:
-curl -s "$PAASBOX_URL/api/dcim/sites/" -H "Authorization: Token a1b2…"
+curl -s "$PAASHUP_URL/api/dcim/sites/" -H "Authorization: Token a1b2…"
 ```
 
 `GET /api/users/tokens/` lists your keys; `DELETE /api/users/tokens/{id}/` revokes one.
@@ -46,16 +46,16 @@ curl -s "$PAASBOX_URL/api/dcim/sites/" -H "Authorization: Token a1b2…"
 deploy time instead of bootstrapping via a bearer:
 
 - **`PB_SEED_TOKEN`** (env, idempotent on boot) — owned by `PB_SEED_USERNAME` (default
-  `admin`): `docker run … -e PB_SEED_TOKEN="$(openssl rand -hex 20)" paas2box`.
+  `admin`): `docker run … -e PB_SEED_TOKEN="$(openssl rand -hex 20)" paashup`.
 - **`scripts/seed-token.mjs <db-file>`** (SQLite) — inserts a token directly and prints a
-  generated key: `node scripts/seed-token.mjs ./paas2box.db --user admin`.
+  generated key: `node scripts/seed-token.mjs ./paashup.db --user admin`.
 
 ---
 
 ## Option 2 — OIDC bearer JWT straight from Keycloak
 
-Nothing is pre-registered in paas2box: you create a **client** in Keycloak once, fetch a
-short-lived token at runtime, and send it as a bearer. paas2box verifies it against the
+Nothing is pre-registered in paashup: you create a **client** in Keycloak once, fetch a
+short-lived token at runtime, and send it as a bearer. paashup verifies it against the
 issuer's public keys.
 
 ```mermaid
@@ -63,17 +63,17 @@ sequenceDiagram
     autonumber
     actor Admin
     participant KC as Keycloak
-    participant Script as paasbox-bearer.sh
-    participant PB as paas2box API
+    participant Script as paashup-bearer.sh
+    participant PB as paashup API
 
     rect rgb(235, 245, 255)
     note over Admin,KC: PHASE 1 - one-time setup in Keycloak
-    Admin->>KC: Create client paasbox-svc
+    Admin->>KC: Create client paashup-svc
     Admin->>KC: Client auth ON, Service accounts ON
     KC-->>Admin: CLIENT_SECRET
     Admin->>KC: Assign PB_OIDC_WRITE_ROLE to service account
-    Admin->>KC: optional audience mapper, aud = paasbox-svc
-    note over PB: paasbox env set once<br/>PB_OIDC_ISSUER, PB_OIDC_AUDIENCE, PB_OIDC_WRITE_ROLE<br/>secret is NEVER given to paasbox
+    Admin->>KC: optional audience mapper, aud = paashup-svc
+    note over PB: paashup env set once<br/>PB_OIDC_ISSUER, PB_OIDC_AUDIENCE, PB_OIDC_WRITE_ROLE<br/>secret is NEVER given to paashup
     end
 
     rect rgb(235, 255, 235)
@@ -84,7 +84,7 @@ sequenceDiagram
     end
 
     rect rgb(255, 245, 235)
-    note over Script,PB: PHASE 3 - token usage, paasbox validates live
+    note over Script,PB: PHASE 3 - token usage, paashup validates live
     Script->>PB: GET /api/dcim/sites/<br/>Authorization: Bearer JWT
     PB->>KC: GET JWKS public keys, cached ~5 min
     KC-->>PB: public signing keys
@@ -96,25 +96,25 @@ sequenceDiagram
 
 Three facts this encodes (straight from [src/oidc.ts](../src/oidc.ts) / [src/auth.ts](../src/auth.ts)):
 
-- The **secret** only ever travels Script ↔ Keycloak. paas2box never sees it.
-- paas2box calls Keycloak only for **public JWKS keys** — never the token endpoint.
-- Nothing is pre-registered in paas2box: it verifies any JWT the issuer signs, **auto-provisions**
+- The **secret** only ever travels Script ↔ Keycloak. paashup never sees it.
+- paashup calls Keycloak only for **public JWKS keys** — never the token endpoint.
+- Nothing is pre-registered in paashup: it verifies any JWT the issuer signs, **auto-provisions**
   the user, and `PB_OIDC_WRITE_ROLE` decides read-only vs read-write.
 
 ### Curl
 
 ```bash
-ISSUER="https://kc.example.com/realms/paasbox"   # = PB_OIDC_ISSUER
-PAASBOX_URL="http://localhost:8000"
-CLIENT_ID="paasbox-svc"; CLIENT_SECRET="••••••••"
+ISSUER="https://kc.example.com/realms/paashup"   # = PB_OIDC_ISSUER
+PAASHUP_URL="http://localhost:8000"
+CLIENT_ID="paashup-svc"; CLIENT_SECRET="••••••••"
 
 # 1. fetch an access token (service account / client-credentials grant)
 JWT=$(curl -s -X POST "$ISSUER/protocol/openid-connect/token" \
   -d grant_type=client_credentials \
   -d client_id="$CLIENT_ID" -d client_secret="$CLIENT_SECRET" | jq -r .access_token)
 
-# 2. call paasbox with the bearer token
-curl -s "$PAASBOX_URL/api/dcim/sites/" -H "Authorization: Bearer $JWT" | jq
+# 2. call paashup with the bearer token
+curl -s "$PAASHUP_URL/api/dcim/sites/" -H "Authorization: Bearer $JWT" | jq
 
 # acting as a real user instead of a service account:
 JWT=$(curl -s -X POST "$ISSUER/protocol/openid-connect/token" \
@@ -123,8 +123,8 @@ JWT=$(curl -s -X POST "$ISSUER/protocol/openid-connect/token" \
 ```
 
 A ready-made helper script wraps both grants:
-[scripts/paasbox-bearer.sh](../scripts/paasbox-bearer.sh) —
-`./scripts/paasbox-bearer.sh GET /api/dcim/sites/`.
+[scripts/paashup-bearer.sh](../scripts/paashup-bearer.sh) —
+`./scripts/paashup-bearer.sh GET /api/dcim/sites/`.
 
 ### Keycloak client checklist (Phase 1)
 
@@ -142,7 +142,7 @@ A ready-made helper script wraps both grants:
 |---------|-------------|
 | `403` on **writes**, `200` on reads | identity lacks `PB_OIDC_WRITE_ROLE` → assign it to the service account |
 | `403`/auth fails on everything | audience mismatch → set `PB_OIDC_AUDIENCE` to the `client_id` (matches `azp`) or add an aud mapper; or the token expired |
-| username is a UUID | a client-credentials token has no `preferred_username`; paas2box falls back to `sub`. Map `PB_OIDC_USERNAME_CLAIM` to a claim the token carries |
+| username is a UUID | a client-credentials token has no `preferred_username`; paashup falls back to `sub`. Map `PB_OIDC_USERNAME_CLAIM` to a claim the token carries |
 | inspect a token | `echo "$JWT" \| cut -d. -f2 \| base64 -d 2>/dev/null \| jq` — check `aud`, `azp`, `realm_access.roles`, `exp` |
 
 ## WebSocket change-feed (`/api/ws/`)
@@ -154,9 +154,9 @@ static token as `token`:
 
 ```bash
 # OIDC bearer
-wscat -c "wss://paasbox.example.com/api/ws/?access_token=$JWT"
+wscat -c "wss://paashup.example.com/api/ws/?access_token=$JWT"
 # static API token
-wscat -c "wss://paasbox.example.com/api/ws/?token=$KEY"
+wscat -c "wss://paashup.example.com/api/ws/?token=$KEY"
 ```
 
 The bundled SPA does this automatically, re-reading the current token on every reconnect.

@@ -1,6 +1,6 @@
 # The API
 
-paas2box is **API-first**: everything in the UI is also available over a REST API that
+paashup is **API-first**: everything in the UI is also available over a REST API that
 mirrors NetBox's, so NetBox client tools (pynetbox, the Terraform provider, your own
 scripts) work against it. Every list page shows its endpoint — copy it and go.
 

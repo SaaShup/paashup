@@ -1,4 +1,4 @@
-# paas2box data-access layer (TypeScript, no ORM)
+# paashup data-access layer (TypeScript, no ORM)
 
 Raw-SQL data layer for the NetBox-compatible entities, running over **SQLite**
 (small customers) or **MariaDB** (big customers) behind one async interface. No
@@ -29,10 +29,10 @@ test/                  node:test smoke tests (SQLite + MariaDB)
 ## Usage
 
 ```ts
-import { createDb, repository } from 'paas2box';
+import { createDb, repository } from 'paashup';
 
-const db = createDb({ dialect: 'sqlite', filename: './paas2box.db' });
-// or: createDb({ dialect: 'mariadb', database: 'paas2box', host: '...', user: '...', password: '...' })
+const db = createDb({ dialect: 'sqlite', filename: './paashup.db' });
+// or: createDb({ dialect: 'mariadb', database: 'paashup', host: '...', user: '...', password: '...' })
 
 const devices = repository(db, 'dcim_device');          // fully typed by table name
 
@@ -88,8 +88,8 @@ A `node:http` server exposes every entity at its NetBox path with the NetBox
 response shape. Routing is metadata-driven (no per-entity route files).
 
 ```bash
-PB_DIALECT=sqlite PB_SQLITE_FILE=./paas2box.db PORT=8000 npm start
-# or PB_DIALECT=mariadb DB_HOST=.. DB_USER=.. DB_PASSWORD=.. DB_NAME=paas2box npm start
+PB_DIALECT=sqlite PB_SQLITE_FILE=./paashup.db PORT=8000 npm start
+# or PB_DIALECT=mariadb DB_HOST=.. DB_USER=.. DB_PASSWORD=.. DB_NAME=paashup npm start
 ```
 
 Per entity: `GET/POST /api/<app>/<resource>/` and

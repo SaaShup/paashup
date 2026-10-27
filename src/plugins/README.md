@@ -1,6 +1,6 @@
-# paas2box plugins
+# paashup plugins
 
-paas2box is **metadata-driven**: the router, repository, serializer, validator and
+paashup is **metadata-driven**: the router, repository, serializer, validator and
 all the NetBox-shaped behaviour (pagination, FK briefs, `{value,label}` choices,
 filtering, computed fields) operate off a table-metadata registry. A plugin simply
 **registers entity metadata + ships its DDL**, and the existing engine turns it into
@@ -10,7 +10,7 @@ custom (non-CRUD) routes and react to writes via hooks.
 ## A plugin is one object
 
 ```ts
-import type { Plugin } from 'paas2box';
+import type { Plugin } from 'paashup';
 
 const plugin: Plugin = {
   name: 'inventory',
@@ -92,23 +92,23 @@ starts:
 ```jsonc
 // package.json
 {
-  "paas2box": { "plugins": ["./dist/plugins/examples/inventory.js"] },
-  "dependencies": { "paas2box-plugin-acme": "^1.0.0" }  // paas2box-plugin-* auto-discovered
+  "paashup": { "plugins": ["./dist/plugins/examples/inventory.js"] },
+  "dependencies": { "paashup-plugin-acme": "^1.0.0" }  // paashup-plugin-* auto-discovered
 }
 ```
 
 ```bash
 # or explicitly via env (comma-separated module specifiers)
-PB_PLUGINS=paas2box/dist/plugins/examples/inventory.js npm start
+PB_PLUGINS=paashup/dist/plugins/examples/inventory.js npm start
 ```
 
 Programmatically:
 
 ```ts
-import { createDb, createApiServer, loadPlugins } from 'paas2box';
-import inventory from 'paas2box/dist/plugins/examples/inventory.js';
+import { createDb, createApiServer, loadPlugins } from 'paashup';
+import inventory from 'paashup/dist/plugins/examples/inventory.js';
 
-const db = createDb({ dialect: 'sqlite', filename: './paas2box.db' });
+const db = createDb({ dialect: 'sqlite', filename: './paashup.db' });
 await loadPlugins(db, [inventory]);   // register entities, apply DDL, mount routes/hooks
 const server = createApiServer({ db });
 ```
@@ -125,7 +125,7 @@ const server = createApiServer({ db });
 
 ## Current limits (vs NetBox plugins)
 
-- No UI/templates (paas2box is API-only).
+- No UI/templates (paashup is API-only).
 - Hooks fire on **API** writes, not on direct repository use.
 - Plugin entity types aren't in the generated `TableName`, so use
   `new Repository(db, getTable(name)!)` for typed-ish access in code.

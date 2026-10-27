@@ -1,5 +1,5 @@
 // Dual-dialect DDL for the OpenStack plugin. Applied (and tracked in `schema_migrations`
-// as `plugin:openstack:0001_initial`) by paasbox's `loadPlugins`.
+// as `plugin:openstack:0001_initial`) by paashup's `loadPlugins`.
 //
 // Only `plugin_openstack_cloud` is an exposed entity. The other tables map OpenStack ids
 // (region, Nova server id, Cinder volume id) to the core Cluster / VirtualMachine /
@@ -158,8 +158,8 @@ export const METADATA_MIGRATION: PluginMigration = {
   mariadb: `ALTER TABLE plugin_openstack_server ADD COLUMN metadata LONGTEXT NULL;`,
 };
 
-// 0004: a VM of a cloud is deleted from paasbox whoever created it, so the `managed` mark
-// (set on the servers paasbox created) is no longer used.
+// 0004: a VM of a cloud is deleted from paashup whoever created it, so the `managed` mark
+// (set on the servers paashup created) is no longer used.
 export const DROP_MANAGED_MIGRATION: PluginMigration = {
   version: '0004_drop_managed',
   sqlite: `ALTER TABLE plugin_openstack_server DROP COLUMN managed;`,

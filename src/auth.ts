@@ -94,7 +94,7 @@ export async function ensureSeedToken(db: Db): Promise<SeedTokenResult | null> {
   return { created: true, username, tokenId: id };
 }
 
-/** Name of the HttpOnly browser-session cookie carrying a paas2box token. */
+/** Name of the HttpOnly browser-session cookie carrying a paashup token. */
 export const SESSION_COOKIE = 'pb_session';
 
 /** Validate a raw token key → auth context. Shared by the `Token` header and the
@@ -162,7 +162,7 @@ export function clearSessionCookieHeader(opts: { secure: boolean }): string {
 /**
  * Resolve a request's credentials to an auth context, or null. In order: a static API
  * token (`Authorization: Token <key>`); an OIDC bearer JWT (`Authorization: Bearer
- * <jwt>`, when OIDC is configured); else the `pb_session` browser cookie (same paas2box
+ * <jwt>`, when OIDC is configured); else the `pb_session` browser cookie (same paashup
  * token, HttpOnly) — so a logged-in user can open API URLs directly in the browser
  * (links, address bar, bookmarks) without a 403 (issue #36).
  */
@@ -183,7 +183,7 @@ export async function authenticate(
     // Machine-to-machine: a Keycloak (or other) service-account JWT presented directly.
     // The provider is selected by the token's issuer; opaque tokens (e.g. Google access
     // tokens) aren't JWTs and are rejected here — interactive users go through the
-    // BFF exchange (ssoExchange) and then use the resulting paas2box token.
+    // BFF exchange (ssoExchange) and then use the resulting paashup token.
     const bearer = /^Bearer\s+(.+)$/i.exec(trimmed);
     if (bearer && oidcEnabled()) {
       const v = await verifyBearer(bearer[1]!.trim());
@@ -242,7 +242,7 @@ export interface SsoSession {
 /**
  * Backend-for-Frontend login: exchange an OIDC authorization `code` (sent by the SPA)
  * for tokens server-side, verify + authorize the identity, find-or-create the user, and
- * mint a paas2box session token the SPA then uses for all API/WS calls. Works uniformly
+ * mint a paashup session token the SPA then uses for all API/WS calls. Works uniformly
  * for any configured provider (Keycloak roles, Google domain/email) — see oidc.ts.
  */
 export async function ssoExchange(

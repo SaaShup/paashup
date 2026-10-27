@@ -1,4 +1,4 @@
-// ContainerTerminal.vue: an interactive shell over paasbox's WebSocket relay, speaking
+// ContainerTerminal.vue: an interactive shell over paashup's WebSocket relay, speaking
 // the docker-exec-websocket-server frame protocol (first byte = message code). `WebSocket`
 // and the xterm.js globals are faked so the test drives the frame exchange directly,
 // without a real network or a real terminal renderer.
@@ -301,7 +301,7 @@ describe('ContainerTerminal', () => {
     expect(w.text()).toContain('agent closed the session');
   });
 
-  it('a paasbox application close code (4000+) shows the relayed reason', async () => {
+  it('a paashup application close code (4000+) shows the relayed reason', async () => {
     const w = mount(ContainerTerminal, { props: props() });
     await flushPromises();
     const sock = FakeSocket.instances[0]!;

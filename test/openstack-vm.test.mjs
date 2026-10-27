@@ -1,11 +1,11 @@
-// Creating and deleting VMs on OpenStack from paasbox, end to end against the fake cloud
+// Creating and deleting VMs on OpenStack from paashup, end to end against the fake cloud
 // (test/fake-openstack.mjs). Verifies:
 //   - a create request is validated (fields, flavor, region, key) and the project's quotas
 //     are checked, all with readable errors and nothing created on the cloud
 //   - a server is booted from the image with the networks / key / groups chosen and the
 //     metadata given; the VM is imported, follows the server to active (or
 //     failed), and its journal keeps the SSH key it was launched with, in full
-//   - an SSH key of paasbox missing from the region is uploaded first; a keypair of that name
+//   - an SSH key of paashup missing from the region is uploaded first; a keypair of that name
 //     with another key, or a key name Nova refuses, is an error — never renamed
 //   - any VM of a cloud can be deleted on OpenStack: deleted on the cloud and removed here;
 //     a VM with no server behind it → 404
@@ -105,7 +105,7 @@ before(async () => {
   gra = region({
     keypairs: [{ name: 'laptop', public_key: ED25519 }],
     images: [{ id: 'img-ubuntu', name: 'Ubuntu 24.04' }],
-    servers: [server('legacy-1', 'legacy')], // there before paasbox
+    servers: [server('legacy-1', 'legacy')], // there before paashup
     buildReads: 2,
   });
   os.state.regions = { GRA9: gra };
@@ -241,10 +241,10 @@ test('a server that fails to build leaves the VM failed, with the reason in its 
 
 // ---- SSH keys ---------------------------------------------------------------------------
 
-test('a paasbox key missing from the region is uploaded, then reused', async () => {
+test('a paashup key missing from the region is uploaded, then reused', async () => {
   const key = (await api('POST', KEYS, { name: 'alice key', public_key: RSA })).body;
   const before = gra.keypairs.length;
-  const first = await create({ name: 'with-alice', ssh_key: { source: 'paasbox', id: key.id } });
+  const first = await create({ name: 'with-alice', ssh_key: { source: 'paashup', id: key.id } });
   assert.equal(first.status, 202, JSON.stringify(first.body));
   assert.equal(gra.keypairs.length, before + 1);
   assert.deepEqual(
@@ -257,7 +257,7 @@ test('a paasbox key missing from the region is uploaded, then reused', async () 
   assert.ok((await journalOf(vm.id))[0].comments.includes(RSA));
 
   // already there with the same key: used as is, not uploaded again
-  const second = await create({ name: 'with-alice-2', ssh_key: { source: 'paasbox', id: key.id } });
+  const second = await create({ name: 'with-alice-2', ssh_key: { source: 'paashup', id: key.id } });
   assert.equal(second.status, 202);
   assert.equal(gra.keypairs.length, before + 1);
 });
@@ -267,7 +267,7 @@ test('a keypair of that name holding another key is an error; nothing is renamed
     .body;
   gra.keypairs.push({ name: 'clash', public_key: ED25519 });
   const created = gra.created.length;
-  const res = await create({ name: 'never', ssh_key: { source: 'paasbox', id: key.id } });
+  const res = await create({ name: 'never', ssh_key: { source: 'paashup', id: key.id } });
   assert.equal(res.status, 400);
   assert.match(res.body.ssh_key[0], /"clash" already exists in region GRA9 with a different/);
   assert.equal(gra.created.length, created);
@@ -283,7 +283,7 @@ test('a key name Nova refuses cannot be used, and is not adapted', async () => {
     )
   ).insertId;
   const keypairs = gra.keypairs.length;
-  const res = await create({ name: 'never-2', ssh_key: { source: 'paasbox', id } });
+  const res = await create({ name: 'never-2', ssh_key: { source: 'paashup', id } });
   assert.equal(res.status, 400);
   assert.match(
     res.body.ssh_key[0],
@@ -291,7 +291,7 @@ test('a key name Nova refuses cannot be used, and is not adapted', async () => {
   );
   assert.equal(gra.keypairs.length, keypairs);
   assert.equal(
-    (await create({ name: 'never-3', ssh_key: { source: 'paasbox', id: 99999 } })).body.ssh_key[0],
+    (await create({ name: 'never-3', ssh_key: { source: 'paashup', id: 99999 } })).body.ssh_key[0],
     'This SSH key does not exist.',
   );
 });
@@ -340,7 +340,7 @@ test('the servers list tells which cloud each VM is a server of', async () => {
   assert.ok(all.some((r) => r.virtual_machine_id === legacy.id));
 });
 
-test('a VM paasbox created is deleted on OpenStack and then removed here', async () => {
+test('a VM paashup created is deleted on OpenStack and then removed here', async () => {
   const vm = await vmNamed('web-nogroup');
   const res = await api('DELETE', `${SERVERS}${vm.id}/`);
   assert.equal(res.status, 202, JSON.stringify(res.body));
@@ -461,7 +461,7 @@ test('a bad init script is refused before anything is created or uploaded', asyn
   const refused = async (init_script, expected) => {
     const res = await create({
       name: 'never-script',
-      ssh_key: { source: 'paasbox', id: key.id },
+      ssh_key: { source: 'paashup', id: key.id },
       init_script,
     });
     assert.equal(res.status, 400, JSON.stringify(res.body));
@@ -606,7 +606,7 @@ test('the metadata of a VM imported from the cloud can be edited too', async () 
   assert.deepEqual(res.body.metadata, { team: 'ops' });
 });
 
-test('a VM that existed before paasbox can be deleted from here too', async () => {
+test('a VM that existed before paashup can be deleted from here too', async () => {
   const legacy = await vmNamed('legacy');
   const res = await api('DELETE', `${SERVERS}${legacy.id}/`);
   assert.equal(res.status, 202, JSON.stringify(res.body));

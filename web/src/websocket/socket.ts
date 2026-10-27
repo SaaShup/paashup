@@ -89,7 +89,7 @@ function defaultUrl(): string {
 
 /**
  * Append the caller's credential to the WS URL. Browsers can't set request headers on a
- * `new WebSocket(...)`, so the server reads the paas2box token from the query string.
+ * `new WebSocket(...)`, so the server reads the paashup token from the query string.
  * Anonymous if there's no token.
  */
 export function withCredential(url: string): string {

@@ -1,5 +1,5 @@
-// Thin REST client for the paas2box API. Same-origin (Vite proxies /api in dev,
-// the API serves the built SPA in prod). Auth: the paas2box token in localStorage —
+// Thin REST client for the paashup API. Same-origin (Vite proxies /api in dev,
+// the API serves the built SPA in prod). Auth: the paashup token in localStorage —
 // minted by the SSO login (BFF exchange) or a static API key the user pasted in.
 import { getToken } from '../auth/oidc.js';
 import { withBase } from '../base.js';

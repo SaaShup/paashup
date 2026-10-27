@@ -509,7 +509,7 @@ test('agent sync auto-creates an unknown mount volume / network by name', async 
       name: 'mounty',
     })
   ).body;
-  // the agent reports a mount to a volume + a network that don't exist in paasbox yet
+  // the agent reports a mount to a volume + a network that don't exist in paashup yet
   const res = await api('PATCH', '/api/plugins/docker/containers/', [
     {
       id: c.id,
@@ -710,7 +710,7 @@ test('host operation=refresh marks state refreshing; the agent clears resources 
   assert.equal(upd.status, 200, JSON.stringify(upd.body));
   assert.equal(upd.body.state, 'refreshing'); // set before storing
   assert.equal(upd.body.operation, 'refresh');
-  // like NetBox, paasbox keeps the discovered resources: the agent deletes them itself
+  // like NetBox, paashup keeps the discovered resources: the agent deletes them itself
   assert.equal(await counts(), '1,1,1,1');
 
   // the agent clears each inventory with a bulk DELETE (containers first: RESTRICT refs)

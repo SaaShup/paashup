@@ -12,7 +12,7 @@ const cfg = {
   port: Number(process.env.DB_PORT ?? 13306),
   user: process.env.DB_USER ?? 'root',
   password: process.env.DB_PASSWORD ?? 'root',
-  database: process.env.DB_NAME ?? 'paas2box',
+  database: process.env.DB_NAME ?? 'paashup',
 };
 
 let db;

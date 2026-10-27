@@ -418,6 +418,7 @@ async function submit() {
   padding: 20px 24px;
   width: 520px;
   max-width: 92vw;
+  margin: auto 0; /* vertically centred; top-aligned (and scrollable) when taller than the screen */
 }
 h3 {
   margin-top: 0;
@@ -469,7 +470,7 @@ select:focus,
 textarea:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
+  box-shadow: var(--ring);
 }
 textarea.long-text {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -495,7 +496,7 @@ input[type='checkbox'] {
 }
 .tags:focus-within {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
+  box-shadow: var(--ring);
 }
 .chip {
   display: inline-flex;

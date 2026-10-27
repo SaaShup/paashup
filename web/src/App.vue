@@ -29,8 +29,6 @@ import LoginView from './views/LoginView.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
 
 const ui = useUiStore();
-const logoOk = ref(true);
-const logoUrl = '/paas2box-logo.png';
 const ssoEnabled = ref(false);
 const loginRequired = ref(false);
 const authed = ref(false);
@@ -88,13 +86,10 @@ onMounted(async () => {
       >
         ☰
       </button>
-      <div class="brand"><span class="logo">▌</span> <span class="brand-text">paas2box</span></div>
-      <input
-        class="globalsearch"
-        type="search"
-        placeholder="Search resources…"
-        v-model="ui.search"
-      />
+      <div class="brand">
+        <img class="brand-mark" src="/paashup-mark.svg" alt="" />
+        <span class="brand-text">paashup</span>
+      </div>
       <span class="spacer" />
       <div v-if="ssoEnabled" class="sso">
         <template v-if="username">
@@ -103,14 +98,7 @@ onMounted(async () => {
         </template>
         <button v-else class="sso-btn" @click="login()">Sign in</button>
       </div>
-      <img
-        v-show="logoOk"
-        class="topbar-logo"
-        :src="logoUrl"
-        alt="paas2box"
-        @error="logoOk = false"
-      />
-      <StatusBadge />
+      <StatusBadge class="live" />
     </header>
     <div class="body">
       <div class="sidebar-host" :class="{ open: sidebarOpen }"><Sidebar /></div>
@@ -146,33 +134,26 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 18px;
-  padding: 0 18px;
-  background: var(--primary);
-  color: #fff;
+  padding: 0 20px;
+  position: relative;
+  z-index: 50;
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
 }
 .brand {
-  font-weight: 700;
-  font-size: 1.05rem;
+  font-weight: 750;
+  font-size: 1.1rem;
+  letter-spacing: -0.02em;
+  color: var(--brand-ink);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 9px;
+  min-width: calc(var(--sidebar-w) - 38px);
 }
-.logo {
-  color: var(--secondary);
-}
-.globalsearch {
-  width: 320px;
-  max-width: 40vw;
-  border: none;
-  background: rgba(255, 255, 255, 0.18);
-  color: #fff;
-}
-.globalsearch::placeholder {
-  color: rgba(255, 255, 255, 0.8);
-}
-.globalsearch:focus {
-  background: rgba(255, 255, 255, 0.28);
-  box-shadow: none;
+.brand-mark {
+  width: 30px;
+  height: auto;
 }
 .spacer {
   flex: 1;
@@ -181,9 +162,10 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 .who {
-  color: #fff;
+  color: var(--muted);
   font-size: 0.85rem;
   max-width: 160px;
   overflow: hidden;
@@ -191,23 +173,23 @@ onMounted(async () => {
   white-space: nowrap;
 }
 .sso-btn {
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
-  border-radius: 6px;
-  padding: 5px 10px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font: inherit;
   font-size: 0.82rem;
+  font-weight: 500;
+  white-space: nowrap;
+  flex: none;
   cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 .sso-btn:hover {
-  background: rgba(255, 255, 255, 0.24);
-}
-.topbar-logo {
-  height: 40px;
-  width: auto;
-  background: #fff;
-  border-radius: 6px;
-  padding: 3px 6px;
+  background: var(--surface);
 }
 .body {
   flex: 1;
@@ -217,7 +199,7 @@ onMounted(async () => {
 .content {
   flex: 1;
   overflow: auto;
-  padding: 22px 28px;
+  padding: 26px 32px;
   background: var(--bg);
   position: relative;
 }
@@ -227,8 +209,8 @@ onMounted(async () => {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  opacity: 0.04;
-  background-image: url('/paas2box-logo.png');
+  opacity: 0.035;
+  background-image: url('/paashup-mark.svg');
   background-repeat: no-repeat;
   background-position: center;
   background-attachment: fixed;
@@ -258,14 +240,14 @@ onMounted(async () => {
   margin-left: -6px;
   border: none;
   background: transparent;
-  color: #fff;
+  color: var(--text);
   font-size: 1.3rem;
   line-height: 1;
   cursor: pointer;
   border-radius: 6px;
 }
 .hamburger:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--surface);
 }
 .scrim {
   display: none;
@@ -284,7 +266,7 @@ onMounted(async () => {
     z-index: 40;
     transform: translateX(-100%);
     transition: transform 0.2s ease;
-    box-shadow: var(--shadow);
+    box-shadow: var(--shadow-lg);
   }
   .sidebar-host.open {
     transform: translateX(0);
@@ -294,7 +276,8 @@ onMounted(async () => {
     position: fixed;
     inset: var(--topbar-h) 0 0 0;
     z-index: 30;
-    background: rgba(15, 23, 42, 0.4);
+    background: rgba(17, 24, 39, 0.35);
+    backdrop-filter: blur(2px);
   }
 }
 @media (max-width: 700px) {
@@ -302,25 +285,17 @@ onMounted(async () => {
     gap: 10px;
     padding: 0 12px;
   }
-  .globalsearch {
-    width: auto;
-    flex: 1 1 60px;
-    min-width: 0;
-    max-width: none;
-  }
   .who {
     max-width: 84px;
   }
-  .topbar-logo {
-    display: none;
+  .brand {
+    min-width: 0;
+  }
+  .live {
+    display: none; /* the connection status is not worth the room on a phone */
   }
   .content {
     padding: 16px 14px;
-  }
-}
-@media (max-width: 460px) {
-  .brand-text {
-    display: none; /* keep just the ▌ glyph to save room */
   }
 }
 @media (prefers-reduced-motion: reduce) {

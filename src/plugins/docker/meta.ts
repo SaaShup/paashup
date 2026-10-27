@@ -1,7 +1,7 @@
 // Table metadata for the Docker plugin entities, ported from
 // SaaShup/netbox-docker-plugin (netbox_docker_plugin/models/*.py).
 //
-// Six top-level entities are registered with paasbox (→ automatic NetBox-shaped
+// Six top-level entities are registered with paashup (→ automatic NetBox-shaped
 // CRUD). The nine container child tables are NOT registered (the source exposes them
 // only nested under a container); their shape lives in `CHILD_TABLES` and is handled
 // by the container custom routes. Model names are namespaced `Docker*` and object
@@ -700,7 +700,7 @@ const vmSshKeyMeta: TableMeta = {
   ],
 };
 
-/** The entities paasbox registers (auto-CRUD + schema + FK-brief resolution). */
+/** The entities paashup registers (auto-CRUD + schema + FK-brief resolution). */
 export const ENTITY_METAS: TableMeta[] = [
   hostMeta,
   registryMeta,

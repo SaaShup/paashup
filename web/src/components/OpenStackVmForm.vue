@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Create a VM on an OpenStack cloud: the cloud and region, then the pickers read live from
 // OpenStack (flavor, image, networks, security groups) and the SSH key — one of the region's
-// keypairs or one of the paasbox keys (uploaded to the region when the VM is created).
+// keypairs or one of the paashup keys (uploaded to the region when the VM is created).
 import { ref, computed, onMounted, watch } from 'vue';
 import { api, ApiError, type Obj, type Page } from '../api/client.js';
 import { confirmDialog } from '../composables/confirm.js';
@@ -17,7 +17,7 @@ const emit = defineEmits<{
 const CLOUDS = '/api/plugins/openstack/clouds/';
 const KEYS = '/api/virtualization/ssh-keys/';
 const SCRIPTS = '/api/virtualization/init-scripts/';
-// what OpenStack accepts as a keypair name; a paasbox key named otherwise cannot be used
+// what OpenStack accepts as a keypair name; a paashup key named otherwise cannot be used
 const KEYPAIR_NAME = /^[A-Za-z0-9_-]+(?: [A-Za-z0-9_-]+)*$/;
 
 interface Named {
@@ -41,7 +41,7 @@ const images = ref<Named[]>([]);
 const networks = ref<Network[]>([]);
 const groups = ref<Named[]>([]);
 const cloudKeys = ref<Named[]>([]);
-const paasboxKeys = ref<Obj[]>([]);
+const paashupKeys = ref<Obj[]>([]);
 const scripts = ref<Obj[]>([]);
 
 const cloudId = ref<number | ''>('');
@@ -51,7 +51,7 @@ const flavorId = ref('');
 const imageId = ref('');
 const networkIds = ref<string[]>([]);
 const securityGroups = ref<string[]>([]);
-const sshKey = ref(''); // "cloud:<name>" or "paasbox:<id>"
+const sshKey = ref(''); // "cloud:<name>" or "paashup:<id>"
 const metadata = ref<Pair[]>([]);
 const scriptId = ref<number | ''>('');
 const varValues = ref<Record<string, string>>({}); // init script variable → value
@@ -69,9 +69,9 @@ const ready = computed(
     networkIds.value.length > 0 &&
     !!sshKey.value,
 );
-/** A paasbox key already present in the region (same name) is listed once, as the cloud's. */
+/** A paashup key already present in the region (same name) is listed once, as the cloud's. */
 const otherKeys = computed(() =>
-  paasboxKeys.value.filter((k) => !cloudKeys.value.some((c) => c.name === k.name)),
+  paashupKeys.value.filter((k) => !cloudKeys.value.some((c) => c.name === k.name)),
 );
 
 interface ScriptVar {
@@ -157,7 +157,7 @@ const flavorLabel = (f: Flavor): string =>
 onMounted(async () => {
   try {
     clouds.value = (await api.list(CLOUDS, { limit: 200 })).results;
-    paasboxKeys.value = (await api.list(KEYS, { limit: 500 })).results;
+    paashupKeys.value = (await api.list(KEYS, { limit: 500 })).results;
     scripts.value = (await api.list(SCRIPTS, { limit: 500 })).results;
     if (clouds.value.length === 1) cloudId.value = (clouds.value[0] as { id: number }).id;
   } catch (e) {
@@ -350,11 +350,11 @@ async function submit(): Promise<void> {
                     {{ k.name }}
                   </option>
                 </optgroup>
-                <optgroup v-if="otherKeys.length" label="paasbox keys">
+                <optgroup v-if="otherKeys.length" label="paashup keys">
                   <option
                     v-for="k in otherKeys"
                     :key="(k as any).id"
-                    :value="`paasbox:${(k as any).id}`"
+                    :value="`paashup:${(k as any).id}`"
                     :disabled="!KEYPAIR_NAME.test(String(k.name))"
                   >
                     {{ k.name
@@ -436,6 +436,7 @@ async function submit(): Promise<void> {
   padding: 20px 24px;
   width: 560px;
   max-width: 92vw;
+  margin: auto 0; /* vertically centred; top-aligned (and scrollable) when taller than the screen */
 }
 h3 {
   margin-top: 0;
@@ -481,7 +482,7 @@ input:focus,
 select:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
+  box-shadow: var(--ring);
 }
 .check {
   display: flex;

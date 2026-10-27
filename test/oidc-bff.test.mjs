@@ -75,7 +75,7 @@ before(async () => {
           res.writeHead(401);
           return res.end(JSON.stringify({ error: 'invalid_client' }));
         }
-        if (f.get('client_id') === 'paasbox' && !f.get('code_verifier')) {
+        if (f.get('client_id') === 'paashup' && !f.get('code_verifier')) {
           res.writeHead(400);
           return res.end(JSON.stringify({ error: 'missing PKCE verifier' }));
         }
@@ -97,9 +97,9 @@ before(async () => {
   process.env.PB_OIDC_PROVIDERS = 'corp,gwork';
   // corp: Keycloak-style (roles), public PKCE client
   process.env.PB_OIDC_CORP_ISSUER = issuer;
-  process.env.PB_OIDC_CORP_CLIENT_ID = 'paasbox';
-  process.env.PB_OIDC_CORP_AUDIENCE = 'paasbox';
-  process.env.PB_OIDC_CORP_WRITE_ROLE = 'paasbox-write';
+  process.env.PB_OIDC_CORP_CLIENT_ID = 'paashup';
+  process.env.PB_OIDC_CORP_AUDIENCE = 'paashup';
+  process.env.PB_OIDC_CORP_WRITE_ROLE = 'paashup-write';
   process.env.PB_OIDC_CORP_KIND = 'oidc';
   // gwork: Google-style (email/domain), confidential client with a secret
   process.env.PB_OIDC_GWORK_ISSUER = issuer;
@@ -142,11 +142,11 @@ test('Keycloak-style: code exchange verifies id_token and grants write via role'
   codes.set('corp-w', {
     id_token: sign({
       iss: issuer,
-      aud: 'paasbox',
+      aud: 'paashup',
       preferred_username: 'alice',
       email: 'alice@corp',
     }),
-    access_token: sign({ iss: issuer, aud: 'paasbox', realm_access: { roles: ['paasbox-write'] } }),
+    access_token: sign({ iss: issuer, aud: 'paashup', realm_access: { roles: ['paashup-write'] } }),
   });
   const r = await exchange({
     provider: 'corp',
@@ -161,10 +161,10 @@ test('Keycloak-style: code exchange verifies id_token and grants write via role'
   assert.equal(await apiPost(r.body.token, 'KcWrite'), 201);
 });
 
-test('Keycloak-style: no role ⇒ read-only paas2box token', async () => {
+test('Keycloak-style: no role ⇒ read-only paashup token', async () => {
   codes.set('corp-ro', {
-    id_token: sign({ iss: issuer, aud: 'paasbox', preferred_username: 'bob' }),
-    access_token: sign({ iss: issuer, aud: 'paasbox', realm_access: { roles: ['viewer'] } }),
+    id_token: sign({ iss: issuer, aud: 'paashup', preferred_username: 'bob' }),
+    access_token: sign({ iss: issuer, aud: 'paashup', realm_access: { roles: ['viewer'] } }),
   });
   const r = await exchange({
     provider: 'corp',

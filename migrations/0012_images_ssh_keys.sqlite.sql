@@ -1,7 +1,7 @@
--- Provider-neutral images and SSH public keys (paas2box extension), filled by whichever
+-- Provider-neutral images and SSH public keys (paashup extension), filled by whichever
 -- cloud / hypervisor plugin is in use, plus the VM's `image` link. `source_type` /
 -- `source_id` say which object (e.g. an OpenStack cloud) a row was imported from;
--- NULL = created in paas2box.
+-- NULL = created in paashup.
 PRAGMA foreign_keys = ON;
 
 BEGIN;

@@ -115,7 +115,7 @@ async function exclusive<T>(cloudId: number, fn: () => Promise<T>): Promise<T> {
  * Import (or update) one server as a VM without reading the whole cloud: its interfaces, IPs,
  * flavor and image come out as in a full sync, but nothing else is read
  * or removed. Returns the VM's id, or null when the server does not exist (any more).
- * Used to follow a server paasbox creates; volumes are left to the next full sync.
+ * Used to follow a server paashup creates; volumes are left to the next full sync.
  */
 export async function importServer(
   db: Db,
@@ -901,7 +901,7 @@ export async function deleteVm(tx: Db, vmId: number): Promise<void> {
  */
 async function removeVm(db: Db, vmId: number, withHosts = false): Promise<void> {
   try {
-    // a VM deleted from paasbox takes its Docker host with it; one that merely disappeared
+    // a VM deleted from paashup takes its Docker host with it; one that merely disappeared
     // from the cloud (a sync) keeps the host, which just loses its link
     if (withHosts) await fireHooks(db, 'virtualization_virtual_machine', 'deleting', vmId);
     await db.transaction((tx) => deleteVm(tx, vmId));
@@ -1010,10 +1010,10 @@ const keyComment = (publicKey: string): string => publicKey.split(/\s+/).slice(2
 
 /**
  * Import a cloud's Nova keypairs as SSH keys marked with the cloud as their source. A
- * key that already exists in paas2box with the same public key and no source (added by
+ * key that already exists in paashup with the same public key and no source (added by
  * hand) is left alone and not imported again; the same key from another cloud is that
  * cloud's own row. A name already taken by a different key gets a suffix. A new key is
- * given as owner the paasbox user whose username matches its name, or else its comment
+ * given as owner the paashup user whose username matches its name, or else its comment
  * (e.g. an email); with no match the owner stays empty. Later syncs never change it, so a
  * hand-set owner sticks. Returns the ids of the keys this cloud owns.
  */
@@ -1041,7 +1041,7 @@ async function importKeypairs(db: Db, cloudId: number, keypairs: Keypair[]): Pro
       [name],
     );
     if (taken) name = `${name.slice(0, 91)}-${shortHash(k.publicKey)}`;
-    // the owner is the paasbox user whose username is the key's name or, failing that,
+    // the owner is the paashup user whose username is the key's name or, failing that,
     // its comment
     let owner: { id: number } | undefined;
     for (const candidate of [k.name, keyComment(k.publicKey)]) {

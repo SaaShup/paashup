@@ -1,11 +1,11 @@
-// Multi-provider OIDC support. paas2box can sign users in via several OIDC providers
+// Multi-provider OIDC support. paashup can sign users in via several OIDC providers
 // at once (e.g. Keycloak + Google). Because providers differ in ways the OIDC spec
 // leaves open — access tokens may be JWTs (Keycloak) or opaque (Google), browser
 // clients may be public+PKCE (Keycloak) or confidential (Google), and authorization is
 // provider-specific (Keycloak roles vs Google email/domain) — the *code→token exchange*
 // is done server-side (a Backend-for-Frontend). The backend verifies the **id_token**
 // (always a JWT, the one portable token), normalizes authorization, and the caller mints
-// a paas2box token. The SPA never holds a client secret or a provider token.
+// a paashup token. The SPA never holds a client secret or a provider token.
 //
 // Config (per provider id listed in PB_OIDC_PROVIDERS, e.g. "keycloak,google"):
 //   PB_OIDC_<ID>_ISSUER          discovery base (required)

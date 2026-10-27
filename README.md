@@ -1,4 +1,4 @@
-# paas2box
+# paashup
 
 A NetBox-compatible REST API for the **DCIM**, **IPAM**, and **Virtualization**
 sections — same OpenAPI contract as the [NetBox community
@@ -28,13 +28,13 @@ npm install
 npm run build                              # tsc -> dist/
 
 # SQLite
-python3 migrations/migrate.py --dialect sqlite --database ./paas2box.db
-PB_DIALECT=sqlite PB_SQLITE_FILE=./paas2box.db PORT=8000 npm start
+python3 migrations/migrate.py --dialect sqlite --database ./paashup.db
+PB_DIALECT=sqlite PB_SQLITE_FILE=./paashup.db PORT=8000 npm start
 
 # MariaDB
-python3 migrations/migrate.py --dialect mariadb --database paas2box \
-  --host 127.0.0.1 --user paas2box --password secret
-PB_DIALECT=mariadb DB_NAME=paas2box DB_USER=paas2box DB_PASSWORD=secret npm start
+python3 migrations/migrate.py --dialect mariadb --database paashup \
+  --host 127.0.0.1 --user paashup --password secret
+PB_DIALECT=mariadb DB_NAME=paashup DB_USER=paashup DB_PASSWORD=secret npm start
 ```
 
 Then e.g. `curl localhost:8000/api/dcim/manufacturers/`. The live OpenAPI schema is
@@ -44,9 +44,9 @@ registry so it always reflects core **and** any loaded plugins.
 ### Docker
 
 ```bash
-docker build -t paas2box .
+docker build -t paashup .
 # SQLite, auto-migrated on startup (data persisted in a volume):
-docker run -p 8000:8000 -e PB_MIGRATE=1 -v paas2box-data:/data paas2box
+docker run -p 8000:8000 -e PB_MIGRATE=1 -v paashup-data:/data paashup
 ```
 
 The image is multi-stage and runs as a non-root user. It bundles the built Vue UI
@@ -65,8 +65,8 @@ valid token. So **bootstrap a credential before use** — either enable OIDC (se
 `PB_SEED_TOKEN` (idempotent on boot, owned by `PB_SEED_USERNAME`, default `admin`):
 
 ```bash
-docker run -p 8000:8000 -e PB_MIGRATE=1 -v paas2box-data:/data \
-  -e PB_SEED_TOKEN="$(openssl rand -hex 20)" paas2box
+docker run -p 8000:8000 -e PB_MIGRATE=1 -v paashup-data:/data \
+  -e PB_SEED_TOKEN="$(openssl rand -hex 20)" paashup
 # then call the API with:  Authorization: Token <that value>
 ```
 
@@ -85,8 +85,8 @@ two ways.
 **Single container (simplest — UI + API + schema + WebSocket on one port):**
 
 ```bash
-docker build -t paas2box .
-docker run --rm -p 8000:8000 -e PB_MIGRATE=1 paas2box
+docker build -t paashup .
+docker run --rm -p 8000:8000 -e PB_MIGRATE=1 paashup
 # then open http://localhost:8000/
 ```
 
@@ -95,8 +95,8 @@ docker run --rm -p 8000:8000 -e PB_MIGRATE=1 paas2box
 ```bash
 # Terminal 1 — backend (API + WebSocket on :8000)
 npm install && npm run build
-node scripts/migrate-sqlite.mjs ./paas2box.db          # create the SQLite schema (no Python)
-PB_SQLITE_FILE=./paas2box.db node dist/main.js
+node scripts/migrate-sqlite.mjs ./paashup.db          # create the SQLite schema (no Python)
+PB_SQLITE_FILE=./paashup.db node dist/main.js
 
 # Terminal 2 — Vue dev server (proxies /api and /api/ws to :8000)
 cd web && npm install && npm run dev                  # then open http://localhost:5173
@@ -188,7 +188,7 @@ five jobs: **test** (SQLite), **test-mariadb** (service container), **lint**
   **code→token exchange runs server-side** (a Backend-for-Frontend, `POST
   /api/auth/oidc/exchange/`). The backend holds any client secret, verifies the **id_token**
   against the issuer's JWKS, normalizes authorization, auto-provisions the user, and mints
-  a **paas2box token** the SPA uses for all API/WS calls — so the browser never holds a
+  a **paashup token** the SPA uses for all API/WS calls — so the browser never holds a
   provider secret or token. Authorization is per provider: **Keycloak** → a realm/client
   **role** grants write; **Google** → a **domain allowlist** gates login and an **email
   allowlist** grants write. Configure with `PB_OIDC_PROVIDERS=keycloak,google` and
@@ -200,10 +200,10 @@ five jobs: **test** (SQLite), **test-mariadb** (service container), **lint**
   [docs/SSO-API-ACCESS.md](docs/SSO-API-ACCESS.md).
 - **OpenAPI conformance** enforced by `test/contract.test.mjs` (validates live
   responses against the NetBox read schemas with `ajv`).
-- **Plugins** ([src/plugins/](src/plugins/)): third parties extend paas2box by
+- **Plugins** ([src/plugins/](src/plugins/)): third parties extend paashup by
   registering entity metadata (+ DDL) — the engine then exposes a full NetBox-shaped
   CRUD API under `/api/plugins/<name>/…` automatically — plus custom routes and write
-  hooks. Load via `PB_PLUGINS=<module,…>` or the `paas2box.plugins` key in
+  hooks. Load via `PB_PLUGINS=<module,…>` or the `paashup.plugins` key in
   `package.json` (loaded on startup, no config needed). See **Docker** below for a
   built-in example.
 - **Webhooks** ([src/webhooks.ts](src/webhooks.ts)): configurable HTTP webhooks fired
@@ -226,7 +226,7 @@ five jobs: **test** (SQLite), **test-mariadb** (service container), **lint**
     auth header; the password is redacted in the delivery log).
   - The change feed is also available live over a **WebSocket** at `/api/ws/`.
 - **Migrate from NetBox** ([src/plugins/netbox-migrate/](src/plugins/netbox-migrate/)): a
-  built-in plugin that imports a live NetBox instance into paas2box over the REST API —
+  built-in plugin that imports a live NetBox instance into paashup over the REST API —
   FK-dependency ordering, id remapping, and a live progress counter. Run it from the web
   UI (**NetBox Migrate** in the sidebar) or `POST /api/plugins/netbox-migrate/run/`. See
   **Migrate from NetBox** below.
@@ -237,7 +237,7 @@ A built-in plugin ([src/plugins/docker/](src/plugins/docker/)) manages Docker �
 of [SaaShup/netbox-docker-plugin](https://github.com/SaaShup/netbox-docker-plugin),
 designed to pair with the
 [netbox-docker-agent](https://github.com/SaaShup/netbox-docker-agent). It is **loaded by
-default** (via the `paas2box.plugins` key in `package.json`), so the endpoints are live
+default** (via the `paashup.plugins` key in `package.json`), so the endpoints are live
 out of the box and appear in the web UI under the **plugins** menu section.
 
 | Endpoint | Notes |
@@ -250,7 +250,7 @@ out of the box and appear in the web UI under the **plugins** menu section.
 | `/api/plugins/docker/containers/` | inline nested `ports`/`env`/`labels`/`mounts`/`binds`/`network_settings`/`devices`/`log_driver_options`/`sysctls` on **read and write**; cross-host integrity is validated; `GET {id}/logs/`, `POST {id}/exec/` proxy to the agent; `WS {id}/ws/` relays the agent's interactive exec stream (terminal) |
 
 Differences from the NetBox plugin (documented gaps): NetBox token + webhook
-auto-provisioning is dropped (paas2box has its own auth + a WebSocket change-feed); the
+auto-provisioning is dropped (paashup has its own auth + a WebSocket change-feed); the
 agent-driven container state machine is not enforced (`state`/`operation` are plain
 fields); `logs` is returned JSON-encoded (plugin responses are JSON-only). The nested
 container routes build absolute `url`s from `BASE_URL` (set it for parity with core
@@ -282,13 +282,13 @@ write failed — safe to retry. Keycloak is simulated by a local HTTP server in 
 ## Migrate from NetBox (built-in plugin)
 
 A built-in plugin ([src/plugins/netbox-migrate/](src/plugins/netbox-migrate/)) performs a
-one-shot import of a **live NetBox** instance into paas2box over the REST API. Because
-paas2box mirrors the NetBox API, each entity is read from the *same* endpoint on NetBox
+one-shot import of a **live NetBox** instance into paashup over the REST API. Because
+paashup mirrors the NetBox API, each entity is read from the *same* endpoint on NetBox
 and written locally — so the engine only has to handle the two hard parts:
 
 - **Dependency order** — entities are topologically sorted by their FK references, so a
   target (e.g. `Manufacturer`) is migrated before its dependants (`DeviceType`).
-- **Id remapping** — NetBox ids differ from the new paas2box ids, so a per-table id map
+- **Id remapping** — NetBox ids differ from the new paashup ids, so a per-table id map
   rewrites every FK; self- and forward-references are resolved in a final **link pass**.
 
 Objects are created **page by page** as they stream in (bounded memory, smooth progress);
@@ -331,7 +331,7 @@ reached, `400` for a missing url/token, `409` if a migration is already running)
 - **Plugin entities** (e.g. `plugin_docker_host`) are migrated only when named in `only`
   *and* present on the source NetBox (i.e. that plugin is installed there).
 - It is a **one-time import, not an upsert** — re-running against a database that already
-  holds the objects fails on unique constraints. Start from a fresh/empty paas2box DB.
+  holds the objects fails on unique constraints. Start from a fresh/empty paashup DB.
 - Verified end-to-end against a real **NetBox 4.6.2** (`netbox-docker`): 138 objects
   migrated, 0 failed. Tests: [test/netbox-migrate.test.mjs](test/netbox-migrate.test.mjs).
 

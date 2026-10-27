@@ -45,7 +45,7 @@ test('payload: status, single version (from package.json), node-version, plugins
   assert.equal(typeof body.plugins, 'object'); // NetBox-style {name: version} map
   assert.ok(!Array.isArray(body.plugins));
   // per review: no duplicate version field, and netbox-version is intentionally absent
-  assert.equal(body['paas2box-version'], undefined);
+  assert.equal(body['paashup-version'], undefined);
   assert.equal(body['netbox-version'], undefined);
 });
 

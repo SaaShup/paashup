@@ -1,8 +1,8 @@
-// Author-time type definitions for the paas2box plugin API. A plugin is plain data
-// + handler functions, so it needs NO runtime dependency on paas2box — the host
-// process provides everything. These types mirror paas2box's `src` (keep in sync
-// with github.com/SaaShup/paas2box if the contract evolves).
-declare module 'paas2box' {
+// Author-time type definitions for the paashup plugin API. A plugin is plain data
+// + handler functions, so it needs NO runtime dependency on paashup — the host
+// process provides everything. These types mirror paashup's `src` (keep in sync
+// with github.com/SaaShup/paashup if the contract evolves).
+declare module 'paashup' {
   // ---- database (passed to route handlers / hooks) ----
   export type Param = string | number | bigint | boolean | null | Uint8Array;
   export interface ExecResult {

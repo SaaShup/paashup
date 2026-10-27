@@ -51,18 +51,18 @@ test('exposes default Node + HTTP + DB + auth metrics in Prometheus format', asy
   assert.equal(m.status, 200);
   assert.match(m.ct, /text\/plain; version=0\.0\.4/);
   // default Node runtime metrics (prefixed)
-  assert.match(m.text, /paas2box_nodejs_/);
-  assert.match(m.text, /paas2box_process_/);
+  assert.match(m.text, /paashup_nodejs_/);
+  assert.match(m.text, /paashup_process_/);
   // HTTP metrics with the normalized route label (collection endpoint, not the raw path)
   assert.match(
     m.text,
-    /paas2box_http_requests_total\{[^}]*route="\/api\/dcim\/manufacturers\/"[^}]*\}/,
+    /paashup_http_requests_total\{[^}]*route="\/api\/dcim\/manufacturers\/"[^}]*\}/,
   );
-  assert.match(m.text, /paas2box_http_request_duration_seconds_bucket/);
+  assert.match(m.text, /paashup_http_request_duration_seconds_bucket/);
   // DB metrics from the list's SELECT
-  assert.match(m.text, /paas2box_db_query_duration_seconds_bucket\{[^}]*database="sqlite"/);
+  assert.match(m.text, /paashup_db_query_duration_seconds_bucket\{[^}]*database="sqlite"/);
   // auth: the wrong token recorded a token failure
-  assert.match(m.text, /paas2box_auth_attempts_total\{method="token",outcome="failure"\} [1-9]/);
+  assert.match(m.text, /paashup_auth_attempts_total\{method="token",outcome="failure"\} [1-9]/);
 });
 
 test('PB_METRICS=0 disables the endpoint (404)', async () => {

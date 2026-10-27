@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="84 47 328 275">
+  <style>.cls-1{fill:#7939d5}.cls-2{fill:#bb91f5}.cls-3{fill:#8950df}.cls-5{fill:#592aab}.cls-6{fill:#985ce8}.cls-7{fill:#ad7cf0}</style>
+      <polygon class="cls-2" points="248 55 326 91 248 128 170 91"/>
+      <polygon class="cls-6" points="170 91 248 128 248 203 170 166"/>
+      <polygon class="cls-7" points="248 128 326 91 326 166 248 203"/>
+      <polygon class="cls-2" points="170 166 248 203 170 241 92 203"/>
+      <polygon class="cls-6" points="92 203 170 241 170 314 92 277"/>
+      <polygon class="cls-3" points="170 241 248 203 248 276 170 314"/>
+      <polygon class="cls-2" points="326 166 404 203 326 241 248 203"/>
+      <polygon class="cls-1" points="248 203 326 241 326 314 248 276"/>
+      <polygon class="cls-5" points="326 241 404 203 404 277 326 314"/>
+      <path d="M248 203 L170 241 M248 203 L326 241" fill="none" stroke="#302058" stroke-opacity=".16" stroke-width="2"/>
+</svg>

@@ -1,6 +1,6 @@
-# paas2box web (Vue 3 + Vite + TypeScript + Pinia)
+# paashup web (Vue 3 + Vite + TypeScript + Pinia)
 
-A human-facing admin UI for paas2box. It's **schema-driven** — resources are
+A human-facing admin UI for paashup. It's **schema-driven** — resources are
 discovered from the API's own `/api/schema/` — and **live**: Pinia stores are kept
 up to date by the backend's WebSocket change-feed (`/api/ws/`), so creates/edits/
 deletes from anywhere (API, other tabs, automation) appear instantly.
@@ -26,7 +26,7 @@ src/
 
 ```bash
 # 1) run the backend (with the WebSocket feed, on by default)
-cd .. && PB_SQLITE_FILE=./paas2box.db PB_MIGRATE=1 npm run build && npm start
+cd .. && PB_SQLITE_FILE=./paashup.db PB_MIGRATE=1 npm run build && npm start
 # 2) run the UI (proxies /api and /api/ws to the backend)
 cd web && npm install && npm run dev    # http://localhost:5173
 ```
@@ -40,7 +40,7 @@ npm run build      # vue-tsc typecheck + vite build -> dist/
 ```
 
 Serve `dist/` with any static server (or behind the API). The UI calls the API
-same-origin, so put it on the same host/proxy as paas2box in production.
+same-origin, so put it on the same host/proxy as paashup in production.
 
 ## How "live" works
 
@@ -68,7 +68,7 @@ cd .. && PB_WEB_ROOT=web/dist npm start   # SPA at /, API at /api/, schema at /a
 ```
 
 The provided `Dockerfile` does this automatically (it builds `web/` and sets
-`PB_WEB_ROOT`), so `docker run paas2box` serves everything on port 8000.
+`PB_WEB_ROOT`), so `docker run paashup` serves everything on port 8000.
 
 ## Notes
 

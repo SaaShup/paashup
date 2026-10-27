@@ -1,6 +1,6 @@
 // Journal entries (extras_journalentry) attached to a Cloud, so connection tests and
 // synchronisations leave a trace in the UI's Logs — and to a VM, for what was done to it
-// through paasbox. Messages never contain credentials.
+// through paashup. Messages never contain credentials.
 import type { Db } from '../../db/types.js';
 import { emitVm } from './events.js';
 import { META } from './meta.js';

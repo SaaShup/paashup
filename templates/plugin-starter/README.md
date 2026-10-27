@@ -1,19 +1,19 @@
-# paas2box-plugin-example (starter template)
+# paashup-plugin-example (starter template)
 
-A starter for a **paas2box plugin** in its own repo. A plugin is a single
-default-exported `Plugin` object; the host paas2box turns its entity metadata into a
+A starter for a **paashup plugin** in its own repo. A plugin is a single
+default-exported `Plugin` object; the host paashup turns its entity metadata into a
 full NetBox-shaped CRUD API automatically, and also mounts its custom routes, fires
 its hooks, applies its migrations, and registers its custom fields.
 
-There is **no runtime dependency on paas2box** — the author-time types are vendored
-in [`types/paas2box.d.ts`](types/paas2box.d.ts), and the built plugin (plain JS) is
-loaded by a running paas2box host.
+There is **no runtime dependency on paashup** — the author-time types are vendored
+in [`types/paashup.d.ts`](types/paashup.d.ts), and the built plugin (plain JS) is
+loaded by a running paashup host.
 
 ## Use it
 
 ```bash
-cp -r templates/plugin-starter ~/paas2box-plugin-myapp   # from a paas2box checkout
-cd ~/paas2box-plugin-myapp
+cp -r templates/plugin-starter ~/paashup-plugin-myapp   # from a paashup checkout
+cd ~/paashup-plugin-myapp
 git init && npm install
 # edit src/index.ts (rename "example", replace the Widget entity with yours)
 npm run build        # -> dist/index.js
@@ -21,15 +21,15 @@ npm run build        # -> dist/index.js
 
 ## See it live
 
-Point any paas2box host at your built plugin with `PB_PLUGINS` (absolute path), then
-start it. Using a paas2box checkout:
+Point any paashup host at your built plugin with `PB_PLUGINS` (absolute path), then
+start it. Using a paashup checkout:
 
 ```bash
-cd /path/to/paas2box
+cd /path/to/paashup
 npm run build
 node scripts/migrate-sqlite.mjs ./dev.db              # core schema (no Python needed)
 PB_SQLITE_FILE=./dev.db \
-PB_PLUGINS=/abs/path/to/paas2box-plugin-myapp/dist/index.js \
+PB_PLUGINS=/abs/path/to/paashup-plugin-myapp/dist/index.js \
   node dist/main.js
 ```
 
@@ -42,8 +42,8 @@ Now:
 
 ## Ship it (so hosts auto-discover it)
 
-Publish as `paas2box-plugin-<name>`; a host discovers it when it's a dependency
-(`paas2box-plugin-*`) or listed in the host's `package.json` `paas2box.plugins`.
+Publish as `paashup-plugin-<name>`; a host discovers it when it's a dependency
+(`paashup-plugin-*`) or listed in the host's `package.json` `paashup.plugins`.
 
 ## The five extension points (see `src/index.ts`)
 
@@ -55,4 +55,4 @@ Publish as `paas2box-plugin-<name>`; a host discovers it when it's a dependency
 5. **customFields** — attach fields to core or plugin entities (stored in
    `custom_fields`), validated on write, defaulted on read.
 
-Porting an existing NetBox plugin? See `docs/PLUGIN-PORTING.md` in the paas2box repo.
+Porting an existing NetBox plugin? See `docs/PLUGIN-PORTING.md` in the paashup repo.

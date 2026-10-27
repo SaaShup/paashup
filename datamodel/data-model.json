@@ -14994,7 +14994,7 @@
           "required_on_create": false,
           "writable": true,
           "read_only": false,
-          "paas2box_extra": true
+          "paashup_extra": true
         },
         {
           "name": "dhcp_relays",
@@ -15004,7 +15004,7 @@
           "required_on_create": false,
           "writable": true,
           "read_only": false,
-          "paas2box_extra": true
+          "paashup_extra": true
         },
         {
           "name": "size",
@@ -18561,7 +18561,7 @@
           "required_on_create": false,
           "writable": true,
           "read_only": false,
-          "paas2box_extra": true
+          "paashup_extra": true
         },
         {
           "name": "primary_ip",

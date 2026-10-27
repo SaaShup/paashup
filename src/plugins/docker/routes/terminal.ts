@@ -1,12 +1,12 @@
 // Interactive container terminal, relayed over WebSocket:
 //
-//   browser ⇄ paasbox  /api/plugins/docker/containers/{id}/ws/?tty=true&command=sh
-//             paasbox ⇄ agent    POST {host.endpoint}/api/engine/containers/{cid}/ws
+//   browser ⇄ paashup  /api/plugins/docker/containers/{id}/ws/?tty=true&command=sh
+//             paashup ⇄ agent    POST {host.endpoint}/api/engine/containers/{cid}/ws
 //                                → { path } of a docker-exec-websocket-server stream
 //                                ws(s)://{agent}{path}?tty=…&command=…
 //
 // The browser can't reach the agent ( Basic-auth credentials in the
-// host endpoint), so paasbox completes the handshake with the browser first, then opens
+// host endpoint), so paashup completes the handshake with the browser first, then opens
 // the upstream stream and pipes binary frames both ways untouched. The frame protocol
 // (first byte = message code: stdin/stdout/stderr/resize/pause/resume/exit…) is the
 // agent's; the SPA speaks it directly. Failures after the handshake are reported as a

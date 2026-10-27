@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Seed a datacenter stack into a running paas2box and print a tree of what was created.
+# Seed a datacenter stack into a running paashup and print a tree of what was created.
 #
 # PATH 1 — bare-metal app (implemented):
 #   Region → Site → Room → Row → Rack → Physical Device → Operating System → Hosted App
@@ -18,7 +18,7 @@
 #     quoted in the JSON below because dcim/devices have UUID ids; everything else is int.)
 #
 # Requires BOTH plugins loaded on the server, e.g.:
-#   PB_PLUGINS="./dist/plugins/docker/index.js,/abs/path/paas2box-ISManager-plugin/dist/index.js"
+#   PB_PLUGINS="./dist/plugins/docker/index.js,/abs/path/paashup-ISManager-plugin/dist/index.js"
 #
 #   scripts/demo-fullstack.sh                  # against http://localhost:8000
 #   BASE=http://host:port scripts/demo-fullstack.sh

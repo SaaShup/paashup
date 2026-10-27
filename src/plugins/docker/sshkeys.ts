@@ -1,10 +1,10 @@
 // VM SSH keys: the authorized_keys file the agent of a VM manages
 // (http://<VM primary IP>:1880/api/ssh-keys — GET / POST {publicKey, revision} /
 // DELETE {id, revision}), reached with the agent credentials of PB_SSH_AGENT_USER /
-// PB_SSH_AGENT_PASSWORD, whether or not the VM is registered as a Docker host. paasbox
+// PB_SSH_AGENT_PASSWORD, whether or not the VM is registered as a Docker host. paashup
 // keeps what it last read in plugin_docker_vm_ssh_key, so the keys of every VM — and the
 // VMs a catalog key is on — are listed without asking the agents. That copy is refreshed
-// when the VMs' cloud is added or synced, and after each change made through paasbox, which
+// when the VMs' cloud is added or synced, and after each change made through paashup, which
 // is where the keys are managed; keys added or removed on the machine itself show up at the
 // next sync of its cloud.
 //
@@ -158,7 +158,7 @@ export async function serializeCatalogKey(db: Db, row: Row): Promise<Row> {
   const type = row.source_type ?? null;
   out.origin =
     type === null
-      ? 'paasbox'
+      ? 'paashup'
       : type === AGENT_SOURCE
         ? 'agent'
         : type === OPENSTACK_SOURCE
@@ -420,7 +420,7 @@ function agentError(r: AgentReply, field: string): PluginRouteResult {
   if (r.status === 404) return { status: 400, body: { virtual_machine: [DISABLED] } };
   if (r.status === 409) return { status: 409, body: { detail: message(r) } };
   if (r.status === 401 || r.status === 403) {
-    return { status: 502, body: { detail: `The agent refused paasbox (${r.status}).` } };
+    return { status: 502, body: { detail: `The agent refused paashup (${r.status}).` } };
   }
   return { status: 502, body: { detail: message(r) } };
 }
@@ -442,7 +442,7 @@ async function withRevision(
   for (let attempt = 0; ; attempt++) {
     const current = await agentCall(agent, 'GET');
     if (current.status !== 200) return current;
-    if (!isList(current.body)) return { status: 502, body: { message: 'Not a paasbox agent' } };
+    if (!isList(current.body)) return { status: 502, body: { message: 'Not a paashup agent' } };
     const r = await write(current.body as unknown as AgentList);
     if (r?.status !== 409 || attempt > 0) return r;
     const again = await agentCall(agent, 'GET');

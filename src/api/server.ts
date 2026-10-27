@@ -49,7 +49,7 @@ import { externalBaseUrl, applyOriginDefaults } from './origin.js';
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 const SWAGGER_UI_HTML = `<!doctype html>
-<html><head><meta charset="utf-8"><title>paas2box API</title>
+<html><head><meta charset="utf-8"><title>paashup API</title>
 <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist/swagger-ui.css"></head>
 <body><div id="swagger-ui"></div>
 <script src="https://unpkg.com/swagger-ui-dist/swagger-ui-bundle.js"></script>
@@ -334,7 +334,7 @@ const RESERVED_ROUTES = new Set(['docs', 'api-keys', 'plugin']);
 
 /**
  * Detect a leading mount prefix a reverse proxy forwards verbatim — e.g. Traefik's
- * `PathPrefix('/datacenter')` — so paasbox can be exposed
+ * `PathPrefix('/datacenter')` — so paashup can be exposed
  * under any subpath.
  */
 
@@ -479,7 +479,7 @@ export function createApiServer(opts: ServerOptions): http.Server {
         return send(res, 200, { login_required: !!opts.auth?.required, providers });
       }
       // BFF code exchange: the SPA posts the OIDC `code`; we exchange it server-side
-      // (holding any client secret) and return a paas2box token. Public — you're logging
+      // (holding any client secret) and return a paashup token. Public — you're logging
       // in — so it sits before the auth gate.
       if (method === 'POST' && path === '/api/auth/oidc/exchange/') {
         const b = (await readBody(req)) as {
@@ -737,7 +737,7 @@ export function createApiServer(opts: ServerOptions): http.Server {
         }
         // NetBox-style bulk delete: DELETE a list of objects (each carrying its id).
         // Lenient on purpose: ids that no longer exist are skipped (a client such as the
-        // Docker agent clears rows paasbox may already have purged), so it never 404s.
+        // Docker agent clears rows paashup may already have purged), so it never 404s.
         if (method === 'DELETE') {
           const body = await readBody(req);
           if (!Array.isArray(body)) {

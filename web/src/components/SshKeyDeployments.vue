@@ -99,7 +99,7 @@ async function remove(id: number): Promise<void> {
   const ok = await confirmDialog({
     title: 'Remove from VM',
     message:
-      `Remove ${row.ssh_key?.display ?? 'this key'} from ${vm}? Its agent deletes it from authorized_keys; the key stays in paasbox.` +
+      `Remove ${row.ssh_key?.display ?? 'this key'} from ${vm}? Its agent deletes it from authorized_keys; the key stays in paashup.` +
       (last ? '\n\nIt is the last key of this VM: key-based SSH access to it will be lost.' : ''),
     confirmLabel: 'Remove',
     tone: 'danger',

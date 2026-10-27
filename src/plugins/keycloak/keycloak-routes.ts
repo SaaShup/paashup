@@ -441,7 +441,7 @@ const redirectUrlRoutes: PluginRoute[] = [
 // ============================================================================
 // Instance sync routes — called by the orchestrator (e.g. nbdiu) after it
 // creates an instance and before it deletes one. Both are idempotent, and
-// self-contained: everything needed is in the body, paasbox has no knowledge
+// self-contained: everything needed is in the body, paashup has no knowledge
 // of the instance. Unregister must receive the same values as register (the
 // URLs are recomputed from them).
 // ============================================================================

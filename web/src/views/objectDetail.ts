@@ -80,7 +80,7 @@ export const DETAIL: Record<string, DetailConfig> = {
         load: byFk('virtual_machine_id'),
       },
       {
-        // what was done to the VM through paasbox (e.g. the SSH key it was launched with)
+        // what was done to the VM through paashup (e.g. the SSH key it was launched with)
         title: 'Journal',
         table: 'extras_journalentry',
         empty: 'No journal entries',

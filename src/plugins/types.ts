@@ -4,7 +4,7 @@ import type { CustomField } from '../customfields/types.js';
 import type { WebhookSeed } from '../webhooks.js';
 
 /**
- * A plugin extends paas2box without touching core. Because the API engine is
+ * A plugin extends paashup without touching core. Because the API engine is
  * metadata-driven, the main thing a plugin provides is **entity metadata** (which
  * the generic router/repository/serializer turn into a full NetBox-shaped CRUD API)
  * plus the SQL to create its tables. Plugins may also add custom routes and react

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Interactive container terminal (xterm.js) over paasbox's WebSocket relay
+// Interactive container terminal (xterm.js) over paashup's WebSocket relay
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { withCredential } from '../websocket/socket.js';
 import { BASE } from '../base.js';
@@ -13,7 +13,7 @@ import {
 } from '../xterm.js';
 
 const props = defineProps<{
-  /** paasbox WebSocket path, e.g. /api/plugins/docker/containers/1/ws/ (null → no container). */
+  /** paashup WebSocket path, e.g. /api/plugins/docker/containers/1/ws/ (null → no container). */
   wsPath: string | null;
   /** Docker ContainerID; null until the agent has created the container. */
   containerId: string | null;
@@ -180,7 +180,7 @@ function connect() {
     status.value = 'closed';
     ready = false;
     ws = null;
-    // application codes (4000+) carry a human-readable reason from paasbox
+    // application codes (4000+) carry a human-readable reason from paashup
     if (!notice.value) {
       notice.value =
         ev.reason ||

@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue';
+import { watch } from 'vue';
 import { useUiStore } from '../stores/ui.js';
 import type { Route } from '../router.js';
 import RouteLink from './RouteLink.vue';
 import { sectionLabel, isPage, type NavItem } from '../groups.js';
 
 const ui = useUiStore();
-const searchActive = computed(() => ui.search.trim() !== '');
 
 // Per-resource record counts shown as item badges — fetched once the catalog is
 // available (shared with the dashboard via the store; kept live by the change-feed).
@@ -35,10 +34,8 @@ const itemRoute = (it: NavItem): Route =>
     ? { view: 'plugin-page', plugin: it.plugin, label: it.label }
     : { view: 'list', table: it.table };
 
-// While searching, force everything open so matches are visible.
-const sectionOpen = (s: string) => searchActive.value || !!ui.expandedSections[s];
-const groupOpen = (section: string, label: string) =>
-  searchActive.value || !!ui.expandedGroups[`${section}::${label}`];
+const sectionOpen = (s: string) => !!ui.expandedSections[s];
+const groupOpen = (section: string, label: string) => !!ui.expandedGroups[`${section}::${label}`];
 </script>
 
 <template>
@@ -111,10 +108,10 @@ const groupOpen = (section: string, label: string) =>
 <style scoped>
 .sidebar {
   width: var(--sidebar-w);
-  background: var(--surface);
+  background: #fff;
   border-right: 1px solid var(--border);
   overflow-y: auto;
-  padding: 10px 8px 40px;
+  padding: 14px 10px 40px;
 }
 .group {
   margin-top: 2px;
@@ -127,15 +124,16 @@ const groupOpen = (section: string, label: string) =>
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--text);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  padding: 8px 10px;
-  border-radius: 6px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 10px 10px 6px;
+  border-radius: 8px;
 }
 .group-head:hover {
-  background: var(--surface-2);
+  color: var(--text);
 }
 .caret {
   width: 10px;
@@ -147,9 +145,9 @@ const groupOpen = (section: string, label: string) =>
 .count {
   margin-left: auto;
   font-weight: 600;
-  background: var(--surface-2);
-  color: var(--primary-d);
-  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 999px;
   padding: 0 7px;
   font-size: 0.72rem;
 }
@@ -165,16 +163,16 @@ const groupOpen = (section: string, label: string) =>
   border: none;
   cursor: pointer;
   text-align: left;
-  color: var(--secondary);
+  color: var(--primary);
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   padding: 6px 10px 6px 22px;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 .subhead:hover {
-  background: var(--surface-2);
+  background: var(--surface);
 }
 .nav-item {
   text-decoration: none;
@@ -184,10 +182,15 @@ const groupOpen = (section: string, label: string) =>
   background: none;
   border: none;
   cursor: pointer;
+  position: relative;
   color: var(--text);
   padding: 6px 12px 6px 26px;
-  border-radius: 6px;
+  margin: 1px 0;
+  border-radius: 8px;
   font-size: 0.88rem;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
 }
 /* label truncates so a long name never pushes the badge off-row */
 .nav-item .label {
@@ -201,26 +204,37 @@ const groupOpen = (section: string, label: string) =>
 .nav-item .count {
   flex: none;
   font-size: 0.7rem;
-  background: var(--surface-2);
 }
 .nav-item.active .count {
-  background: rgba(255, 255, 255, 0.25);
-  color: #fff;
+  background: #fff;
+  color: var(--primary-d);
 }
 .nav-item.deep {
   padding-left: 38px;
 }
 .nav-item.top {
   padding-left: 12px;
-  font-weight: 600;
-  margin-bottom: 6px;
+  font-weight: 550;
+  margin-bottom: 2px;
 }
 .nav-item:hover {
-  background: var(--surface-2);
+  background: var(--surface);
 }
 .nav-item.active {
+  background: var(--primary-soft);
+  color: var(--primary-d);
+  font-weight: 600;
+}
+/* accent bar on the active row */
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 3px;
   background: var(--primary);
-  color: #fff;
 }
 .ico {
   margin-right: 6px;

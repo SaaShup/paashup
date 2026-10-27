@@ -179,7 +179,7 @@ class MariaDB(Dialect):
 
 
 # ------------------------------------------------------------- helpers --------
-# When False, paas2box "extra" fields (added beyond the NetBox spec) are omitted —
+# When False, paashup "extra" fields (added beyond the NetBox spec) are omitted —
 # used so the 0001 initial migration stays as the base schema and extras ship as
 # their own incremental migrations (which also upgrade already-deployed databases).
 _INCLUDE_EXTRA = True
@@ -195,7 +195,7 @@ def persisted_fields(ent):
             continue
         if f["read_only"] and name not in TIMESTAMPS and not f.get("auto"):
             continue  # read-only, but server-auto fields (e.g. uuid) are persisted
-        if f.get("paas2box_extra") and not _INCLUDE_EXTRA:
+        if f.get("paashup_extra") and not _INCLUDE_EXTRA:
             continue
         col = name + "_id" if f["kind"] == "fk" else name
         yield f, col
@@ -384,7 +384,7 @@ def build(d, include_extra=True):
     global _INCLUDE_EXTRA
     _INCLUDE_EXTRA = include_extra
     parts = [
-        f"-- paas2box initial schema ({d.name}) — generated from data-model.json",
+        f"-- paashup initial schema ({d.name}) — generated from data-model.json",
         f"-- NetBox {MODEL.get('source')} compatible. Do not edit by hand; "
         f"run datamodel/build_schema.py.",
         d.header(),
@@ -410,7 +410,7 @@ def main():
     os.makedirs(os.path.join(ROOT, "datamodel", "sql"), exist_ok=True)
     os.makedirs(os.path.join(ROOT, "migrations"), exist_ok=True)
     for d in (SQLite(), MariaDB()):
-        # schema.<d>.sql = full current schema (incl. paas2box extras, used by tests)
+        # schema.<d>.sql = full current schema (incl. paashup extras, used by tests)
         full = build(d, include_extra=True)
         with open(os.path.join(ROOT, "datamodel", "sql", f"schema.{d.name}.sql"), "w") as f:
             f.write(full)

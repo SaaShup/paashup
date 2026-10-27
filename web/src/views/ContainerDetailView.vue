@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { useUiStore } from '../stores/ui.js';
+import { useConnectionStore } from '../stores/connection.js';
 import type { Route } from '../router.js';
 import RouteLink from '../components/RouteLink.vue';
 import { api, type Obj } from '../api/client.js';
@@ -20,14 +21,51 @@ import ObjectForm from '../components/ObjectForm.vue';
 import ContainerLogs from '../components/ContainerLogs.vue';
 import StatusPill from '../components/StatusPill.vue';
 import { pillFor } from '../format.js';
+import { confirmDialog } from '../composables/confirm.js';
 import ContainerTerminal from '../components/ContainerTerminal.vue';
 
 const ui = useUiStore();
+const connection = useConnectionStore();
 const resource = computed(() => ui.selected); // the container resource (endpoint/model/writable)
 const container = ref<Obj | null>(null);
 const loading = ref(false);
 const error = ref('');
 const editing = ref(false);
+
+// Lifecycle ops: PATCH the container's `operation`, which fires the agent webhook (the
+// agent performs the real action); the WebSocket 'updated' event then refreshes the state.
+const OP_BTNS = [
+  { op: 'start', label: 'Start', cls: 'op-start', danger: false },
+  { op: 'restart', label: 'Restart', cls: 'op-restart', danger: false },
+  { op: 'stop', label: 'Stop', cls: 'op-stop', danger: true },
+  { op: 'kill', label: 'Kill', cls: 'op-kill', danger: true },
+  { op: 'recreate', label: 'Recreate', cls: 'op-recreate', danger: true },
+] as const;
+const runningOp = ref<string | null>(null);
+
+async function runOp(op: string, danger: boolean) {
+  const r = resource.value;
+  const id = ui.detailId;
+  if (!r || id == null) return;
+  if (danger) {
+    const ok = await confirmDialog({
+      title: `Run "${op}"`,
+      message: `Run "${op}" on ${title.value || 'this container'}?`,
+      confirmLabel: 'Run',
+      tone: 'danger',
+    });
+    if (!ok) return;
+  }
+  runningOp.value = op;
+  error.value = '';
+  try {
+    await api.update(r.endpoint, id, { operation: op });
+  } catch (e) {
+    error.value = String(e);
+  } finally {
+    runningOp.value = null;
+  }
+}
 
 const get = (k: string): unknown => (container.value as Record<string, unknown> | null)?.[k];
 const title = computed(() => scalarText(get('display') ?? get('name')));
@@ -145,6 +183,18 @@ async function load() {
 }
 
 onMounted(load);
+watch(
+  () => connection.log[0],
+  (e) => {
+    if (!e || e.event !== 'updated' || !container.value) return;
+    if (e.table !== resource.value?.table || e.id !== ui.detailId) return;
+    const data = e.data as Record<string, unknown> | undefined;
+    if (!data) return;
+    const next: Record<string, unknown> = { ...container.value };
+    for (const s of CONTAINER_SCALARS) if (s.key in data) next[s.key] = data[s.key];
+    container.value = next as Obj;
+  },
+);
 watch(() => ui.detailId, load); // re-fetch if another container is opened
 
 // ---- tabs: Container (properties + collections) / Logs / Terminal ----------------------
@@ -193,7 +243,19 @@ async function onSaved() {
       <RouteLink v-if="backTo" class="btn btn-ghost" :to="backTo" back>‹ Back</RouteLink>
       <h2>{{ title || 'Container' }}</h2>
       <span class="spacer" />
-      <button v-if="resource.writable" class="btn btn-ok" @click="editing = true">Edit</button>
+      <template v-if="resource.writable && container">
+        <button
+          v-for="b in OP_BTNS"
+          :key="b.op"
+          class="btn op-btn"
+          :class="b.cls"
+          :disabled="runningOp !== null"
+          @click="runOp(b.op, b.danger)"
+        >
+          {{ runningOp === b.op ? `${b.label}…` : b.label }}
+        </button>
+      </template>
+      <button v-if="resource.writable" class="btn btn-ghost" @click="editing = true">Edit</button>
     </div>
 
     <p v-if="error" class="error">{{ error }}</p>

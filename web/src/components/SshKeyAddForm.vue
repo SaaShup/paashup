@@ -94,7 +94,7 @@ async function submit(): Promise<void> {
     try {
       await api.post(DEPLOY, { virtual_machine: vmId, ssh_key: keyId });
     } catch (e) {
-      fail(e, createdNow ? 'Key saved in paasbox, but not added to the VM: ' : '');
+      fail(e, createdNow ? 'Key saved in paashup, but not added to the VM: ' : '');
       return;
     }
     emit('saved');
@@ -158,7 +158,7 @@ const canSubmit = computed(() =>
                   choices.length
                     ? 'Choose…'
                     : byVm
-                      ? 'No other key in paasbox'
+                      ? 'No other key in paashup'
                       : 'No other VM with an IP'
                 }}
               </option>
@@ -196,6 +196,7 @@ const canSubmit = computed(() =>
   padding: 20px 24px;
   width: 520px;
   max-width: 92vw;
+  margin: auto 0; /* vertically centred; top-aligned (and scrollable) when taller than the screen */
 }
 h3 {
   margin-top: 0;

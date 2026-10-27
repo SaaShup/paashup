@@ -1,8 +1,8 @@
 // REAL Docker-in-Docker integration. Boots a `docker:dind` daemon and a stub agent
 // that DRIVES THAT REAL DOCKERD. Two paths are exercised:
-//   1. event-driven:  paasbox --(webhook: container created)--> agent --(docker run)--> dind
+//   1. event-driven:  paashup --(webhook: container created)--> agent --(docker run)--> dind
 //                            <--(callback: PATCH ContainerID)-- agent
-//   2. proxy actions: paasbox --(POST .../exec, GET .../logs, POST .../force_pull)-->
+//   2. proxy actions: paashup --(POST .../exec, GET .../logs, POST .../force_pull)-->
 //                     agent's /api/engine/* --(docker exec|logs|pull)--> dind
 // and asserts REAL effects inside dind (a running container, its real stdout/logs, a pulled image).
 //
@@ -33,7 +33,7 @@ const ENABLED = process.env.PB_DIND === '1';
 /** run a docker command INSIDE the dind daemon (i.e. drive the real engine) */
 const dind = (...args) => exec('docker', ['exec', DIND, 'docker', ...args], { timeout: 120000 });
 
-let db, server, base, paasboxBase, agent, agentBase, hostId, imageId, ready, webContainerId;
+let db, server, base, paashupBase, agent, agentBase, hostId, imageId, ready, webContainerId;
 
 if (!ENABLED) {
   test('dind integration (set PB_DIND=1 to run)', { skip: 'PB_DIND not set' }, () => {});
@@ -75,7 +75,7 @@ if (!ENABLED) {
           try {
             // event feed: provision the container for real, then report back
             if (req.url === '/webhook') {
-              console.log('  [agent] <- webhook call fired by paasbox; payload:');
+              console.log('  [agent] <- webhook call fired by paashup; payload:');
               console.log('    ' + JSON.stringify(body));
               if (body.model === 'plugins.dockercontainer' && body.event === 'created') {
                 const cid = `pbx_${body.object_id}`;
@@ -89,13 +89,13 @@ if (!ENABLED) {
                   '-c',
                   `echo READY-${body.data?.name}; sleep 300`,
                 );
-                await fetch(`${paasboxBase}/api/plugins/docker/containers/${body.object_id}/`, {
+                await fetch(`${paashupBase}/api/plugins/docker/containers/${body.object_id}/`, {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ ContainerID: cid }),
                 });
               }
-              console.log('  [agent] -> returning 200 to paasbox');
+              console.log('  [agent] -> returning 200 to paashup');
               res.writeHead(200);
               return res.end('ok');
             }
@@ -131,7 +131,7 @@ if (!ENABLED) {
     await new Promise((r) => agent.listen(0, '127.0.0.1', () => r()));
     agentBase = `http://127.0.0.1:${agent.address().port}`;
 
-    // 3) paasbox
+    // 3) paashup
     rmSync(DB, { force: true });
     db = new SqliteDb(DB);
     db.exec(readFileSync(join(ROOT, 'datamodel', 'sql', 'schema.sqlite.sql'), 'utf8'));
@@ -144,7 +144,7 @@ if (!ENABLED) {
     server = createApiServer({ db });
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
     base = `http://127.0.0.1:${server.address().port}`;
-    paasboxBase = base;
+    paashupBase = base;
 
     const wh = await pb('POST', '/api/extras/webhooks/', {
       name: 'docker-agent',
@@ -215,10 +215,10 @@ if (!ENABLED) {
     const { stdout } = await dind('ps', '--filter', `name=${cid}`, '--format', '{{.Names}}');
     assert.match(stdout, new RegExp(cid), `container not running in dind:\n${stdout}`);
 
-    // what paasbox recorded for the webhook delivery (the agent's return code)
+    // what paashup recorded for the webhook delivery (the agent's return code)
     const deliveries = await pb('GET', '/api/extras/webhook-deliveries/?ordering=-id&limit=1');
     const last = deliveries.results?.[0];
-    console.log('  [dind-test] docker agent returned (from paasbox delivery log):');
+    console.log('  [dind-test] docker agent returned (from paashup delivery log):');
     console.log(
       '    ' +
         JSON.stringify({

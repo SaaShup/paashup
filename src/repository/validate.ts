@@ -74,7 +74,7 @@ export function validateWrite(
   }
 
   // gateway must be a valid IP, and within [start_address, end_address] when both
-  // bounds are present (paas2box extension to IP ranges).
+  // bounds are present (paashup extension to IP ranges).
   if (byName.has('gateway') && typeof data.gateway === 'string' && data.gateway.trim() !== '') {
     const gw = ipToInt(data.gateway);
     if (gw === null) {
@@ -88,7 +88,7 @@ export function validateWrite(
     }
   }
 
-  // dhcp_relays must be a list of valid IP addresses (paas2box extension).
+  // dhcp_relays must be a list of valid IP addresses (paashup extension).
   if (byName.has('dhcp_relays') && data.dhcp_relays != null) {
     const v = data.dhcp_relays;
     if (!Array.isArray(v)) {

@@ -1,6 +1,6 @@
 # Migrations (no ORM)
 
-Plain-SQL schema migrations for paas2box, applied by a tiny runner. Two dialects:
+Plain-SQL schema migrations for paashup, applied by a tiny runner. Two dialects:
 **SQLite** (small customers) and **MariaDB** (big customers). Both are generated
 from `datamodel/data-model.json` by `datamodel/build_schema.py` — do not hand-edit
 `0001_initial.*`; add new migrations as higher-numbered files.
@@ -19,14 +19,14 @@ Files apply in ascending filename order. Applied versions are recorded in a
 
 ```bash
 # SQLite
-python migrations/migrate.py --dialect sqlite --database ./paas2box.db
+python migrations/migrate.py --dialect sqlite --database ./paashup.db
 
 # MariaDB (PyMySQL if installed, otherwise the mariadb/mysql CLI)
-python migrations/migrate.py --dialect mariadb --database paas2box \
-    --host 127.0.0.1 --port 3306 --user paas2box --password secret
+python migrations/migrate.py --dialect mariadb --database paashup \
+    --host 127.0.0.1 --port 3306 --user paashup --password secret
 
 # Show applied / pending without changing anything
-python migrations/migrate.py --dialect sqlite --database ./paas2box.db --status
+python migrations/migrate.py --dialect sqlite --database ./paashup.db --status
 ```
 
 Connection params also fall back to env vars: `DB_HOST DB_PORT DB_USER

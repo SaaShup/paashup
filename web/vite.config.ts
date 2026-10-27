@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
-// In dev, proxy the REST API and the WebSocket change-feed to the paas2box backend.
+// In dev, proxy the REST API and the WebSocket change-feed to the paashup backend.
 export default defineConfig({
   plugins: [vue()],
   server: {

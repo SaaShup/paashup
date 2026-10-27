@@ -31,14 +31,14 @@ const now = () => Math.floor(Date.now() / 1000);
 function claims(over = {}) {
   return {
     iss: issuer,
-    aud: 'paasbox',
+    aud: 'paashup',
     exp: now() + 300,
     iat: now(),
     preferred_username: 'alice',
     email: 'alice@example.com',
     given_name: 'Alice',
     family_name: 'Liddell',
-    realm_access: { roles: ['paasbox-write'] },
+    realm_access: { roles: ['paashup-write'] },
     ...over,
   };
 }
@@ -59,8 +59,8 @@ before(async () => {
   issuer = `http://127.0.0.1:${idp.address().port}`;
 
   process.env.PB_OIDC_ISSUER = issuer;
-  process.env.PB_OIDC_AUDIENCE = 'paasbox';
-  process.env.PB_OIDC_WRITE_ROLE = 'paasbox-write';
+  process.env.PB_OIDC_AUDIENCE = 'paashup';
+  process.env.PB_OIDC_WRITE_ROLE = 'paashup-write';
   _resetOidcCache();
 
   rmSync(DB, { force: true });
@@ -114,7 +114,7 @@ test('client roles (resource_access) are honored too', async () => {
       claims({
         preferred_username: 'carol',
         realm_access: { roles: [] },
-        resource_access: { paasbox: { roles: ['paasbox-write'] } },
+        resource_access: { paashup: { roles: ['paashup-write'] } },
       }),
     )}`,
   );

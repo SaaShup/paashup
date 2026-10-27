@@ -1,4 +1,4 @@
-// Example paas2box plugin: a small "inventory" app that adds its own entity
+// Example paashup plugin: a small "inventory" app that adds its own entity
 // (auto-CRUD under /api/plugins/inventory/assets/), a custom stats endpoint, and
 // a write hook. Demonstrates the full plugin surface in one file.
 import type { TableMeta } from '../../model/meta-types.js';

@@ -1,4 +1,4 @@
-// Dev helper: run paas2box behind a FAKE OIDC provider so you can click "Sign in"
+// Dev helper: run paashup behind a FAKE OIDC provider so you can click "Sign in"
 // in the browser and exercise the SSO login flow without standing up Keycloak.
 //
 //   npm run build && (cd web && npm run build)      # build backend + SPA once
@@ -6,8 +6,8 @@
 //
 // The fake IdP auto-approves login (no password page) and issues a signed RS256
 // token the backend verifies against its JWKS. Configure the fake identity with env:
-//   FAKE_USER=demo  FAKE_ROLES=paasbox-write  FAKE_EMAIL=demo@example.test
-//   PB_SQLITE_FILE=./paas2box.db  PORT=8000  PB_AUTH_REQUIRED=1
+//   FAKE_USER=demo  FAKE_ROLES=paashup-write  FAKE_EMAIL=demo@example.test
+//   PB_SQLITE_FILE=./paashup.db  PORT=8000  PB_AUTH_REQUIRED=1
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
@@ -22,12 +22,12 @@ import { discoverPluginSpecifiers } from '../dist/plugins/discovery.js';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT ?? 8000);
 const USER = process.env.FAKE_USER ?? 'demo';
-const ROLES = (process.env.FAKE_ROLES ?? 'paasbox-write')
+const ROLES = (process.env.FAKE_ROLES ?? 'paashup-write')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
 const EMAIL = process.env.FAKE_EMAIL ?? `${USER}@example.test`;
-const AUD = 'paasbox-spa';
+const AUD = 'paashup-spa';
 
 // --- fake OIDC provider (discovery + JWKS + auto-login + token) ---
 const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -103,13 +103,13 @@ const idp = http.createServer((req, res) => {
 await new Promise((r) => idp.listen(0, '127.0.0.1', r));
 idpUrl = `http://127.0.0.1:${idp.address().port}`;
 
-// --- paas2box, wired to the fake IdP ---
+// --- paashup, wired to the fake IdP ---
 process.env.PB_OIDC_ISSUER = idpUrl;
 process.env.PB_OIDC_AUDIENCE = AUD;
-process.env.PB_OIDC_WRITE_ROLE = 'paasbox-write';
+process.env.PB_OIDC_WRITE_ROLE = 'paashup-write';
 process.env.PB_OIDC_CLIENT_ID = AUD;
 
-const dbFile = process.env.PB_SQLITE_FILE ?? join(ROOT, 'paas2box.db');
+const dbFile = process.env.PB_SQLITE_FILE ?? join(ROOT, 'paashup.db');
 const db = new SqliteDb(dbFile);
 if (!existsSync(dbFile) || dbFile === ':memory:') {
   db.exec(readFileSync(join(ROOT, 'datamodel', 'sql', 'schema.sqlite.sql'), 'utf8'));
@@ -152,7 +152,7 @@ const server = createApiServer({
 await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
 
 console.log(`\n  fake OIDC provider : ${idpUrl}`);
-console.log(`  paas2box           : http://localhost:${PORT}/`);
+console.log(`  paashup           : http://localhost:${PORT}/`);
 console.log(`  will sign you in as : ${USER}  (roles: ${ROLES.join(', ') || 'none'})`);
 console.log(`  auth required       : ${process.env.PB_AUTH_REQUIRED === '1'}`);
 console.log(`\n  Open http://localhost:${PORT}/ and click "Sign in".  Ctrl-C to stop.\n`);

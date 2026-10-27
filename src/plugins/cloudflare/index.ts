@@ -1,5 +1,5 @@
-// paasbox-plugin-cloudflare — manage Cloudflare DNS (zone accounts + A/CNAME records)
-// through paasbox. A port of SaaShup/netbox-cloudflare-plugin to the paasbox plugin
+// paashup-plugin-cloudflare — manage Cloudflare DNS (zone accounts + A/CNAME records)
+// through paashup. A port of SaaShup/netbox-cloudflare-plugin to the paashup plugin
 // contract: it registers two entities (→ NetBox-shaped CRUD), ships dual-dialect DDL,
 // adds custom DnsRecord write routes that sync to the Cloudflare API (create/delete),
 // and imports a zone's existing records when a ZoneAccount is created.

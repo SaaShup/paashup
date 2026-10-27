@@ -1,6 +1,6 @@
 // Docker-agent proxy actions, ported from the source DRF @action endpoints. Each
 // proxies an HTTP call to the owning host's agent (`host.endpoint` + /api/engine/...)
-// and maps an upstream failure to 502. Note: paasbox's plugin response layer is
+// and maps an upstream failure to 502. Note: paashup's plugin response layer is
 // JSON-only, so `logs` text is returned JSON-encoded (the source used text/html).
 
 import type { Db } from '../../../db/types.js';

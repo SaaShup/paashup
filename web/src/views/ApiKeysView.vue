@@ -222,7 +222,7 @@ code {
 }
 .reveal {
   border-color: var(--primary);
-  background: #f0f9ff;
+  background: var(--primary-soft);
 }
 .reveal-row {
   display: flex;

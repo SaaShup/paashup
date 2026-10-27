@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Container logs panel, rendered in a read-only xterm.js so ANSI colours show like in a
-// terminal. Logs come from the agent through paasbox (GET …/containers/{id}/logs/),
+// terminal. Logs come from the agent through paashup (GET …/containers/{id}/logs/),
 // fetched when the panel is shown, on Refresh, or polled while "Follow" is on. The
 // section can go browser-fullscreen.
 import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue';
@@ -17,7 +17,7 @@ import {
 } from '../xterm.js';
 
 const props = defineProps<{
-  /** paasbox proxy path, e.g. /api/plugins/docker/containers/1/logs/ (null → no container). */
+  /** paashup proxy path, e.g. /api/plugins/docker/containers/1/logs/ (null → no container). */
   path: string | null;
   /** Docker ContainerID; null until the agent has created the container. */
   containerId: string | null;

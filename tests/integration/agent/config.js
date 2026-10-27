@@ -1,1 +1,1 @@
-{"netbox_url":"http://paasbox:8000","netbox_token":"e2e-token","ui":1,"id":"1","endpoint":"http://paasbox:8000","flows":"0"}
+{"netbox_url":"http://paashup:8000","netbox_token":"e2e-token","ui":1,"id":"1","endpoint":"http://paashup:8000","flows":"0"}

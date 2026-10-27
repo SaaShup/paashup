@@ -1,6 +1,6 @@
 # Deployment guide
 
-paas2box ships as a single container that serves **everything on one port**: the REST API
+paashup ships as a single container that serves **everything on one port**: the REST API
 at `/api/`, the OpenAPI schema at `/api/schema/`, the WebSocket change-feed at `/api/ws/`,
 and the built Vue SPA at `/`. SQLite is the default store (one file on a volume); MariaDB
 is supported for larger installs.
@@ -13,17 +13,17 @@ is supported for larger installs.
 ## Quick start (Docker, SQLite)
 
 ```bash
-docker build -t paas2box .
-docker run -d --name paas2box -p 8000:8000 \
+docker build -t paashup .
+docker run -d --name paashup -p 8000:8000 \
   -e PB_MIGRATE=1 \
   -e PB_SEED_TOKEN="$(openssl rand -hex 20)" \
-  -v paas2box-data:/data \
-  paas2box
+  -v paashup-data:/data \
+  paashup
 # then call the API with:  Authorization: Token <the value above>
 ```
 
 `PB_MIGRATE=1` applies the bundled SQLite migrations on boot (Node-native, no Python in the
-image). The DB persists in the `paas2box-data` volume at `/data/paas2box.db`.
+image). The DB persists in the `paashup-data` volume at `/data/paashup.db`.
 
 ## Environment variables
 
@@ -32,12 +32,12 @@ image). The DB persists in the `paas2box-data` volume at `/data/paas2box.db`.
 | Var | Default | Notes |
 |-----|---------|-------|
 | `PB_DIALECT` | `sqlite` | `sqlite` or `mariadb` |
-| `PB_SQLITE_FILE` | `/data/paas2box.db` (image) | SQLite file path |
+| `PB_SQLITE_FILE` | `/data/paashup.db` (image) | SQLite file path |
 | `PB_MIGRATE` | — | `1` → apply SQLite migrations on container start |
 | `DB_HOST` `DB_PORT` `DB_USER` `DB_PASSWORD` `DB_NAME` | — | MariaDB connection (`PB_DIALECT=mariadb`) |
 
 For MariaDB, run migrations separately (they are not auto-applied):
-`python3 migrations/migrate.py --dialect mariadb --database paas2box --host … --user … --password …`.
+`python3 migrations/migrate.py --dialect mariadb --database paashup --host … --user … --password …`.
 
 ### Server
 
@@ -52,7 +52,7 @@ For MariaDB, run migrations separately (they are not auto-applied):
 ### Metrics (Prometheus)
 
 `GET /metrics` exposes Prometheus metrics (`text/plain; version=0.0.4`): default Node
-runtime metrics plus HTTP (`paas2box_http_requests_total`, `…_request_duration_seconds`),
+runtime metrics plus HTTP (`paashup_http_requests_total`, `…_request_duration_seconds`),
 auth (`…_auth_attempts_total`, `…_logins_total`), and database
 (`…_db_query_duration_seconds`, `…_db_query_failures_total`, and — on MariaDB —
 `…_db_pool_connections`). The endpoint is **exempt from the API auth gate** so scrapers work.
@@ -67,9 +67,9 @@ Example scrape config:
 
 ```yaml
 scrape_configs:
-  - job_name: paas2box
+  - job_name: paashup
     static_configs:
-      - targets: ['paas2box:8000']
+      - targets: ['paashup:8000']
     # if PB_METRICS_USER/PASSWORD are set:
     # basic_auth: { username: prom, password: s3cret }
 ```
@@ -98,7 +98,7 @@ provider token. See [SSO-API-ACCESS.md](SSO-API-ACCESS.md) for headless/API acce
 | Var | Applies to | Notes |
 |-----|------------|-------|
 | `PB_OIDC_PROVIDERS` | — | Comma list of provider ids; omit to use the single legacy provider below |
-| `PB_OIDC_ISSUER` | all | Discovery base, e.g. `https://kc/realms/paasbox` or `https://accounts.google.com` |
+| `PB_OIDC_ISSUER` | all | Discovery base, e.g. `https://kc/realms/paashup` or `https://accounts.google.com` |
 | `PB_OIDC_CLIENT_ID` | all | OAuth client id |
 | `PB_OIDC_CLIENT_SECRET` | confidential clients | **Required for Google** (and any confidential client); held server-side only |
 | `PB_OIDC_AUDIENCE` | all | id_token `aud` to require (defaults to the client id) |
@@ -106,7 +106,7 @@ provider token. See [SSO-API-ACCESS.md](SSO-API-ACCESS.md) for headless/API acce
 | `PB_OIDC_WRITE_ROLE` | Keycloak | Realm/client role granting write (else read-only) |
 | `PB_OIDC_ALLOWED_DOMAINS` | Google | **Required** — comma list of email domains allowed to sign in (fail-closed) |
 | `PB_OIDC_WRITE_EMAILS` | Google | Comma list of emails granted write (others read-only) |
-| `PB_OIDC_SESSION_TTL_HOURS` | all | Lifetime of the paas2box token minted at login (default `12`) |
+| `PB_OIDC_SESSION_TTL_HOURS` | all | Lifetime of the paashup token minted at login (default `12`) |
 | `PB_OIDC_<ID>_KIND` / `_LABEL` / `_SCOPES` | per-provider | `oidc`\|`google` (inferred from issuer), button label, scopes (`openid profile email`) |
 
 Service-account `Authorization: Bearer <JWT>` (Keycloak) keeps working directly for
@@ -116,13 +116,13 @@ automation; static `Authorization: Token <key>` always works regardless of SSO.
 
 ```
 PB_OIDC_PROVIDERS=keycloak
-PB_OIDC_KEYCLOAK_ISSUER=https://kc.example.com/realms/paasbox
-PB_OIDC_KEYCLOAK_CLIENT_ID=paasbox
-PB_OIDC_KEYCLOAK_WRITE_ROLE=paasbox-write
-PB_OIDC_KEYCLOAK_AUDIENCE=paasbox
+PB_OIDC_KEYCLOAK_ISSUER=https://kc.example.com/realms/paashup
+PB_OIDC_KEYCLOAK_CLIENT_ID=paashup
+PB_OIDC_KEYCLOAK_WRITE_ROLE=paashup-write
+PB_OIDC_KEYCLOAK_AUDIENCE=paashup
 ```
 In Keycloak: a **public** client (Standard Flow on), redirect URI `https://<host>/*`, and a
-`paasbox-write` role assigned to users who should have write access.
+`paashup-write` role assigned to users who should have write access.
 
 #### Google (confidential client)
 
@@ -151,35 +151,35 @@ Use both providers together by setting `PB_OIDC_PROVIDERS=keycloak,google` and t
 | `PB_WEBHOOK_RETRIES` | `2` | Extra delivery attempts after the first (total tries = retries + 1) |
 | `PB_WEBHOOK_BACKOFF_MS` | `500` | Base backoff between attempts |
 | `PB_WEBHOOK_TIMEOUT_MS` | `8000` | Per-request timeout |
-| `PB_PLUGINS` | — | Extra plugin module specifiers (comma list), merged with `package.json` `paas2box.plugins` |
+| `PB_PLUGINS` | — | Extra plugin module specifiers (comma list), merged with `package.json` `paashup.plugins` |
 | `PB_CLOUDFLARE_BASE_URL` | Cloudflare API | Override for the Cloudflare plugin |
 
 ## docker-compose example
 
 ```yaml
 services:
-  paas2box:
-    image: paas2box
+  paashup:
+    image: paashup
     ports: ['8000:8000']
     environment:
       PB_MIGRATE: '1'
-      BASE_URL: https://paasbox.example.com
+      BASE_URL: https://paashup.example.com
       # bootstrap credential (or configure OIDC below)
       PB_SEED_TOKEN: ${PB_SEED_TOKEN}
       # SSO (Keycloak + Google)
       PB_OIDC_PROVIDERS: keycloak,google
-      PB_OIDC_KEYCLOAK_ISSUER: https://kc.example.com/realms/paasbox
-      PB_OIDC_KEYCLOAK_CLIENT_ID: paasbox
-      PB_OIDC_KEYCLOAK_WRITE_ROLE: paasbox-write
+      PB_OIDC_KEYCLOAK_ISSUER: https://kc.example.com/realms/paashup
+      PB_OIDC_KEYCLOAK_CLIENT_ID: paashup
+      PB_OIDC_KEYCLOAK_WRITE_ROLE: paashup-write
       PB_OIDC_GOOGLE_ISSUER: https://accounts.google.com
       PB_OIDC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       PB_OIDC_GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       PB_OIDC_GOOGLE_ALLOWED_DOMAINS: example.com
       PB_OIDC_GOOGLE_WRITE_EMAILS: admin@example.com
     volumes:
-      - paas2box-data:/data
+      - paashup-data:/data
 volumes:
-  paas2box-data:
+  paashup-data:
 ```
 
 ## Behind a reverse proxy / TLS

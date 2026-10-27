@@ -37,7 +37,7 @@ jobs:
         image: mariadb:11
         env:
           MARIADB_ROOT_PASSWORD: root
-          MARIADB_DATABASE: paas2box
+          MARIADB_DATABASE: paashup
         ports:
           - 3306:3306
         options: >-
@@ -48,7 +48,7 @@ jobs:
       DB_PORT: '3306'
       DB_USER: root
       DB_PASSWORD: root
-      DB_NAME: paas2box
+      DB_NAME: paashup
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -138,12 +138,12 @@ jobs:
           if-no-files-found: error
 
       - name: Build Docker image
-        run: docker build -t paas2box:ci .
+        run: docker build -t paashup:ci .
       - name: Smoke-test image (migrate + serve + request)
         run: |
           # Image is secure by default (PB_AUTH_REQUIRED=1); seed a known token to use.
           TOKEN=0123456789abcdef0123456789abcdef01234567
-          docker run -d --name pbx -e PB_MIGRATE=1 -e PB_SEED_TOKEN=$TOKEN -p 8000:8000 paas2box:ci
+          docker run -d --name pbx -e PB_MIGRATE=1 -e PB_SEED_TOKEN=$TOKEN -p 8000:8000 paashup:ci
           for i in $(seq 1 30); do
             code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Token $TOKEN" localhost:8000/api/dcim/manufacturers/ || echo 000)
             if [ "$code" = "200" ]; then echo "API up (HTTP $code)"; break; fi

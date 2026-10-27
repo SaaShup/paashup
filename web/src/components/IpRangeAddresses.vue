@@ -216,6 +216,7 @@ async function save(row: { ip: string; existing: Obj | null }) {
   padding: 18px 20px;
   width: 860px;
   max-width: 94vw;
+  margin: auto 0; /* vertically centred; top-aligned (and scrollable) when taller than the screen */
 }
 .ph {
   display: flex;

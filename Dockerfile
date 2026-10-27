@@ -23,7 +23,7 @@ FROM node:24-slim AS runtime
 ENV NODE_ENV=production \
     PORT=8000 \
     PB_DIALECT=sqlite \
-    PB_SQLITE_FILE=/data/paas2box.db \
+    PB_SQLITE_FILE=/data/paashup.db \
     PB_WEB_ROOT=/app/web
 # ── Auth / SSO (set these at `docker run`/compose/Helm) ───────────────────────────
 # Secure by default: PB_AUTH_REQUIRED=1 rejects unauthenticated requests. Provision a

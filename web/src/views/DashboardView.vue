@@ -180,16 +180,18 @@ watch(
   gap: 16px;
 }
 .card {
-  background: var(--surface);
+  background: #fff;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 16px 22px;
-  min-width: 120px;
+  border-radius: 14px;
+  padding: 18px 22px;
+  min-width: 140px;
+  box-shadow: var(--shadow);
 }
 .num {
   font-size: 2rem;
-  font-weight: 700;
-  color: var(--primary-d);
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  color: var(--text);
 }
 .lbl {
   color: var(--muted);
@@ -208,8 +210,8 @@ watch(
   border: 1px solid var(--border);
   background: #fff;
   color: var(--text);
-  border-radius: 6px;
-  padding: 5px 10px;
+  border-radius: 999px;
+  padding: 5px 12px;
   cursor: pointer;
   font-size: 0.82rem;
 }
@@ -227,13 +229,19 @@ watch(
   text-align: left;
   background: #fff;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 14px 16px;
   cursor: pointer;
-  transition: border-color 0.12s;
+  box-shadow: var(--shadow);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
 }
 .usage-card:hover {
-  border-color: var(--primary);
+  border-color: #d1d5db;
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-1px);
 }
 .usage-card.expandable {
   border-left: 4px solid var(--primary);

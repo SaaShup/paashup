@@ -1,6 +1,6 @@
 // Dual-dialect DDL for the Docker plugin's 15 tables, ported from the Django
 // migrations of netbox_docker_plugin. Applied (and tracked in `schema_migrations`
-// as `plugin:docker:0001_initial`) by paasbox's `loadPlugins`.
+// as `plugin:docker:0001_initial`) by paashup's `loadPlugins`.
 //
 // FK on-delete mirrors the source models: hosts cascade to their registries/images/
 // volumes/networks/containers; containers cascade to their child rows; container→image,
@@ -415,7 +415,7 @@ export const HOST_TOKEN_MIGRATION: PluginMigration = {
   mariadb: tokenMariadb,
 };
 
-// The public keys found in the authorized_keys file the agent of a VM manages: what paasbox
+// The public keys found in the authorized_keys file the agent of a VM manages: what paashup
 // last read from the agent, not a desired state. A key matching an SSH key of the catalog
 // (same fingerprint) points to it; the others ("unknown", added on the machine) don't.
 const sshKeySqlite = `

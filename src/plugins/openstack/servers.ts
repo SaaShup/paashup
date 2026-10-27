@@ -1,4 +1,4 @@
-// Create and delete VMs on OpenStack from paasbox.
+// Create and delete VMs on OpenStack from paashup.
 //
 // Create: validate the request, check the quotas, make sure the chosen SSH key exists as a
 // Nova keypair of the region or uploaded, then boot the server from an image.
@@ -33,7 +33,7 @@ interface CloudRow extends CloudConfig {
   name: string;
 }
 
-export type SshKeyChoice = { source: 'cloud'; name: string } | { source: 'paasbox'; id: number };
+export type SshKeyChoice = { source: 'cloud'; name: string } | { source: 'paashup'; id: number };
 
 export interface CreateInput {
   region: string;
@@ -123,8 +123,8 @@ export function parseCreate(body: unknown): CreateInput {
   const k = (b.ssh_key ?? {}) as Record<string, unknown>;
   let sshKey: SshKeyChoice | undefined;
   if (k.source === 'cloud' && str(k.name)) sshKey = { source: 'cloud', name: str(k.name) };
-  else if (k.source === 'paasbox' && Number.isInteger(Number(k.id)) && Number(k.id) > 0) {
-    sshKey = { source: 'paasbox', id: Number(k.id) };
+  else if (k.source === 'paashup' && Number.isInteger(Number(k.id)) && Number(k.id) > 0) {
+    sshKey = { source: 'paashup', id: Number(k.id) };
   }
   need('ssh_key', !!sshKey, 'Choose the SSH key to launch the VM with.');
 
@@ -215,7 +215,7 @@ interface ResolvedKey {
 }
 
 /**
- * The Nova keypair to launch with. A key of the cloud must exist in the region; a paasbox
+ * The Nova keypair to launch with. A key of the cloud must exist in the region; a paashup
  * key is registered there first. Nothing is renamed: a keypair of that name holding another
  * key is an error.
  */
@@ -250,7 +250,7 @@ async function resolveKey(
     if (!samePublicKey(same.publicKey, row.public_key)) {
       throw fieldError(
         'ssh_key',
-        `A keypair named "${row.name}" already exists in region ${region} with a different public key. Rename the key in paasbox, or delete that keypair in OpenStack.`,
+        `A keypair named "${row.name}" already exists in region ${region} with a different public key. Rename the key in paashup, or delete that keypair in OpenStack.`,
       );
     }
     return { name: row.name, publicKey: row.public_key };
@@ -283,7 +283,7 @@ async function checkQuota(
 
 export interface Launched {
   server_id: string;
-  /** the VM it became in paasbox; null if it could not be imported right away */
+  /** the VM it became in paashup; null if it could not be imported right away */
   vm_id: number | null;
   region: string;
   ssh_key: string;
@@ -319,7 +319,7 @@ export async function launchServer(db: Db, cloud: CloudRow, input: CreateInput):
     `Server "${input.name}" requested in ${input.region} (flavor ${flavor.name}, SSH key "${key.name}").`,
   );
 
-  // the VM exists in paasbox as soon as the request is answered, still building
+  // the VM exists in paashup as soon as the request is answered, still building
   let vmId: number | null = null;
   try {
     vmId = await importServer(db, cloud.id, input.region, serverId);
@@ -343,7 +343,7 @@ export async function launchServer(db: Db, cloud: CloudRow, input: CreateInput):
 
 /** The permanent record of what a VM was launched with: the key's name and the whole key. */
 const launchedWith = (cloud: CloudRow, region: string, key: ResolvedKey): string =>
-  `Launched through paasbox on OpenStack cloud "${cloud.name}" (region ${region}) with SSH key "${key.name}":\n${key.publicKey}`;
+  `Launched through paashup on OpenStack cloud "${cloud.name}" (region ${region}) with SSH key "${key.name}":\n${key.publicKey}`;
 
 /**
  * What a VM's journal says of its init script: its name and the variables that were changed,
@@ -430,7 +430,7 @@ async function serverOfVm(db: Db, vmId: number): Promise<{ link: Link; cloud: Cl
     [vmId],
   );
   if (!link) {
-    throw new ApiError(404, 'This VM is not a server of an OpenStack cloud known to paasbox.');
+    throw new ApiError(404, 'This VM is not a server of an OpenStack cloud known to paashup.');
   }
   const cloud = await db.get<CloudRow>(`SELECT * FROM ${T.cloud} WHERE id = ?`, [link.cloud_id]);
   if (!cloud) throw new ApiError(404, 'The OpenStack cloud of this VM is gone.');

@@ -1,9 +1,9 @@
-// NetBox → paasbox migration engine. Because paasbox mirrors the NetBox API, each
+// NetBox → paashup migration engine. Because paashup mirrors the NetBox API, each
 // core entity is migrated by GETting the *same* endpoint from NetBox and creating the
 // objects locally. Two hard parts are handled here:
 //   1. dependency order — entities are topologically sorted by their FK references so
 //      a target (e.g. Manufacturer) is migrated before its dependants (DeviceType);
-//   2. id remapping — NetBox ids differ from the new paasbox ids, so an id map per
+//   2. id remapping — NetBox ids differ from the new paashup ids, so an id map per
 //      table rewrites every FK. Self-references and forward references are resolved in
 //      a final "link" pass once every id is known.
 // Progress is tracked live: a count pass tallies the total up front, then `migrated`
@@ -125,7 +125,7 @@ export function orderedEntities(only?: Set<string>): TableMeta[] {
 const nbIdOf = (v: unknown): Id | null =>
   v == null ? null : typeof v === 'object' ? ((v as { id?: Id }).id ?? null) : (v as Id);
 
-/** Build a paasbox create payload from a NetBox object; defer FKs not yet mapped. */
+/** Build a paashup create payload from a NetBox object; defer FKs not yet mapped. */
 function transform(
   meta: TableMeta,
   nbObj: Obj,

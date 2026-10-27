@@ -301,7 +301,7 @@ export function buildOpenApi(): Schema {
   return {
     openapi: '3.0.3',
     info: {
-      title: 'paas2box REST API',
+      title: 'paashup REST API',
       version: NETBOX_VERSION,
       description:
         'NetBox-compatible API (DCIM, IPAM, Virtualization) — generated from the live registry.',
@@ -504,7 +504,7 @@ function addCustomEndpoints(paths: Schema, schemas: Schema): void {
       tags: ['auth'],
       operationId: 'auth_oidc_exchange',
       security: [],
-      summary: 'Exchange an OIDC authorization code for a paas2box token.',
+      summary: 'Exchange an OIDC authorization code for a paashup token.',
       requestBody: { required: true, ...json(ref('OidcExchangeRequest')) },
       responses: {
         200: { description: '', ...json(ref('OidcExchangeResult')) },

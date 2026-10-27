@@ -1,32 +1,32 @@
-# Porting a NetBox plugin to paas2box
+# Porting a NetBox plugin to paashup
 
 This is a self-contained guide (and handoff doc) for turning an existing **NetBox
-plugin** into a **paas2box plugin**. It assumes no prior context beyond this file
-plus the paas2box plugin contract in [`../src/plugins/`](../src/plugins/) and the
+plugin** into a **paashup plugin**. It assumes no prior context beyond this file
+plus the paashup plugin contract in [`../src/plugins/`](../src/plugins/) and the
 worked example [`../src/plugins/examples/inventory.ts`](../src/plugins/examples/inventory.ts).
 
 ## Mental model
 
 NetBox plugins are Django apps: models + migrations + serializers + viewsets + URLs
-+ signals + templates. paas2box is **metadata-driven and ORM-free**, so most of that
++ signals + templates. paashup is **metadata-driven and ORM-free**, so most of that
 collapses: you describe your **entities as metadata** and ship the **SQL** to create
 them; the generic engine produces the REST API (CRUD, pagination, filtering, nested
 FKs, `{value,label}` choices, validation, OpenAPI schema, and the live UI) for free.
 
-A paas2box plugin is **one module that default-exports a `Plugin` object** and has
-**no runtime dependency on paas2box** (the host provides everything). Author-time
-types are vendored (see the starter template) or imported from paas2box.
+A paashup plugin is **one module that default-exports a `Plugin` object** and has
+**no runtime dependency on paashup** (the host provides everything). Author-time
+types are vendored (see the starter template) or imported from paashup.
 
 ## Where it lives
 
-Its own repo, `paas2box-plugin-<name>`. Start from
+Its own repo, `paashup-plugin-<name>`. Start from
 [`../templates/plugin-starter/`](../templates/plugin-starter/): copy it out, `npm
 install`, edit `src/index.ts`, `npm run build`, then load into a host with
 `PB_PLUGINS=/abs/path/dist/index.js` (or publish it and let discovery find it).
 
 ## Mapping
 
-| NetBox | paas2box |
+| NetBox | paashup |
 |--------|---------|
 | `models.py` model | one `entities[].meta` (`TableMeta`) **+** a `migrations[]` entry (per-dialect `CREATE TABLE`) |
 | model field | a `columns[]` entry (`tsKind`, `nullable`, `writable`, `required`, `maxLength`) |
@@ -46,7 +46,7 @@ install`, edit `src/index.ts`, `npm run build`, then load into a host with
 ## Step by step
 
 1. **Scaffold.** Copy `templates/plugin-starter` → new repo; set `name` to
-   `paas2box-plugin-<name>` and the `NAME`/endpoints in `src/index.ts`.
+   `paashup-plugin-<name>` and the `NAME`/endpoints in `src/index.ts`.
 2. **Entities.** For each NetBox model, write a `TableMeta`:
    - `table`: `plugin_<name>_<thing>`; `endpoint`: `/api/plugins/<name>/<things>/`;
      `objectType`: `plugins.<thing>`; `origin: 'plugin'`.
@@ -67,15 +67,15 @@ install`, edit `src/index.ts`, `npm run build`, then load into a host with
 7. **Build & run.** `npm run build`, then load via `PB_PLUGINS` and exercise
    `/api/plugins/<name>/…`; confirm it shows in `/api/schema/` and the UI.
 
-## What does NOT port (and the paas2box alternative)
+## What does NOT port (and the paashup alternative)
 
-- **Templates / UI views / forms / navigation** — the paas2box UI auto-generates
+- **Templates / UI views / forms / navigation** — the paashup UI auto-generates
   list/detail/create/edit from the schema; you get UI for free, but bespoke pages
   aren't a plugin concern yet.
 - **Background jobs / RQ workers** — not built in; do async work in a hook or an
   external worker hitting the API.
 - **GraphQL** — not supported.
-- **Permissions/RBAC** — paas2box has token auth (read-only vs read-write); NetBox's
+- **Permissions/RBAC** — paashup has token auth (read-only vs read-write); NetBox's
   object-level permissions don't have an equivalent yet.
 
 ## Gotchas
@@ -95,8 +95,8 @@ install`, edit `src/index.ts`, `npm run build`, then load into a host with
 
 In the new plugin repo, start a thread and say:
 
-> Port this NetBox plugin to a paas2box plugin. The contract is documented at
-> github.com/SaaShup/paas2box — read `docs/PLUGIN-PORTING.md`,
+> Port this NetBox plugin to a paashup plugin. The contract is documented at
+> github.com/SaaShup/paashup — read `docs/PLUGIN-PORTING.md`,
 > `src/plugins/README.md`, `src/plugins/examples/inventory.ts`, and the type files
 > under `src/plugins/` and `src/model/meta-types.ts`. I started from
 > `templates/plugin-starter`. Here is my NetBox plugin: «paste models.py / views /

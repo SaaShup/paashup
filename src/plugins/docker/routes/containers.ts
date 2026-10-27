@@ -28,7 +28,7 @@ const hasId = (v: unknown): boolean =>
 
 /**
  * Resolve a FK descriptor sent with a Docker-agent natural key — an image by its
- * Docker `ImageID`, a network/volume by `name` — to the matching paasbox row id,
+ * Docker `ImageID`, a network/volume by `name` — to the matching paashup row id,
  * scoped to the container's host. Values already carrying an `id` (or a bare
  * id/number) are returned untouched for the generic FK handling to coerce.
  */
@@ -54,7 +54,7 @@ async function resolveRef(
     // The agent observed this resource on the host (e.g. a container's anonymous volume
     // or its network), so register it by name — other columns take their defaults — and
     // link the container to it. Avoids failing a sync just because the volume/network
-    // row hasn't been created in paasbox yet.
+    // row hasn't been created in paashup yet.
     const res = await db.execute(
       `INSERT INTO ${ident(table)} (host_id, ${ident(keyColumn)}) VALUES (?, ?)`,
       [hostId, key],

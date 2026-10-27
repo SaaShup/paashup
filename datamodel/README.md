@@ -1,6 +1,6 @@
 # Data Model (DCIM · IPAM · Virtualization)
 
-Database data model for paas2box, derived from the NetBox-compatible OpenAPI spec
+Database data model for paashup, derived from the NetBox-compatible OpenAPI spec
 in [`../openapi/`](../openapi/). **No ORM** — the model generates raw SQL DDL for
 two engines: **SQLite** (small customers) and **MariaDB** (big customers) from a
 single source of truth.

@@ -1,4 +1,4 @@
-// paasbox-plugin-openstack — connect paasbox to an OpenStack cloud. A Cloud entity holds
+// paashup-plugin-openstack — connect paashup to an OpenStack cloud. A Cloud entity holds
 // the Keystone credentials + region; creating it (or PATCHing operation=refresh) imports
 // the cloud's flavors, servers and IPs into the core virtualization / IPAM tables.
 // Saving tests the connection first (a failure is shown in the form); read routes expose flavors, volumes, networks, security groups and quotas for pickers.

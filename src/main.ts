@@ -1,5 +1,5 @@
 // Entry point: start the HTTP API. Configure via environment:
-//   PB_DIALECT=sqlite  PB_SQLITE_FILE=./paas2box.db
+//   PB_DIALECT=sqlite  PB_SQLITE_FILE=./paashup.db
 //   PB_DIALECT=mariadb DB_HOST=.. DB_PORT=.. DB_USER=.. DB_PASSWORD=.. DB_NAME=..
 //   PORT=8000  BASE_URL=http://localhost:8000
 import { isAbsolute, resolve } from 'node:path';
@@ -15,9 +15,9 @@ import type { Plugin } from './plugins/types.js';
 
 /**
  * Resolve a plugin specifier for `import()`. Relative/absolute paths (e.g. a
- * `paas2box.plugins` entry like `./dist/plugins/docker/index.js`) are resolved
+ * `paashup.plugins` entry like `./dist/plugins/docker/index.js`) are resolved
  * against the project root (cwd), not this module's location under `dist/`; bare
- * package specifiers (`paas2box-plugin-foo`) are imported as-is.
+ * package specifiers (`paashup-plugin-foo`) are imported as-is.
  */
 function resolveSpecifier(spec: string): string {
   return spec.startsWith('.') || isAbsolute(spec)
@@ -28,7 +28,7 @@ function resolveSpecifier(spec: string): string {
 function configFromEnv(): DbConfig {
   const dialect = (process.env.PB_DIALECT ?? 'sqlite') as 'sqlite' | 'mariadb';
   if (dialect === 'sqlite') {
-    return { dialect, filename: process.env.PB_SQLITE_FILE ?? './paas2box.db' };
+    return { dialect, filename: process.env.PB_SQLITE_FILE ?? './paashup.db' };
   }
   return {
     dialect,
@@ -36,7 +36,7 @@ function configFromEnv(): DbConfig {
     port: process.env.DB_PORT ? Number(process.env.DB_PORT) : undefined,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME ?? 'paas2box',
+    database: process.env.DB_NAME ?? 'paashup',
   };
 }
 
@@ -45,7 +45,7 @@ const baseUrl = process.env.BASE_URL ?? `http://localhost:${port}`;
 const db = createDb(configFromEnv());
 
 // Load plugins before the server is created, so their entities/routes are part of
-// the routing table. Sources: package.json (`paas2box.plugins` + `paas2box-plugin-*`
+// the routing table. Sources: package.json (`paashup.plugins` + `paashup-plugin-*`
 // deps) merged with the PB_PLUGINS env list.
 const pluginPaths = [
   ...discoverPluginSpecifiers(process.cwd()),
@@ -96,7 +96,7 @@ const server = createApiServer({
 });
 
 server.listen(port, () => {
-  console.log(`paas2box API listening on ${baseUrl}`);
+  console.log(`paashup API listening on ${baseUrl}`);
 });
 
 // Graceful shutdown on Ctrl+C (SIGINT) and SIGTERM (e.g. `docker stop`, systemd).

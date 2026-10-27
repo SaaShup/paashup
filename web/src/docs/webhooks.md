@@ -1,6 +1,6 @@
 # Webhooks & realtime
 
-paas2box can notify other systems whenever objects change — either by **pushing HTTP
+paashup can notify other systems whenever objects change — either by **pushing HTTP
 webhooks**, or by **streaming a live feed** over WebSocket.
 
 ## Webhooks
@@ -88,7 +88,7 @@ flexible option: bearer tokens, API keys, Basic auth, etc.
 Authorization: Basic dXNlcjpwYXNzd29yZA==   (base64 of "user:password")
 ```
 
-**2. Credentials in the URL — `http://user:password@host`.** paas2box turns the
+**2. Credentials in the URL — `http://user:password@host`.** paashup turns the
 `user:password@` part into a `Basic` `Authorization` header automatically and fetches
 the cleaned URL (a bare `fetch` rejects URLs that embed credentials). Percent-encoded
 userinfo is decoded (`p%40ss` → `p@ss`).
@@ -112,9 +112,9 @@ Notes:
   and error logs, so it isn't exposed via the read-only deliveries API. Values in
   `additional_headers` are stored as configured — treat the webhook as sensitive.
 
-### Signing (verify it really came from paas2box)
+### Signing (verify it really came from paashup)
 
-If a `secret` is set, paas2box adds an `X-Hook-Signature` header — the **HMAC-SHA512**
+If a `secret` is set, paashup adds an `X-Hook-Signature` header — the **HMAC-SHA512**
 of the exact request body. Recompute it on your side with the same secret and compare.
 
 ### Conditions (fire only when it matters)

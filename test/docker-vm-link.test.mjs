@@ -263,7 +263,7 @@ test('deleting a VM deletes its Docker host with what it discovered, and only th
   assert.equal((await api('GET', `${HOSTS}${free}/`)).status, 200, 'a host with no VM is left');
 });
 
-test('deleting a VM paasbox created on OpenStack deletes its Docker host too', async () => {
+test('deleting a VM paashup created on OpenStack deletes its Docker host too', async () => {
   const gra = region({
     images: [{ id: 'img-ubuntu', name: 'Ubuntu 24.04' }],
     keypairs: [

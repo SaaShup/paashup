@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Minimal no-ORM migration runner for paas2box (SQLite + MariaDB).
+"""Minimal no-ORM migration runner for paashup (SQLite + MariaDB).
 
 Migrations are plain SQL files in this directory named:
 
@@ -12,14 +12,14 @@ table so re-running only applies what's pending.
 
 Usage:
     # SQLite (small customers)
-    python migrate.py --dialect sqlite --database /path/to/paas2box.db [--status]
+    python migrate.py --dialect sqlite --database /path/to/paashup.db [--status]
 
     # MariaDB (big customers) — uses PyMySQL if installed, else the mariadb/mysql CLI
-    python migrate.py --dialect mariadb --database paas2box \
+    python migrate.py --dialect mariadb --database paashup \
         --host 127.0.0.1 --port 3306 --user root --password secret
 
     # Just show what is applied / pending
-    python migrate.py --dialect sqlite --database paas2box.db --status
+    python migrate.py --dialect sqlite --database paashup.db --status
 
 Environment fallbacks: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, DB_SOCKET.
 """
@@ -220,7 +220,7 @@ def report(migs, applied):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="paas2box no-ORM migration runner")
+    ap = argparse.ArgumentParser(description="paashup no-ORM migration runner")
     ap.add_argument("--dialect", required=True, choices=["sqlite", "mariadb"])
     ap.add_argument("--database", help="sqlite file path, or mariadb database name")
     ap.add_argument("--status", action="store_true", help="show applied/pending and exit")

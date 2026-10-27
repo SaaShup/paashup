@@ -271,7 +271,7 @@ test('a sync stores the keys of each VM and imports the unknown ones into the ca
 test('a catalog key is deployed to a VM and counted there', async () => {
   const publicKey = makeKey('ops');
   const key = (await api('POST', KEYS, { name: 'ops', public_key: publicKey })).body;
-  assert.equal(key.origin, 'paasbox');
+  assert.equal(key.origin, 'paashup');
   assert.equal(key.deployed_on, 0);
 
   const add = await api('POST', DEPLOY, { virtual_machine: vmA, ssh_key: key.id });
@@ -328,7 +328,7 @@ test('a key is removed from its VM; the agent copy goes once no VM has it', asyn
   assert.ok(!(await deploymentsOf(vmA)).some((d) => d.comment === 'retry'));
   assert.equal((await api('GET', `${KEYS}${catalogId}/`)).status, 404);
 
-  // a paasbox key removed from its only VM stays in the catalog
+  // a paashup key removed from its only VM stays in the catalog
   const ops = await catalogByComment('ops');
   const opsRow = (await deploymentsOf(vmA)).find((d) => d.ssh_key.id === ops.id);
   assert.equal((await api('DELETE', `${DEPLOY}${opsRow.id}/`)).status, 204);

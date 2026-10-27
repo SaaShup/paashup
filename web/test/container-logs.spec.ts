@@ -1,4 +1,4 @@
-// ContainerLogs.vue: fetches the agent's logs through the paasbox proxy and renders them
+// ContainerLogs.vue: fetches the agent's logs through the paashup proxy and renders them
 // in a (faked) xterm.js pane. `Terminal`/`FitAddon` are ambient CDN globals — a fake is
 // installed on `globalThis` for each test — and `ResizeObserver` is stubbed since jsdom
 // doesn't implement it.

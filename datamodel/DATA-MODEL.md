@@ -2135,11 +2135,11 @@ _10 entities._
 | `config_context` | json | ✓ |  | ✓ |  |
 
 
-### Image _(paas2box)_
+### Image _(paashup)_
 
 - **Table:** `virtualization_image`
 - **Endpoint:** `/api/virtualization/images/`
-- **Read schema:** `(paas2box entity)` · **Write schema:** `(paas2box entity)`
+- **Read schema:** `(paashup entity)` · **Write schema:** `(paashup entity)`
 
 | Field | Type | Null | Req | RO | Relationship / Notes |
 |-------|------|:----:|:---:|:--:|----------------------|
@@ -2153,11 +2153,11 @@ _10 entities._
 | `last_updated` | datetime | ✓ |  | ✓ |  |
 
 
-### SshKey _(paas2box)_
+### SshKey _(paashup)_
 
 - **Table:** `virtualization_ssh_key`
 - **Endpoint:** `/api/virtualization/ssh-keys/`
-- **Read schema:** `(paas2box entity)` · **Write schema:** `(paas2box entity)`
+- **Read schema:** `(paashup entity)` · **Write schema:** `(paashup entity)`
 
 | Field | Type | Null | Req | RO | Relationship / Notes |
 |-------|------|:----:|:---:|:--:|----------------------|

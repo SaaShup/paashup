@@ -1,6 +1,6 @@
 // The container terminal WebSocket relay:
-//   browser  --(ws /api/plugins/docker/containers/:id/ws/)-->  paasbox
-//            <--(pipes frames)-->  paasbox  --(POST/WS /api/engine/containers/:cid/ws)--> agent
+//   browser  --(ws /api/plugins/docker/containers/:id/ws/)-->  paashup
+//            <--(pipes frames)-->  paashup  --(POST/WS /api/engine/containers/:cid/ws)--> agent
 // The stub agent below stands in for SaaShup/netbox-docker-agent's docker-exec-websocket
 // stream: POST returns {path}, then a WS at that path speaks the msgcode-prefixed frame
 // protocol (0 stdin, 1 stdout, 2 stderr, 50 resize, 100 resume, 200 exited, …).
@@ -36,7 +36,7 @@ async function freshDb(file) {
 
 // ---- stub agent: docker-exec-websocket-server stand-in --------------------------------
 // `POST …/ws` opens a session (or refuses it); the WS it points at then exchanges frames.
-// `seen` records what paasbox sent it, for the auth/forwarding assertions.
+// `seen` records what paashup sent it, for the auth/forwarding assertions.
 function startStubAgent() {
   const seen = { postAuth: [], wsAuth: null, wsQuery: null, resize: null, stdin: [] };
   let disabled = false;
@@ -88,7 +88,7 @@ function startStubAgent() {
   };
 }
 
-/** Drive one client session against paasbox's relay; resolves on close. */
+/** Drive one client session against paashup's relay; resolves on close. */
 function session(base, id, query = '?tty=true&command=bash', driveShell = true) {
   return new Promise((resolve) => {
     const wsBase = base.replace('http', 'ws');
@@ -212,7 +212,7 @@ test('a container without a ContainerID yet is refused without ever calling the 
   assert.equal(agent.seen.postAuth.length, before, 'the agent should not have been contacted');
 });
 
-test('an unknown paasbox container id closes with 4004', async () => {
+test('an unknown paashup container id closes with 4004', async () => {
   const r = await session(base, 999999, '?tty=true&command=sh', false);
   assert.equal(r.code, 4004);
   assert.match(r.reason, /not found/i);
@@ -266,7 +266,7 @@ test('when the server requires auth, an anonymous terminal connection is rejecte
   const awsBase = abase.replace('http', 'ws');
 
   try {
-    // anonymous: rejected before paasbox even looks at the container. This is a plain
+    // anonymous: rejected before paashup even looks at the container. This is a plain
     // HTTP-level refusal (no WS handshake completes), so the client sees an error, not
     // a close code — like the "unmatched path" 404 case above.
     const anonMessage = await new Promise((resolve) => {

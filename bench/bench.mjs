@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Target-agnostic API benchmark for paas2box vs NetBox. Hits a NetBox-compatible
+// Target-agnostic API benchmark for paashup vs NetBox. Hits a NetBox-compatible
 // endpoint (dcim/manufacturers) and reports latency percentiles + throughput for
 // three phases: POST (create), GET list, GET detail. Works against any base URL
 // with an optional `Authorization: Token` header.

@@ -217,7 +217,7 @@ async function del(id: number) {
     const ok = await confirmDialog({
       title: 'Delete SSH key',
       message:
-        `Delete "${row.name}" from paasbox? It stays on the ${row.deployed_on} VM(s) it is deployed on: remove it from them on its page first.` +
+        `Delete "${row.name}" from paashup? It stays on the ${row.deployed_on} VM(s) it is deployed on: remove it from them on its page first.` +
         (row.origin === 'agent'
           ? '\n\nFound by an agent, it is listed again at the next sync of its cloud.'
           : ''),
@@ -488,60 +488,6 @@ function onAction(row: Obj) {
 .clear-filters {
   font-size: 0.78rem;
   padding: 4px 10px;
-}
-/* Docker container operation buttons — colour-coded by intent. */
-.op-btn {
-  padding: 6px 11px;
-  font-size: 0.85rem;
-  color: #fff;
-}
-.op-start {
-  background: var(--ok);
-  border-color: var(--ok);
-}
-.op-start:hover {
-  background: #15803d;
-  border-color: #15803d;
-}
-.op-restart {
-  background: var(--warn);
-  border-color: var(--warn);
-}
-.op-restart:hover {
-  background: #b45309;
-  border-color: #b45309;
-}
-.op-recreate {
-  background: var(--primary);
-  border-color: var(--primary);
-}
-.op-recreate:hover {
-  background: var(--primary-d);
-  border-color: var(--primary-d);
-}
-.op-stop {
-  background: var(--danger);
-  border-color: var(--danger);
-}
-.op-stop:hover {
-  background: #b91c1c;
-  border-color: #b91c1c;
-}
-.op-kill {
-  background: #991b1b;
-  border-color: #991b1b;
-}
-.op-kill:hover {
-  background: #7f1d1d;
-  border-color: #7f1d1d;
-}
-.op-refresh {
-  background: #0891b2;
-  border-color: #0891b2;
-}
-.op-refresh:hover {
-  background: #0e7490;
-  border-color: #0e7490;
 }
 .api-pill {
   font-family: ui-monospace, monospace;

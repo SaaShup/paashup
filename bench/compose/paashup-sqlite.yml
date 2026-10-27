@@ -1,0 +1,17 @@
+# paashup over SQLite (small-customer profile). Built from the repo Dockerfile.
+services:
+  paashup:
+    build:
+      context: ../..
+    image: paashup:bench
+    environment:
+      PB_DIALECT: sqlite
+      PB_SQLITE_FILE: /data/paashup.db
+      PB_MIGRATE: '1'
+      PORT: '8000'
+    volumes:
+      - paashup-data:/data
+    ports:
+      - '8000:8000'
+volumes:
+  paashup-data:

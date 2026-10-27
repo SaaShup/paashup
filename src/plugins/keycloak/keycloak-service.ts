@@ -670,7 +670,7 @@ function instanceUrls(input: SyncUrlsInput): { url: string; kind: RedirectUrlKin
   ];
 }
 
-/** The client rows an input targets (empty when not configured in paasbox). */
+/** The client rows an input targets (empty when not configured in paashup). */
 async function targetClients(db: Db, input: SyncUrlsInput): Promise<number[]> {
   const rows = await db.query<{ id: number }>(
     `SELECT c.id FROM ${T.client} c
@@ -684,7 +684,7 @@ async function targetClients(db: Db, input: SyncUrlsInput): Promise<number[]> {
 /**
  * Register an instance's URLs in Keycloak: the callback URL in the client's
  * redirect URIs, and a post-logout URL (postlogout_path, or the bare base
- * URL). Everything comes from the request — paasbox needs no knowledge of
+ * URL). Everything comes from the request — paashup needs no knowledge of
  * the instance. Idempotent: re-running never duplicates.
  */
 export async function registerInstanceUrls(db: Db, input: SyncUrlsInput): Promise<SyncUrlsResult> {
@@ -692,7 +692,7 @@ export async function registerInstanceUrls(db: Db, input: SyncUrlsInput): Promis
 
   const clientRowIds = await targetClients(db, input);
   if (!clientRowIds.length) {
-    result.skipped = `realm "${input.realm}" with client "${input.client_id}" is not configured in paasbox`;
+    result.skipped = `realm "${input.realm}" with client "${input.client_id}" is not configured in paashup`;
     console.warn(`[Keycloak] register-urls: ${result.skipped}`);
     return result;
   }
@@ -732,7 +732,7 @@ export async function unregisterInstanceUrls(
 
   const clientRowIds = await targetClients(db, input);
   if (!clientRowIds.length) {
-    result.skipped = `realm "${input.realm}" with client "${input.client_id}" is not configured in paasbox`;
+    result.skipped = `realm "${input.realm}" with client "${input.client_id}" is not configured in paashup`;
     console.warn(`[Keycloak] unregister-urls: ${result.skipped}`);
     return result;
   }

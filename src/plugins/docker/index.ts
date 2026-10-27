@@ -1,6 +1,6 @@
-// paasbox-plugin-docker — manage Docker (hosts, registries, images, volumes,
-// networks, containers) through paasbox. A port of SaaShup/netbox-docker-plugin to
-// the paasbox plugin contract: it registers the six top-level entities (→ NetBox-shaped
+// paashup-plugin-docker — manage Docker (hosts, registries, images, volumes,
+// networks, containers) through paashup. A port of SaaShup/netbox-docker-plugin to
+// the paashup plugin contract: it registers the six top-level entities (→ NetBox-shaped
 // CRUD), ships dual-dialect DDL, overrides GET to embed the source's nested arrays,
 // adds custom container write routes (inline nested children + cross-host validation),
 // custom image write routes (cross-host validation),
@@ -42,7 +42,7 @@ registerSerializer(T.volume, serializeVolume);
 registerSerializer(T.network, serializeNetwork);
 registerSerializer(T.registry, serializeRegistry);
 registerSerializer(T.container, serializeContainer);
-// SSH keys of the catalog: where each comes from (paasbox, a cloud, an agent) and on how many VMs
+// SSH keys of the catalog: where each comes from (paashup, a cloud, an agent) and on how many VMs
 registerSerializer('virtualization_ssh_key', serializeCatalogKey);
 
 const dockerPlugin: Plugin = {
@@ -69,7 +69,7 @@ const dockerPlugin: Plugin = {
     // VM SSH keys: added/removed through the agent, the stored copy re-read after.
     ...sshKeyRoutes,
   ],
-  // Interactive container terminal: browser ⇄ paasbox ⇄ agent exec stream.
+  // Interactive container terminal: browser ⇄ paashup ⇄ agent exec stream.
   websockets: terminalWebSockets,
   hooks,
   // Default agent-integration webhooks, created at startup if missing.

@@ -1,7 +1,7 @@
 // The plugin's small web UI: a self-contained page to start a migration and watch the
 // live progress bar. It's written to a temp dir at load and served as a static asset
 // (plugin routes can only return JSON, so an HTML page must come from an asset mount).
-// The page is shown in the paasbox sidebar via the /ui/ manifest (see routes.ts).
+// The page is shown in the paashup sidebar via the /ui/ manifest (see routes.ts).
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,7 +9,7 @@ import { join } from 'node:path';
 export const UI_PREFIX = '/api/plugins/netbox-migrate/app/';
 
 const HTML = `<!doctype html>
-<html><head><meta charset="utf-8"><title>NetBox → paasbox migration</title>
+<html><head><meta charset="utf-8"><title>NetBox → paashup migration</title>
 <style>
  :root{--p:#0EA5E9;--pd:#0284c7;--bd:#e2e8f0;--mut:#64748b;--bg:#f8fafc;--txt:#0f172a}
  body{font:14px system-ui,sans-serif;color:var(--txt);margin:0;background:var(--bg);padding:24px}
@@ -31,7 +31,7 @@ const HTML = `<!doctype html>
  code{background:#f1f5f9;padding:1px 5px;border-radius:4px}
 </style></head>
 <body>
- <h1>NetBox &rarr; paasbox migration</h1>
+ <h1>NetBox &rarr; paashup migration</h1>
  <p class="sub">Reads core objects from a NetBox instance and creates them here. Use an API token with read access to all objects.</p>
  <div class="card">
    <label>NetBox URL</label>
@@ -43,7 +43,7 @@ const HTML = `<!doctype html>
    <div class="row">
      <button id="start">Start migration</button>
      <button id="dry" class="ghost">Dry run</button>
-     <label style="display:flex;align-items:center;gap:6px;margin:0;font-weight:400"><input type="checkbox" id="confirm"> I understand this writes into paasbox</label>
+     <label style="display:flex;align-items:center;gap:6px;margin:0;font-weight:400"><input type="checkbox" id="confirm"> I understand this writes into paashup</label>
    </div>
    <div class="err hide" id="error"></div>
  </div>
@@ -105,6 +105,6 @@ $('dry').onclick=function(){start(true);};
 </script>
 </body></html>`;
 
-export const UI_DIR = join(tmpdir(), 'paasbox-nbmigrate-ui');
+export const UI_DIR = join(tmpdir(), 'paashup-nbmigrate-ui');
 mkdirSync(UI_DIR, { recursive: true });
 writeFileSync(join(UI_DIR, 'index.html'), HTML);

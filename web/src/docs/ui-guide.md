@@ -18,10 +18,9 @@ and each section is split into **functional sub-groups** (for example DCIM → *
 
 ## The top bar
 
-- **Search** filters the menu by name as you type (it temporarily expands matching
-  sections so you can see the hits).
 - The **live** indicator shows the WebSocket connection status (green = connected).
-  When it is green, changes made anywhere appear instantly without reloading.
+  When it is green, changes made anywhere appear instantly without reloading. It is
+  hidden on small screens.
 
 ## Browsing a resource
 
@@ -49,7 +48,7 @@ Opening a resource shows a list page with:
 ## Container logs and terminal
 
 The detail page of a Docker container has three tabs: **Container** (properties and the
-editable collections), **Logs** and **Terminal**. Both panels go through paas2box to the
+editable collections), **Logs** and **Terminal**. Both panels go through paashup to the
 agent of the container's host, so they only work once the agent has created the container.
 
 - **Logs** — fetched when you open the tab and rendered like a terminal (colours
@@ -63,7 +62,7 @@ agent of the container's host, so they only work once the agent has created the 
 
 ## Live updates
 
-paas2box streams every create / update / delete over a WebSocket. Open two browser
+paashup streams every create / update / delete over a WebSocket. Open two browser
 tabs: create or edit a record in one, and watch the list and the Dashboard activity
 log update in the other in real time.
 

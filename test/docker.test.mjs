@@ -400,6 +400,19 @@ test('Container pid_mode accepts "" (blank choice → null)', async () => {
   assert.ok(bad.body.pid_mode);
 });
 
+test('Container pid_mode is a bare string, as the agent passes it to Docker as PidMode', async () => {
+  const c = await api('POST', '/api/plugins/docker/containers/', {
+    host: ids.host,
+    image: ids.image,
+    name: 'host-pid',
+    pid_mode: 'host',
+  });
+  assert.equal(c.status, 201, JSON.stringify(c.body));
+  assert.equal(c.body.pid_mode, 'host'); // not {value, label}: Docker rejects an object
+  const read = await api('GET', `/api/plugins/docker/containers/${c.body.id}/`);
+  assert.equal(read.body.pid_mode, 'host');
+});
+
 test('container POST resolves agent natural keys (image ImageID, network name)', async () => {
   const SHA = 'sha256:deadbeefcafe0000';
   const img = await api('POST', '/api/plugins/docker/images/', {
@@ -524,7 +537,7 @@ test('Network driver accepts "none"', async () => {
     driver: 'none',
   });
   assert.equal(net.status, 201, JSON.stringify(net.body));
-  assert.deepEqual(net.body.driver, { value: 'none', label: 'None' });
+  assert.equal(net.body.driver, 'none'); // bare string, not a {value,label} choice
 
   // the Docker agent sends Docker-cased values — "None"/"Bridge" map to the
   // canonical lowercase choice rather than failing the choice check
@@ -538,7 +551,7 @@ test('Network driver accepts "none"', async () => {
       driver: sent,
     });
     assert.equal(r.status, 201, JSON.stringify(r.body));
-    assert.equal(r.body.driver.value, value);
+    assert.equal(r.body.driver, value);
   }
 
   // a genuinely unsupported driver is still rejected
@@ -549,6 +562,25 @@ test('Network driver accepts "none"', async () => {
   });
   assert.equal(bad.status, 400);
   assert.ok(bad.body.driver);
+});
+
+test('Container network brief has driver as a bare string, as the agent checks it for host mode', async () => {
+  const net = await api('POST', '/api/plugins/docker/networks/', {
+    host: ids.host,
+    name: 'host',
+    driver: 'host',
+  });
+  assert.equal(net.status, 201, JSON.stringify(net.body));
+  const c = await api('POST', '/api/plugins/docker/containers/', {
+    host: ids.host,
+    image: ids.image,
+    name: 'host-net',
+    network_settings: [{ network: net.body.id }],
+  });
+  assert.equal(c.status, 201, JSON.stringify(c.body));
+  // the agent sets NetworkMode 'host' only on driver === 'host'; otherwise Docker
+  // refuses to connect the container to the host network
+  assert.equal(c.body.network_settings[0].network.driver, 'host');
 });
 
 test('FK write: FK accepts a nested brief object ({ id })', async () => {

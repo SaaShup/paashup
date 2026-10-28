@@ -27,6 +27,11 @@ import ApiKeysView from './views/ApiKeysView.vue';
 import PluginPageView from './views/PluginPageView.vue';
 import LoginView from './views/LoginView.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
+import { withBase } from './base.js';
+
+// Public files are served under the mount base (e.g. /datacenter), like the API.
+const markSrc = withBase('/paashup-mark.svg');
+const markBg = `url('${markSrc}')`;
 
 const ui = useUiStore();
 const ssoEnabled = ref(false);
@@ -87,7 +92,7 @@ onMounted(async () => {
         ☰
       </button>
       <div class="brand">
-        <img class="brand-mark" src="/paashup-mark.svg" alt="" />
+        <img class="brand-mark" :src="markSrc" alt="" />
         <span class="brand-text">paashup</span>
       </div>
       <span class="spacer" />
@@ -210,7 +215,7 @@ onMounted(async () => {
   z-index: 0;
   pointer-events: none;
   opacity: 0.035;
-  background-image: url('/paashup-mark.svg');
+  background-image: v-bind(markBg);
   background-repeat: no-repeat;
   background-position: center;
   background-attachment: fixed;

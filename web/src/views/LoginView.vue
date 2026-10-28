@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { login, loadProviders, type Provider } from '../auth/oidc.js';
+import { withBase } from '../base.js';
+
+// Public files are served under the mount base (e.g. /datacenter), like the API.
+const logoSrc = withBase('/paashup-logo.svg');
+const markBg = `url('${withBase('/paashup-mark.svg')}')`;
 
 const busy = ref(false);
 const providers = ref<Provider[]>([]);
@@ -17,7 +22,7 @@ async function signIn(id: string) {
 <template>
   <div class="login">
     <div class="card">
-      <img class="logo" src="/paashup-logo.svg" alt="paashup" />
+      <img class="logo" :src="logoSrc" alt="paashup" />
       <p class="sub">Sign in with your organization account to continue.</p>
       <div class="providers">
         <button
@@ -101,6 +106,6 @@ async function signIn(id: string) {
   z-index: 0;
   pointer-events: none;
   opacity: 0.04;
-  background: url('/paashup-mark.svg') right -80px bottom -60px / min(520px, 60vw) no-repeat;
+  background: v-bind(markBg) right -80px bottom -60px / min(520px, 60vw) no-repeat;
 }
 </style>

@@ -1,4 +1,4 @@
-name: Build and publish on Docker Hub
+name: Build and publish on GHCR
 
 on:
   push:
@@ -14,12 +14,15 @@ jobs:
     uses: ./.github/workflows/ci.yml
 
   publish:
-    name: Push image to Docker Hub
+    name: Push image to GHCR
     needs: ci
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.name }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -27,17 +30,25 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      - name: Log in to Docker Hub
+      - name: Log in to GHCR
         uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # GHCR requires lowercase repository names (the owner is "SaaShup").
+      - name: Resolve image name
+        id: image
+        env:
+          IMAGE: ${{ vars.GHCR_IMAGE || format('ghcr.io/{0}/paashup', github.repository_owner) }}
+        run: echo "name=${IMAGE,,}" >> "$GITHUB_OUTPUT"
 
       - name: Compute image tags
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ${{ vars.DOCKERHUB_IMAGE || format('{0}/paashup', secrets.DOCKERHUB_USERNAME) }}
+          images: ${{ steps.image.outputs.name }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -75,7 +86,7 @@ jobs:
       - name: Notify upgrade webhook
         env:
           WEBHOOK_URL: https://${{ vars.WEBHOOK_DOMAIN }}${{ secrets.WEBHOOK_PATH }}
-          IMAGE: ${{ vars.DOCKERHUB_IMAGE || format('{0}/paashup', secrets.DOCKERHUB_USERNAME) }}
+          IMAGE: ${{ needs.publish.outputs.image }}
           TAG: ${{ github.ref_name }}
         run: |
           curl -fsS -X POST "$WEBHOOK_URL" \

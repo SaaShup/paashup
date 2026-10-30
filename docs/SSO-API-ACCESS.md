@@ -161,4 +161,4 @@ wscat -c "wss://paashup.example.com/api/ws/?token=$KEY"
 
 The bundled SPA does this automatically, re-reading the current token on every reconnect.
 
-See also the **SSO via OIDC** entry in the [README](../README.md#features).
+See also [DEPLOYMENT.md › SSO / OIDC](DEPLOYMENT.md#sso--oidc).

@@ -10,6 +10,7 @@ import { loadPlugins, loadedPlugins } from './plugins/runtime.js';
 import { discoverPluginSpecifiers } from './plugins/discovery.js';
 import { ensureWebhooks } from './webhooks.js';
 import { ensureSeedToken } from './auth.js';
+import { refreshServiceLinkIcons } from './service-links.js';
 import { closeRealtime } from './realtime.js';
 import type { Plugin } from './plugins/types.js';
 
@@ -84,6 +85,16 @@ try {
     `PB_SEED_TOKEN: could not seed token — have migrations run? ${(e as Error).message}`,
   );
 }
+
+// Best-effort: resolve favicons for any pinned service link missing one. Never
+// blocks startup; the dashboard's "Refresh icons" button retries on demand.
+refreshServiceLinkIcons(db)
+  .then(({ checked, updated }) => {
+    if (checked) console.log(`service links: resolved ${updated}/${checked} icon(s)`);
+  })
+  .catch((e) =>
+    console.warn(`service links: initial icon refresh failed — ${(e as Error).message}`),
+  );
 
 const server = createApiServer({
   db,

@@ -42,6 +42,7 @@ import { dispatchWebhooks, type WebhookEventContext } from '../webhooks.js';
 import { listUserTokens, createUserToken, revokeUserToken } from '../tokens.js';
 import '../journal.js'; // registers the journal-entries entity
 import '../configcontext.js'; // registers config-contexts entity + the /render/ route
+import '../service-links.js'; // registers the service-links entity + the /refresh-icons/ route
 import { Serializer, getSerializer } from './serializer.js';
 import { buildOpenApi } from './openapi.js';
 import { externalBaseUrl, applyOriginDefaults } from './origin.js';

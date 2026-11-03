@@ -4,6 +4,7 @@
 // applies authorization, and returns a **paashup token**. The SPA stores that token
 // (as the existing `pb_token`) and uses it for every API/WS call — so it never touches
 // provider secrets or provider tokens, and works for any provider (Keycloak, Google, …).
+import { ref } from 'vue';
 import { withBase } from '../base.js';
 
 export interface Provider {
@@ -33,6 +34,9 @@ const LS = {
 const SS = { verifier: 'pb_oidc_verifier', state: 'pb_oidc_state', provider: 'pb_oidc_provider' };
 
 let cache: ProvidersResponse | null = null;
+
+/** Bumped whenever the stored session is cleared, so `authed`-dependent UI re-evaluates. */
+export const authTick = ref(0);
 
 export async function loadProviders(): Promise<ProvidersResponse> {
   if (cache) return cache;
@@ -73,6 +77,19 @@ export function getToken(): string | null {
 }
 function clearTokens(): void {
   for (const k of Object.values(LS)) localStorage.removeItem(k);
+  authTick.value++;
+}
+
+/**
+ * Called by the API client when a request comes back 403 "credentials not provided":
+ * the session (token) paashup issued is no longer valid (expired, or the user was
+ * revoked), as opposed to a permission error (e.g. a read-only key on a write call).
+ * Drops the stale local session so the UI falls back to the login gate / "Sign in"
+ * button instead of leaving the user looking at a bare 403.
+ */
+export function handleUnauthorized(): void {
+  if (!getToken()) return; // nothing locally to drop — not our session that's stale
+  clearTokens();
 }
 export function isAuthenticated(): boolean {
   const exp = localStorage.getItem(LS.expires);

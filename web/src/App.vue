@@ -11,6 +11,7 @@ import {
   startAutoRefresh,
   currentUsername,
   isAuthenticated,
+  authTick,
   login,
   logout,
 } from './auth/oidc.js';
@@ -51,6 +52,17 @@ watch(
 
 // Show the dedicated login page only when SSO is required and the user isn't signed in.
 const showLogin = computed(() => ssoEnabled.value && loginRequired.value && !authed.value);
+
+// The API client drops the session on a 403 that means it's no longer valid (expired,
+// revoked, …); isAuthenticated() itself does the same once the token's `expires` has
+// passed. Either way authTick is bumped — re-read the session here so a required login
+// gate reappears, or the "Sign in" button comes back, instead of leaving a dead session
+// behind and the user looking at 403s (issue: logout/expiry UX).
+watch(authTick, () => {
+  if (!ssoEnabled.value) return;
+  authed.value = isAuthenticated();
+  username.value = currentUsername();
+});
 
 onMounted(async () => {
   // OIDC/SSO: finish any redirect login, then keep the token fresh, before loading data.

@@ -237,6 +237,8 @@ export interface SsoSession {
   username: string;
   writeEnabled: boolean;
   expires: string;
+  /** The provider's id_token: the SPA hands it back as `id_token_hint` to sign out there. */
+  idToken: string;
 }
 
 /**
@@ -277,5 +279,6 @@ export async function ssoExchange(
     username: identity.username,
     writeEnabled: identity.writeEnabled,
     expires,
+    idToken: r.idToken,
   };
 }

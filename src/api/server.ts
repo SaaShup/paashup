@@ -461,8 +461,11 @@ export function createApiServer(opts: ServerOptions): http.Server {
         const providers = await Promise.all(
           listProviders().map(async (p) => {
             let authorization_endpoint: string | null = null;
+            let end_session_endpoint: string | null = null;
             try {
-              authorization_endpoint = (await discover(p.issuer)).authorization_endpoint;
+              const d = await discover(p.issuer);
+              authorization_endpoint = d.authorization_endpoint;
+              end_session_endpoint = d.end_session_endpoint ?? null; // none at Google
             } catch {
               /* discovery unavailable — still list it; the SPA surfaces the error */
             }
@@ -474,6 +477,7 @@ export function createApiServer(opts: ServerOptions): http.Server {
               client_id: p.clientId,
               scopes: p.scopes,
               authorization_endpoint,
+              end_session_endpoint,
             };
           }),
         );
@@ -514,6 +518,9 @@ export function createApiServer(opts: ServerOptions): http.Server {
           username: r.username,
           write_enabled: r.writeEnabled,
           expires: r.expires,
+          // not a credential: only sent back to the provider on sign-out (id_token_hint),
+          // so it ends the provider session too, without a confirmation page
+          id_token: r.idToken,
         });
       }
       // Establish the browser session cookie from a static token (the SPA calls this

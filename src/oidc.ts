@@ -329,7 +329,7 @@ export function authorizeIdentity(
 export async function exchangeCode(
   p: OidcProvider,
   args: { code: string; codeVerifier?: string; redirectUri: string },
-): Promise<{ identity: SsoIdentity } | { error: string; status: number }> {
+): Promise<{ identity: SsoIdentity; idToken: string } | { error: string; status: number }> {
   let d: Discovery;
   try {
     d = await discover(p.issuer);
@@ -377,7 +377,7 @@ export async function exchangeCode(
   }
   const identity = authorizeIdentity(p, idClaims, accessClaims);
   if ('error' in identity) return { error: identity.error, status: 403 };
-  return { identity };
+  return { identity, idToken };
 }
 
 /** Test helper: drop the cached discovery + JWKS. */

@@ -383,6 +383,7 @@ function addCustomEndpoints(paths: Schema, schemas: Schema): void {
               client_id: { type: 'string' },
               scopes: { type: 'array', items: { type: 'string' } },
               authorization_endpoint: str({ nullable: true }),
+              end_session_endpoint: str({ nullable: true }),
             },
           },
         },
@@ -406,6 +407,7 @@ function addCustomEndpoints(paths: Schema, schemas: Schema): void {
         username: { type: 'string' },
         write_enabled: { type: 'boolean' },
         expires: str({ format: 'date-time', nullable: true }),
+        id_token: { type: 'string' },
       },
     },
     APIToken: {

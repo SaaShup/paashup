@@ -14,6 +14,8 @@ export interface Provider {
   client_id: string;
   scopes: string;
   authorization_endpoint: string | null;
+  /** Where to end the provider's own session on sign-out (none at Google). */
+  end_session_endpoint?: string | null;
 }
 interface ProvidersResponse {
   login_required: boolean;
@@ -25,6 +27,8 @@ const LS = {
   username: 'pb_username',
   tokenId: 'pb_token_id',
   expires: 'pb_token_expires', // ISO string
+  provider: 'pb_provider', // provider signed in with, to sign out there too
+  idToken: 'pb_id_token', // its id_token, the id_token_hint of that sign-out
 };
 const SS = { verifier: 'pb_oidc_verifier', state: 'pb_oidc_state', provider: 'pb_oidc_provider' };
 
@@ -134,8 +138,11 @@ export async function handleRedirectCallback(): Promise<boolean> {
     token_id?: number;
     username?: string;
     expires?: string;
+    id_token?: string;
   };
   localStorage.setItem(LS.token, d.token);
+  localStorage.setItem(LS.provider, provider);
+  if (d.id_token) localStorage.setItem(LS.idToken, d.id_token);
   if (d.username) localStorage.setItem(LS.username, d.username);
   if (d.token_id != null) localStorage.setItem(LS.tokenId, String(d.token_id));
   if (d.expires) localStorage.setItem(LS.expires, d.expires);
@@ -166,10 +173,16 @@ export async function establishSession(): Promise<void> {
   }
 }
 
-/** Sign out: revoke the paashup token + clear the session cookie (best-effort), then local state. */
+/**
+ * Sign out: revoke the paashup token + clear the session cookie (best-effort), then local
+ * state, then end the provider's session (Keycloak) — else its SSO cookie signs the user
+ * straight back in on the next "Sign in".
+ */
 export async function logout(): Promise<void> {
   const id = localStorage.getItem(LS.tokenId);
   const token = getToken();
+  const providerId = localStorage.getItem(LS.provider);
+  const idToken = localStorage.getItem(LS.idToken);
   if (id && token) {
     try {
       await fetch(withBase(`/api/users/tokens/${id}/`), {
@@ -186,6 +199,18 @@ export async function logout(): Promise<void> {
     /* best-effort */
   }
   clearTokens();
+  const p = providerId
+    ? (await loadProviders()).providers.find((x) => x.id === providerId)
+    : undefined;
+  if (p?.end_session_endpoint) {
+    const q = new URLSearchParams({
+      client_id: p.client_id,
+      post_logout_redirect_uri: redirectUri(),
+    });
+    if (idToken) q.set('id_token_hint', idToken);
+    location.assign(`${p.end_session_endpoint}?${q.toString()}`);
+    return;
+  }
   location.assign(withBase('/'));
 }
 

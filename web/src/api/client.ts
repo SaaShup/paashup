@@ -1,7 +1,7 @@
 // Thin REST client for the paashup API. Same-origin (Vite proxies /api in dev,
 // the API serves the built SPA in prod). Auth: the paashup token in localStorage —
 // minted by the SSO login (BFF exchange) or a static API key the user pasted in.
-import { getToken } from '../auth/oidc.js';
+import { getToken, handleUnauthorized } from '../auth/oidc.js';
 import { withBase } from '../base.js';
 
 export interface Page<T = Record<string, unknown>> {
@@ -30,7 +30,14 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   const data = text ? JSON.parse(text) : undefined;
-  if (!res.ok) throw new ApiError(res.status, data);
+  if (!res.ok) {
+    // A 403 for anything other than "this key can't write" means our session itself
+    // isn't accepted any more (typically: it expired) — drop it so the UI prompts for
+    // a fresh login instead of leaving the user looking at a bare error.
+    const detail = (data as { detail?: unknown } | undefined)?.detail;
+    if (res.status === 403 && detail !== 'This token is read-only.') handleUnauthorized();
+    throw new ApiError(res.status, data);
+  }
   return data as T;
 }
 

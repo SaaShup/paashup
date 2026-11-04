@@ -76,7 +76,8 @@ const VM_STATUS: Record<string, string> = {
   ERROR: 'failed',
   DELETING: 'decommissioning',
 };
-const vmStatus = (openstackStatus: string): string =>
+/** paashup's normalized VM status for a Nova server status (e.g. "ACTIVE" → "active"). */
+export const vmStatus = (openstackStatus: string): string =>
   VM_STATUS[openstackStatus.toUpperCase()] ?? 'offline';
 
 const slugify = (s: string): string =>

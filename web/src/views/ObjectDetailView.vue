@@ -42,6 +42,12 @@ const metaDirty = computed(
   () => JSON.stringify(metaRows.value) !== JSON.stringify(metaSaved.value),
 );
 const deleting = ref(false);
+const rebooting = ref<'soft' | 'hard' | ''>('');
+const rebootMenuOpen = ref(false);
+const rebootMenuEl = ref<HTMLElement | null>(null);
+// Set from a transient `_rebooting` hint on the live feed (never persisted): shown on the
+// VM's status pill while OpenStack is still rebooting it.
+const statusRebooting = ref(false);
 
 const HIDE = new Set(['id', 'url', 'display_url', 'display', 'custom_fields', 'tags']);
 const get = (k: string): unknown => (obj.value as Record<string, unknown> | null)?.[k];
@@ -96,6 +102,7 @@ async function load(quiet = false): Promise<void> {
       regionStatus.value = [];
       metaRows.value = metaSaved.value = [];
       metaError.value = '';
+      statusRebooting.value = false;
     }
     await Promise.all([
       ...sections.value.map(async (s) => {
@@ -222,6 +229,32 @@ async function deleteOnOpenStack(): Promise<void> {
   }
 }
 
+/** Reboot the VM's server on OpenStack: soft asks the guest to shut down first, hard power-cycles it. */
+async function rebootOnOpenStack(type: 'soft' | 'hard'): Promise<void> {
+  const id = ui.detailId;
+  if (id == null || !vmServer.value) return;
+  const ok = await confirmDialog({
+    title: type === 'hard' ? 'Hard reboot on OpenStack' : 'Soft reboot on OpenStack',
+    message:
+      type === 'hard'
+        ? `Hard reboot "${title.value}" on OpenStack (cloud "${vmServer.value.cloud}")?\n\nThis power-cycles the server without asking the guest OS to shut down first; use it only if a soft reboot is stuck.`
+        : `Soft reboot "${title.value}" on OpenStack (cloud "${vmServer.value.cloud}")?\n\nThe guest OS is asked to shut down, then the server is started again.`,
+    confirmLabel: 'Reboot',
+    tone: type === 'hard' ? 'danger' : 'warning',
+  });
+  if (!ok) return;
+  rebooting.value = type;
+  error.value = '';
+  try {
+    await api.post(`${OPENSTACK_SERVERS}${id}/reboot/`, { type });
+  } catch (e) {
+    const d = (e as { detail?: { detail?: unknown } }).detail;
+    error.value = typeof d?.detail === 'string' ? d.detail : String(e);
+  } finally {
+    rebooting.value = '';
+  }
+}
+
 async function loadRegionStatus(endpoint: string, id: number): Promise<void> {
   regionStatus.value = (
     await api.get<{ results: Obj[] }>(`${endpoint}${id}/region-status/`)
@@ -255,10 +288,20 @@ async function refresh(): Promise<void> {
   }
 }
 
-onMounted(() => load());
+function onDocClick(e: MouseEvent): void {
+  if (rebootMenuOpen.value && !rebootMenuEl.value?.contains(e.target as Node)) {
+    rebootMenuOpen.value = false;
+  }
+}
+
+onMounted(() => {
+  load();
+  document.addEventListener('click', onDocClick);
+});
 onBeforeUnmount(() => {
   clearTimeout(poll);
   clearTimeout(liveTimer);
+  document.removeEventListener('click', onDocClick);
 });
 watch(
   () => [ui.detailId, ui.selected?.table],
@@ -280,6 +323,9 @@ watch(
       applyRoute(ui, { view: 'list', table: r.table });
       return;
     }
+    const stillRebooting = (e.data as Record<string, unknown> | undefined)?._rebooting === true;
+    statusRebooting.value = stillRebooting;
+    if (stillRebooting) return; // nothing persisted changed, just the transient hint above
     // the page just saved its own metadata: it already shows the result, a reload would flash
     if (savingMeta.value || Date.now() < ignoreLiveUntil) return;
     clearTimeout(liveTimer);
@@ -423,6 +469,33 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
       <button v-if="resource.writable && resource.model" class="btn" @click="editing = true">
         Edit
       </button>
+      <div v-if="vmServer && resource.writable" ref="rebootMenuEl" class="reboot-wrap">
+        <button class="btn" :disabled="!!rebooting" @click="rebootMenuOpen = !rebootMenuOpen">
+          Reboot ▾
+        </button>
+        <div v-if="rebootMenuOpen" class="card reboot-menu">
+          <button
+            class="btn btn-ghost sm"
+            title="Ask the guest OS to shut down, then start the server again"
+            @click="
+              rebootMenuOpen = false;
+              rebootOnOpenStack('soft');
+            "
+          >
+            Soft reboot
+          </button>
+          <button
+            class="btn btn-ghost sm"
+            title="Power-cycle the server without asking the guest OS first"
+            @click="
+              rebootMenuOpen = false;
+              rebootOnOpenStack('hard');
+            "
+          >
+            Hard reboot
+          </button>
+        </div>
+      </div>
       <button
         v-if="vmServer && resource.writable"
         class="btn btn-danger"
@@ -443,7 +516,13 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
         <div v-for="f in fields" :key="f.key" class="prop">
           <span class="k">{{ f.label }}</span>
           <span class="v">
-            <StatusPill v-if="f.pill" v-bind="f.pill" />
+            <StatusPill
+              v-if="f.key === 'status' && vmServer && statusRebooting"
+              label="Rebooting…"
+              tone="warn"
+              busy
+            />
+            <StatusPill v-else-if="f.pill" v-bind="f.pill" />
             <RouteLink v-else-if="f.to" class="rowlink" :to="f.to">{{ f.text }}</RouteLink>
             <template v-else>{{ f.text }}</template>
           </span>
@@ -884,6 +963,24 @@ th {
 .btn.sm {
   padding: 3px 10px;
   font-size: 0.8rem;
+}
+.reboot-wrap {
+  position: relative;
+}
+.reboot-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  min-width: 140px;
+}
+.reboot-menu .btn {
+  width: 100%;
+  justify-content: flex-start;
 }
 .meta-ro td {
   padding: 3px 14px 3px 0;

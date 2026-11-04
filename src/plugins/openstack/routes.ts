@@ -13,6 +13,7 @@
 //   POST   /clouds/{id}/servers/         boot a server (202); the VM is imported by a sync
 //   GET    /servers/[?virtual_machine_id=]  the OpenStack server behind each VM
 //   DELETE /servers/{vm_id}/             delete the server of a VM paashup created
+//   POST   /servers/{vm_id}/reboot/      reboot the server of a VM, { type: 'soft' | 'hard' }
 //   GET|PUT /servers/{vm_id}/metadata/   read / edit the metadata of the server behind a VM
 import type { Db } from '../../db/types.js';
 import type { PluginRoute } from '../../plugins/types.js';
@@ -38,6 +39,7 @@ import {
   listLinks,
   parseCreate,
   readVmMetadata,
+  rebootVm,
   writeVmMetadata,
 } from './servers.js';
 import { META, T } from './meta.js';
@@ -293,6 +295,27 @@ const deleteServerRoute: PluginRoute = {
   },
 };
 
+const rebootServerRoute: PluginRoute = {
+  method: 'POST',
+  path: `${OPENSTACK_API}/servers/{vm_id}/reboot/`,
+  handler: async ({ db, params, body }) => {
+    const type = str((body as Obj | null)?.type).toLowerCase();
+    if (type !== 'soft' && type !== 'hard') {
+      throw new ValidationError('Invalid request', { type: ['Must be "soft" or "hard".'] });
+    }
+    try {
+      await rebootVm(db, Number(params.vm_id), type);
+      return {
+        status: 202,
+        body: { detail: `${type === 'hard' ? 'Hard' : 'Soft'} reboot requested on OpenStack.` },
+      };
+    } catch (e) {
+      if (e instanceof OpenStackError) return fail(e);
+      throw e;
+    }
+  },
+};
+
 const getMetadataRoute: PluginRoute = {
   method: 'GET',
   path: `${OPENSTACK_API}/servers/{vm_id}/metadata/`,
@@ -326,6 +349,7 @@ export const cloudRoutes: PluginRoute[] = [
   createServerRoute,
   listServersRoute,
   deleteServerRoute,
+  rebootServerRoute,
   createRoute,
   ...updateRoutes,
   deleteRoute,

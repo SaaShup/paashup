@@ -22,6 +22,8 @@ export const region = (extra = {}) => ({
   },
   buildReads: 0, // how many times a new server is read as BUILD before it turns ACTIVE
   failBuild: null, // a message: a new server ends in ERROR with this fault
+  rebootReads: 1, // how many times a rebooting server is read as (HARD_)REBOOT before ACTIVE
+  failReboot: null, // a message: a rebooted server ends in ERROR with this fault
   down: false, // the whole compute API answers 500
   glanceDown: false,
   volumesDown: false,
@@ -148,7 +150,26 @@ export async function startFakeOpenStack() {
             if (r.failBuild) found.fault = { message: r.failBuild };
             else found.addresses = { 'Ext-Net': [addr(`51.0.0.${r.servers.length + 10}`)] };
           }
+          if (
+            (found.status === 'REBOOT' || found.status === 'HARD_REBOOT') &&
+            found.rebootReads++ >= r.rebootReads
+          ) {
+            found.status = r.failReboot ? 'ERROR' : 'ACTIVE';
+            if (r.failReboot) found.fault = { message: r.failReboot };
+          }
           return send(200, { server: found });
+        }
+        const action = rest.match(/^\/servers\/([^/]+)\/action$/);
+        if (action && req.method === 'POST') {
+          const found = r.servers.find((x) => x.id === action[1]);
+          if (!found)
+            return send(404, { itemNotFound: { message: 'Instance could not be found' } });
+          const body = JSON.parse(raw);
+          if (!body.reboot) return send(400, { badRequest: { message: 'unsupported action' } });
+          found.status = body.reboot.type === 'HARD' ? 'HARD_REBOOT' : 'REBOOT';
+          found.rebootReads = 0;
+          r.rebooted = [...(r.rebooted ?? []), { id: found.id, type: body.reboot.type }];
+          return send(202, {});
         }
         // server metadata: GET reads, POST adds / updates, DELETE /<key> removes one
         const meta = rest.match(/^\/servers\/([^/]+)\/metadata(?:\/([^/]+))?$/);

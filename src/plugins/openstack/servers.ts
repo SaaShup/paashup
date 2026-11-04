@@ -18,6 +18,7 @@ import {
   getComputeLimits,
   getServerMetadata,
   getServerState,
+  rebootServer,
   updateServerMetadata,
   listFlavors,
   listKeypairs,
@@ -26,7 +27,7 @@ import {
 import { emitVm } from './events.js';
 import { journal, journalVm } from './journal.js';
 import { T } from './meta.js';
-import { dropServer, importServer } from './sync.js';
+import { dropServer, importServer, vmStatus } from './sync.js';
 
 interface CloudRow extends CloudConfig {
   id: number;
@@ -543,6 +544,90 @@ async function followDelete(db: Db, cloud: CloudRow, link: Link): Promise<void> 
       'danger',
       `Following the deletion of "${link.name}": ${messageOf(e)}`,
     );
+  }
+}
+
+/**
+ * Reboot the OpenStack server behind a VM: "soft" asks the guest OS to shut down then boots it
+ * again, "hard" power-cycles it without asking the guest (use when a soft reboot is stuck).
+ */
+export async function rebootVm(db: Db, vmId: number, type: 'soft' | 'hard'): Promise<void> {
+  const { link, cloud } = await serverOfVm(db, vmId);
+
+  await rebootServer(cloud, link.region, link.server_id, type.toUpperCase() as 'SOFT' | 'HARD');
+  await journalVm(
+    db,
+    vmId,
+    'warning',
+    `${type === 'hard' ? 'Hard' : 'Soft'} reboot requested on OpenStack (region ${link.region}).`,
+  );
+  await journal(
+    db,
+    cloud.id,
+    'warning',
+    `${type === 'hard' ? 'Hard' : 'Soft'} reboot of server "${link.name}" requested in ${link.region}.`,
+  );
+  void followReboot(db, cloud, link, vmId);
+}
+
+/**
+ * Poll the server behind a VM until it leaves the (hard-)reboot state. While it's still
+ * rebooting, the VM is re-pushed to connected pages with a transient `_rebooting` hint (never
+ * stored: paashup's VM status has no "rebooting" value) so the page can show it's in progress.
+ * A journal entry on both ends the story once the outcome (active again, or something else) is
+ * known, and a final plain push clears the hint either way.
+ */
+async function followReboot(db: Db, cloud: CloudRow, link: Link, vmId: number): Promise<void> {
+  try {
+    let settled: string | null = null;
+    for (let waited = 0; waited < POLL_LIMIT_MS; waited += POLL_MS) {
+      const state = await getServerState(cloud, link.region, link.server_id);
+      if (!state) break; // the server is gone; nothing left to follow
+      const upper = state.status.toUpperCase();
+      if (upper !== 'REBOOT' && upper !== 'HARD_REBOOT') {
+        settled = state.status;
+        await db.execute(`UPDATE virtualization_virtual_machine SET status = ? WHERE id = ?`, [
+          vmStatus(state.status),
+          vmId,
+        ]);
+        break;
+      }
+      await emitVm(db, vmId, 'updated', { _rebooting: true });
+      await sleep(POLL_MS);
+    }
+    if (settled === 'ACTIVE') {
+      await journalVm(db, vmId, 'success', `Server "${link.name}" rebooted, active again.`);
+      await journal(db, cloud.id, 'success', `Server "${link.name}" rebooted in ${link.region}.`);
+    } else if (settled) {
+      await journalVm(
+        db,
+        vmId,
+        'danger',
+        `Server "${link.name}" ended up "${settled}" after the reboot.`,
+      );
+      await journal(
+        db,
+        cloud.id,
+        'danger',
+        `Server "${link.name}" ended up "${settled}" after a reboot in ${link.region}.`,
+      );
+    } else {
+      await journal(
+        db,
+        cloud.id,
+        'warning',
+        `Server "${link.name}" is still rebooting ${POLL_LIMIT_MS / 60_000} minutes after it was requested.`,
+      );
+    }
+  } catch (e) {
+    await journal(
+      db,
+      cloud.id,
+      'danger',
+      `Following the reboot of "${link.name}": ${messageOf(e)}`,
+    );
+  } finally {
+    await emitVm(db, vmId, 'updated'); // clear the "rebooting" hint, whatever the outcome
   }
 }
 

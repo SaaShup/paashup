@@ -8,11 +8,16 @@ import { broadcast } from '../../realtime.js';
 
 const VM_TABLE = 'virtualization_virtual_machine';
 
-/** Push a VM's current state (or its removal) to the connected clients. Never throws. */
+/**
+ * Push a VM's current state (or its removal) to the connected clients. Never throws.
+ * `extra` is merged onto the serialized object for transient, unpersisted hints (e.g. a
+ * reboot in progress) that a page can show without them ever living in the database.
+ */
 export async function emitVm(
   db: Db,
   vmId: number,
   event: 'created' | 'updated' | 'deleted',
+  extra?: Record<string, unknown>,
 ): Promise<void> {
   try {
     const meta = getTable(VM_TABLE);
@@ -30,7 +35,7 @@ export async function emitVm(
     const row = await new Repository<Record<string, unknown>>(db, meta).retrieve(vmId);
     if (!row) return;
     const data = await new Serializer(db, process.env.BASE_URL ?? '').object(VM_TABLE, row);
-    broadcast({ ...base, event, data });
+    broadcast({ ...base, event, data: extra ? { ...data, ...extra } : data });
   } catch {
     /* a missed notification only means a page refreshes later */
   }

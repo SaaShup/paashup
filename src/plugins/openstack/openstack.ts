@@ -517,6 +517,18 @@ export async function deleteServer(c: CloudConfig, region: string, id: string): 
   }
 }
 
+/** Ask for a reboot of a server, soft (graceful shutdown then boot) or hard (power cycle). */
+export async function rebootServer(
+  c: CloudConfig,
+  region: string,
+  id: string,
+  type: 'SOFT' | 'HARD',
+): Promise<void> {
+  await send(c, region, 'compute', 'POST', `/servers/${encodeURIComponent(id)}/action`, {
+    reboot: { type },
+  });
+}
+
 /** The metadata (key → value) of a server. */
 export async function getServerMetadata(
   c: CloudConfig,

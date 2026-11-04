@@ -145,6 +145,12 @@ export async function startFakeOpenStack() {
             r.deleted = [...(r.deleted ?? []), found.id];
             return send(204, {});
           }
+          if (req.method === 'PUT') {
+            const body = JSON.parse(raw);
+            found.name = body.server?.name ?? found.name;
+            r.renamed = [...(r.renamed ?? []), { id: found.id, name: found.name }];
+            return send(200, { server: found });
+          }
           if (found.status === 'BUILD' && found.reads++ >= r.buildReads) {
             found.status = r.failBuild ? 'ERROR' : 'ACTIVE';
             if (r.failBuild) found.fault = { message: r.failBuild };

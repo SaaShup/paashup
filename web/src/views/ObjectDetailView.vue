@@ -195,6 +195,30 @@ function errorText(e: unknown): string {
   return String(e);
 }
 
+/**
+ * The generic edit form just saved the VM. If its name changed and it's backed by an
+ * OpenStack server, push the new name to Nova too, so the two don't drift apart — a failure
+ * here is surfaced but the edit itself already succeeded, so it isn't rolled back.
+ */
+async function onEditSaved(): Promise<void> {
+  const previousName = get('name');
+  editing.value = false;
+  await load();
+  const newName = get('name');
+  if (
+    vmServer.value &&
+    typeof previousName === 'string' &&
+    typeof newName === 'string' &&
+    newName !== previousName
+  ) {
+    try {
+      await api.put(`${OPENSTACK_SERVERS}${ui.detailId}/rename/`, { name: newName });
+    } catch (e) {
+      error.value = `Renamed in paashup, but OpenStack wasn't updated: ${errorText(e)}`;
+    }
+  }
+}
+
 /** Delete the VM's server on OpenStack, then follow the VM until it is gone. */
 async function deleteOnOpenStack(): Promise<void> {
   const r = resource.value;
@@ -755,10 +779,7 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
       :model="resource.model"
       :endpoint="resource.endpoint"
       :object="obj"
-      @saved="
-        editing = false;
-        load();
-      "
+      @saved="onEditSaved"
       @cancel="editing = false"
     />
   </div>

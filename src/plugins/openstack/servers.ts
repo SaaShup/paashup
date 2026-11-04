@@ -19,6 +19,7 @@ import {
   getServerMetadata,
   getServerState,
   rebootServer,
+  renameServer,
   updateServerMetadata,
   listFlavors,
   listKeypairs,
@@ -491,6 +492,18 @@ export async function writeVmMetadata(
   await saveMetadata(db, vmId, metadata);
   await emitVm(db, vmId, 'updated');
   return { metadata };
+}
+
+/**
+ * Push a VM's name to its OpenStack server. Paashup's name is the source of truth (set by the
+ * generic edit of the VM); this only syncs Nova's own display name to match, so
+ * `openstack server list` doesn't drift from it. It never touches the guest OS's own hostname.
+ */
+export async function renameVm(db: Db, vmId: number, name: string): Promise<void> {
+  const { link, cloud } = await serverOfVm(db, vmId);
+  await renameServer(cloud, link.region, link.server_id, name);
+  await journalVm(db, vmId, 'info', `Renamed to "${name}" on OpenStack (region ${link.region}).`);
+  await journal(db, cloud.id, 'info', `Server renamed to "${name}" in ${link.region}.`);
 }
 
 /**

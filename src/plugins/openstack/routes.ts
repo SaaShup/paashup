@@ -14,6 +14,7 @@
 //   GET    /servers/[?virtual_machine_id=]  the OpenStack server behind each VM
 //   DELETE /servers/{vm_id}/             delete the server of a VM paashup created
 //   POST   /servers/{vm_id}/reboot/      reboot the server of a VM, { type: 'soft' | 'hard' }
+//   PUT    /servers/{vm_id}/rename/      sync the server's Nova name to paashup's, { name }
 //   GET|PUT /servers/{vm_id}/metadata/   read / edit the metadata of the server behind a VM
 import type { Db } from '../../db/types.js';
 import type { PluginRoute } from '../../plugins/types.js';
@@ -40,6 +41,7 @@ import {
   parseCreate,
   readVmMetadata,
   rebootVm,
+  renameVm,
   writeVmMetadata,
 } from './servers.js';
 import { META, T } from './meta.js';
@@ -316,6 +318,22 @@ const rebootServerRoute: PluginRoute = {
   },
 };
 
+const renameServerRoute: PluginRoute = {
+  method: 'PUT',
+  path: `${OPENSTACK_API}/servers/{vm_id}/rename/`,
+  handler: async ({ db, params, body }) => {
+    const name = str((body as Obj | null)?.name);
+    if (!name) throw new ValidationError('Invalid request', { name: ['This field is required.'] });
+    try {
+      await renameVm(db, Number(params.vm_id), name);
+      return { status: 200, body: { detail: 'Rename sent to OpenStack.' } };
+    } catch (e) {
+      if (e instanceof OpenStackError) return fail(e);
+      throw e;
+    }
+  },
+};
+
 const getMetadataRoute: PluginRoute = {
   method: 'GET',
   path: `${OPENSTACK_API}/servers/{vm_id}/metadata/`,
@@ -350,6 +368,7 @@ export const cloudRoutes: PluginRoute[] = [
   listServersRoute,
   deleteServerRoute,
   rebootServerRoute,
+  renameServerRoute,
   createRoute,
   ...updateRoutes,
   deleteRoute,

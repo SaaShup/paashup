@@ -529,6 +529,21 @@ export async function rebootServer(
   });
 }
 
+/**
+ * Rename a server on OpenStack. This only changes the Nova display name (what
+ * `openstack server list` shows) — it never touches the guest OS's own hostname.
+ */
+export async function renameServer(
+  c: CloudConfig,
+  region: string,
+  id: string,
+  name: string,
+): Promise<void> {
+  await send(c, region, 'compute', 'PUT', `/servers/${encodeURIComponent(id)}`, {
+    server: { name },
+  });
+}
+
 /** The metadata (key → value) of a server. */
 export async function getServerMetadata(
   c: CloudConfig,

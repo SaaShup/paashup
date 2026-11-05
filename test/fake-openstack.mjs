@@ -11,7 +11,10 @@ export const region = (extra = {}) => ({
   images: [],
   volumes: [],
   keypairs: [],
-  flavors: [{ id: 'fl-1', name: 'b2-7', vcpus: 2, ram: 7168, disk: 50 }],
+  flavors: [
+    { id: 'fl-1', name: 'b2-7', vcpus: 2, ram: 7168, disk: 50 },
+    { id: 'fl-2', name: 'b2-15', vcpus: 4, ram: 15360, disk: 100 },
+  ],
   limits: {
     maxTotalInstances: 10,
     totalInstancesUsed: 0,
@@ -24,6 +27,8 @@ export const region = (extra = {}) => ({
   failBuild: null, // a message: a new server ends in ERROR with this fault
   rebootReads: 1, // how many times a rebooting server is read as (HARD_)REBOOT before ACTIVE
   failReboot: null, // a message: a rebooted server ends in ERROR with this fault
+  resizeReads: 1, // how many times a resizing server is read as RESIZE before VERIFY_RESIZE
+  failResize: null, // a message: a resized server ends in ERROR with this fault
   down: false, // the whole compute API answers 500
   glanceDown: false,
   volumesDown: false,
@@ -163,6 +168,13 @@ export async function startFakeOpenStack() {
             found.status = r.failReboot ? 'ERROR' : 'ACTIVE';
             if (r.failReboot) found.fault = { message: r.failReboot };
           }
+          if (found.status === 'RESIZE' && found.resizeReads++ >= r.resizeReads) {
+            // a real Nova needs an explicit confirmResize/revertResize from here; it never
+            // moves on from VERIFY_RESIZE on its own, which is exactly the real ambiguity
+            // followResize's auto-confirm is there to resolve
+            found.status = r.failResize ? 'ERROR' : 'VERIFY_RESIZE';
+            if (r.failResize) found.fault = { message: r.failResize };
+          }
           return send(200, { server: found });
         }
         const action = rest.match(/^\/servers\/([^/]+)\/action$/);
@@ -171,11 +183,43 @@ export async function startFakeOpenStack() {
           if (!found)
             return send(404, { itemNotFound: { message: 'Instance could not be found' } });
           const body = JSON.parse(raw);
-          if (!body.reboot) return send(400, { badRequest: { message: 'unsupported action' } });
-          found.status = body.reboot.type === 'HARD' ? 'HARD_REBOOT' : 'REBOOT';
-          found.rebootReads = 0;
-          r.rebooted = [...(r.rebooted ?? []), { id: found.id, type: body.reboot.type }];
-          return send(202, {});
+          if (body.reboot) {
+            found.status = body.reboot.type === 'HARD' ? 'HARD_REBOOT' : 'REBOOT';
+            found.rebootReads = 0;
+            r.rebooted = [...(r.rebooted ?? []), { id: found.id, type: body.reboot.type }];
+            return send(202, {});
+          }
+          if (body.resize) {
+            const flavor = r.flavors.find((f) => f.id === body.resize.flavorRef);
+            if (!flavor) return send(400, { badRequest: { message: 'flavor not found' } });
+            found.status = 'RESIZE';
+            found.resizeReads = 0;
+            found.pendingFlavor = flavor;
+            r.resized = [...(r.resized ?? []), { id: found.id, flavorId: flavor.id }];
+            return send(202, {});
+          }
+          if ('confirmResize' in body) {
+            if (found.status !== 'VERIFY_RESIZE') {
+              return send(409, { conflictingRequest: { message: 'not in VERIFY_RESIZE' } });
+            }
+            if (found.pendingFlavor) {
+              found.flavor = { original_name: found.pendingFlavor.name, ...found.pendingFlavor };
+              found.pendingFlavor = null;
+            }
+            found.status = 'ACTIVE';
+            r.confirmed = [...(r.confirmed ?? []), found.id];
+            return send(204, {});
+          }
+          if ('revertResize' in body) {
+            if (found.status !== 'VERIFY_RESIZE') {
+              return send(409, { conflictingRequest: { message: 'not in VERIFY_RESIZE' } });
+            }
+            found.pendingFlavor = null;
+            found.status = 'ACTIVE';
+            r.reverted = [...(r.reverted ?? []), found.id];
+            return send(202, {});
+          }
+          return send(400, { badRequest: { message: 'unsupported action' } });
         }
         // server metadata: GET reads, POST adds / updates, DELETE /<key> removes one
         const meta = rest.match(/^\/servers\/([^/]+)\/metadata(?:\/([^/]+))?$/);

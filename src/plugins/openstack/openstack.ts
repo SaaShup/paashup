@@ -544,6 +544,33 @@ export async function renameServer(
   });
 }
 
+/** Ask Nova to change a server's flavor. The server goes through RESIZE, then VERIFY_RESIZE
+ *  once the new flavor is in place, and needs `confirmResize` or `revertResize` to finish. */
+export async function resizeServer(
+  c: CloudConfig,
+  region: string,
+  id: string,
+  flavorId: string,
+): Promise<void> {
+  await send(c, region, 'compute', 'POST', `/servers/${encodeURIComponent(id)}/action`, {
+    resize: { flavorRef: flavorId },
+  });
+}
+
+/** Finish a resize: keep the new flavor, freeing the old one's resources. Irreversible. */
+export async function confirmResize(c: CloudConfig, region: string, id: string): Promise<void> {
+  await send(c, region, 'compute', 'POST', `/servers/${encodeURIComponent(id)}/action`, {
+    confirmResize: null,
+  });
+}
+
+/** Finish a resize by undoing it: go back to the flavor the server had before. */
+export async function revertResize(c: CloudConfig, region: string, id: string): Promise<void> {
+  await send(c, region, 'compute', 'POST', `/servers/${encodeURIComponent(id)}/action`, {
+    revertResize: null,
+  });
+}
+
 /** The metadata (key → value) of a server. */
 export async function getServerMetadata(
   c: CloudConfig,

@@ -15,6 +15,7 @@
 //   DELETE /servers/{vm_id}/             delete the server of a VM paashup created
 //   POST   /servers/{vm_id}/reboot/      reboot the server of a VM, { type: 'soft' | 'hard' }
 //   PUT    /servers/{vm_id}/rename/      sync the server's Nova name to paashup's, { name }
+//   POST   /servers/{vm_id}/resize/      change the server's flavor, { flavor_id }
 //   GET|PUT /servers/{vm_id}/metadata/   read / edit the metadata of the server behind a VM
 import type { Db } from '../../db/types.js';
 import type { PluginRoute } from '../../plugins/types.js';
@@ -42,6 +43,7 @@ import {
   readVmMetadata,
   rebootVm,
   renameVm,
+  resizeVm,
   writeVmMetadata,
 } from './servers.js';
 import { META, T } from './meta.js';
@@ -334,6 +336,24 @@ const renameServerRoute: PluginRoute = {
   },
 };
 
+const resizeServerRoute: PluginRoute = {
+  method: 'POST',
+  path: `${OPENSTACK_API}/servers/{vm_id}/resize/`,
+  handler: async ({ db, params, body }) => {
+    const flavorId = str((body as Obj | null)?.flavor_id);
+    if (!flavorId) {
+      throw new ValidationError('Invalid request', { flavor_id: ['This field is required.'] });
+    }
+    try {
+      await resizeVm(db, Number(params.vm_id), flavorId);
+      return { status: 202, body: { detail: 'Resize requested on OpenStack.' } };
+    } catch (e) {
+      if (e instanceof OpenStackError) return fail(e);
+      throw e;
+    }
+  },
+};
+
 const getMetadataRoute: PluginRoute = {
   method: 'GET',
   path: `${OPENSTACK_API}/servers/{vm_id}/metadata/`,
@@ -369,6 +389,7 @@ export const cloudRoutes: PluginRoute[] = [
   deleteServerRoute,
   rebootServerRoute,
   renameServerRoute,
+  resizeServerRoute,
   createRoute,
   ...updateRoutes,
   deleteRoute,

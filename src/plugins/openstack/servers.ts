@@ -12,6 +12,7 @@ import { NOVA_KEYPAIR_NAME } from '../../repository/validate.js';
 import {
   authenticate,
   computeRegions,
+  confirmResize,
   createKeypair,
   createServer,
   deleteServer,
@@ -20,6 +21,7 @@ import {
   getServerState,
   rebootServer,
   renameServer,
+  resizeServer,
   updateServerMetadata,
   listFlavors,
   listKeypairs,
@@ -641,6 +643,111 @@ async function followReboot(db: Db, cloud: CloudRow, link: Link, vmId: number): 
     );
   } finally {
     await emitVm(db, vmId, 'updated'); // clear the "rebooting" hint, whatever the outcome
+  }
+}
+
+/**
+ * Resize the OpenStack server behind a VM to another flavor. Nova only allows growing or
+ * keeping the disk the same, never shrinking it — a flavor with a smaller disk is rejected by
+ * OpenStack itself, so this is not checked here.
+ */
+export async function resizeVm(db: Db, vmId: number, flavorId: string): Promise<void> {
+  const { link, cloud } = await serverOfVm(db, vmId);
+  const flavor = (await listFlavors(cloud, link.region)).find((f) => f.id === flavorId);
+  if (!flavor) throw fieldError('flavor_id', 'This flavor is not available in this region.');
+
+  await resizeServer(cloud, link.region, link.server_id, flavorId);
+  await journalVm(
+    db,
+    vmId,
+    'warning',
+    `Resize to "${flavor.name}" requested on OpenStack (region ${link.region}).`,
+  );
+  await journal(
+    db,
+    cloud.id,
+    'warning',
+    `Resize of server "${link.name}" to "${flavor.name}" requested in ${link.region}.`,
+  );
+  void followResize(db, cloud, link, vmId, flavor.name);
+}
+
+/**
+ * Poll the server behind a VM until its resize settles. OpenStack moves it through RESIZE then
+ * VERIFY_RESIZE, which needs an explicit confirm (keep the new flavor) or revert (undo); this
+ * always confirms, since paashup doesn't offer a "try it, then decide" step. While in progress,
+ * the VM is re-pushed with a transient `_resizing` hint (never stored). On success, the VM's
+ * vcpus/memory/disk are refreshed from the new flavor via the same path used to follow a newly
+ * created server; a journal entry on both ends the story, and a final plain push clears the hint.
+ */
+async function followResize(
+  db: Db,
+  cloud: CloudRow,
+  link: Link,
+  vmId: number,
+  flavorName: string,
+): Promise<void> {
+  try {
+    let settled: string | null = null;
+    let confirmed = false;
+    for (let waited = 0; waited < POLL_LIMIT_MS; waited += POLL_MS) {
+      const state = await getServerState(cloud, link.region, link.server_id);
+      if (!state) break; // the server is gone; nothing left to follow
+      const upper = state.status.toUpperCase();
+      if (upper !== 'RESIZE' && upper !== 'VERIFY_RESIZE') {
+        settled = state.status;
+        break;
+      }
+      if (upper === 'VERIFY_RESIZE' && !confirmed) {
+        confirmed = true;
+        await confirmResize(cloud, link.region, link.server_id);
+      }
+      await emitVm(db, vmId, 'updated', { _resizing: true });
+      await sleep(POLL_MS);
+    }
+    if (settled === 'ACTIVE') {
+      await importServer(db, cloud.id, link.region, link.server_id); // refreshes vcpus/memory/disk too
+      await journalVm(db, vmId, 'success', `Server "${link.name}" resized to "${flavorName}".`);
+      await journal(
+        db,
+        cloud.id,
+        'success',
+        `Server "${link.name}" resized to "${flavorName}" in ${link.region}.`,
+      );
+    } else if (settled) {
+      await db.execute(`UPDATE virtualization_virtual_machine SET status = ? WHERE id = ?`, [
+        vmStatus(settled),
+        vmId,
+      ]);
+      await journalVm(
+        db,
+        vmId,
+        'danger',
+        `Server "${link.name}" ended up "${settled}" after the resize.`,
+      );
+      await journal(
+        db,
+        cloud.id,
+        'danger',
+        `Server "${link.name}" ended up "${settled}" after a resize to "${flavorName}" in ${link.region}.`,
+      );
+    } else {
+      await journal(
+        db,
+        cloud.id,
+        'warning',
+        `Server "${link.name}" is still resizing ${POLL_LIMIT_MS / 60_000} minutes after it was requested.`,
+      );
+    }
+  } catch (e) {
+    await journal(
+      db,
+      cloud.id,
+      'danger',
+      `Following the resize of "${link.name}": ${messageOf(e)}`,
+    );
+  } finally {
+    await emitVm(db, vmId, 'updated'); // clear the "resizing" hint, whatever the outcome
   }
 }
 

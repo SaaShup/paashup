@@ -16,6 +16,7 @@ import { fromPairs, toPairs, type Pair } from '../keyValue.js';
 import { useConnectionStore } from '../stores/connection.js';
 import { isValidDefault, setDefault } from '../initScript.js';
 import { briefTarget, DETAIL, LINKABLE_TABLES, type RelatedSection } from './objectDetail.js';
+import { flavorGroups, type Flavor } from '../flavors.js';
 
 const ui = useUiStore();
 const connection = useConnectionStore();
@@ -31,7 +32,7 @@ const editing = ref(false);
 const refreshing = ref(false);
 // A VM that is a server of an OpenStack cloud: deleting it here deletes the server on OpenStack.
 const OPENSTACK_SERVERS = '/api/plugins/openstack/servers/';
-const vmServer = ref<{ cloud: string } | null>(null);
+const vmServer = ref<{ cloud: string; cloudId: number; region: string } | null>(null);
 const notice = ref('');
 // The metadata of that server (key → value), read from OpenStack and editable in place.
 const metaRows = ref<Pair[]>([]);
@@ -48,6 +49,16 @@ const rebootMenuEl = ref<HTMLElement | null>(null);
 // Set from a transient `_rebooting` hint on the live feed (never persisted): shown on the
 // VM's status pill while OpenStack is still rebooting it.
 const statusRebooting = ref(false);
+
+const resizing = ref(false);
+const resizeModalOpen = ref(false);
+const flavors = ref<Flavor[]>([]);
+const flavorsLoading = ref(false);
+const flavorsError = ref('');
+const selectedFlavorId = ref('');
+// Set from a transient `_resizing` hint on the live feed (never persisted): shown on the
+// VM's status pill while OpenStack is still resizing it.
+const statusResizing = ref(false);
 
 const HIDE = new Set(['id', 'url', 'display_url', 'display', 'custom_fields', 'tags']);
 const get = (k: string): unknown => (obj.value as Record<string, unknown> | null)?.[k];
@@ -103,6 +114,7 @@ async function load(quiet = false): Promise<void> {
       metaRows.value = metaSaved.value = [];
       metaError.value = '';
       statusRebooting.value = false;
+      statusResizing.value = false;
     }
     await Promise.all([
       ...sections.value.map(async (s) => {
@@ -133,7 +145,11 @@ async function loadVmServer(table: string, id: number): Promise<void> {
   try {
     const row = (await api.list(OPENSTACK_SERVERS, { virtual_machine_id: id })).results[0];
     if (row) {
-      vmServer.value = { cloud: String(row.cloud) };
+      vmServer.value = {
+        cloud: String(row.cloud),
+        cloudId: Number(row.cloud_id),
+        region: String(row.region),
+      };
       void loadMetadata(id); // a live call to the cloud: the page does not wait for it
     } else {
       vmServer.value = null;
@@ -279,6 +295,103 @@ async function rebootOnOpenStack(type: 'soft' | 'hard'): Promise<void> {
   }
 }
 
+/** Fetch the region's flavors live from OpenStack, once, when the Resize menu is first opened. */
+async function loadFlavors(): Promise<void> {
+  if (!vmServer.value || flavors.value.length || flavorsLoading.value) return;
+  flavorsLoading.value = true;
+  flavorsError.value = '';
+  try {
+    flavors.value = (
+      await api.get<{ results: Flavor[] }>(
+        `/api/plugins/openstack/clouds/${vmServer.value.cloudId}/flavors/?region=${encodeURIComponent(vmServer.value.region)}`,
+      )
+    ).results;
+  } catch (e) {
+    flavorsError.value = String(e);
+  } finally {
+    flavorsLoading.value = false;
+  }
+}
+
+/** The VM's current sizes, as last synced from OpenStack. */
+const currentSizes = computed(() => ({
+  vcpus: Number(get('vcpus') ?? NaN),
+  ram: Number(get('memory') ?? NaN),
+  disk: Number(get('disk') ?? NaN),
+}));
+// The VM's current flavor, by name: paashup's VM type is created from the flavor's own name
+// (plugins/openstack/sync.ts), so this is the actual flavor running, not just a size match —
+// several flavors can share the same vCPU/RAM/disk (e.g. a "-flex" variant).
+const currentFlavorName = computed(
+  () => (get('virtual_machine_type') as { name?: string } | null)?.name ?? '',
+);
+
+/** Why a flavor can't be picked: it's the VM's current one, or its disk is smaller than the
+ *  VM's current disk — OpenStack itself refuses to shrink a disk on resize. Empty when it can. */
+function flavorDisabledReason(f: Flavor): string {
+  if (f.name === currentFlavorName.value) return ' (current flavor)';
+  if (f.disk < currentSizes.value.disk) return ' (smaller disk, unavailable)';
+  return '';
+}
+const flavorDisabled = (f: Flavor): boolean => flavorDisabledReason(f) !== '';
+
+const selectedFlavor = computed(
+  () => flavors.value.find((f) => f.id === selectedFlavorId.value) ?? null,
+);
+const groupedFlavors = computed(() => flavorGroups(flavors.value));
+
+/** One row of the current-vs-new comparison: a base bar for the current value, then a green
+ *  segment for an increase or a red one marking what a decrease takes away. Widths are a
+ *  percentage of the larger of the two values, so the bar always fits its row. */
+function compareBar(
+  current: number,
+  next: number,
+): { basePct: number; deltaPct: number; tone: 'more' | 'less' | 'same' } {
+  const scale = Math.max(current, next, 1);
+  if (next === current) return { basePct: (current / scale) * 100, deltaPct: 0, tone: 'same' };
+  if (next > current) {
+    return {
+      basePct: (current / scale) * 100,
+      deltaPct: ((next - current) / scale) * 100,
+      tone: 'more',
+    };
+  }
+  return {
+    basePct: (next / scale) * 100,
+    deltaPct: ((current - next) / scale) * 100,
+    tone: 'less',
+  };
+}
+
+/** Open the resize popup and fetch the region's flavors live from OpenStack, once. */
+function openResizeModal(): void {
+  resizeModalOpen.value = true;
+  selectedFlavorId.value = '';
+  void loadFlavors();
+}
+
+function closeResizeModal(): void {
+  resizeModalOpen.value = false;
+}
+
+/** Resize the VM's server on OpenStack to the flavor picked in the popup. */
+async function resizeOnOpenStack(): Promise<void> {
+  const id = ui.detailId;
+  const f = selectedFlavor.value;
+  if (id == null || !vmServer.value || !f) return;
+  resizing.value = true;
+  error.value = '';
+  try {
+    await api.post(`${OPENSTACK_SERVERS}${id}/resize/`, { flavor_id: f.id });
+    resizeModalOpen.value = false;
+  } catch (e) {
+    const d = (e as { detail?: { detail?: unknown } }).detail;
+    error.value = typeof d?.detail === 'string' ? d.detail : String(e);
+  } finally {
+    resizing.value = false;
+  }
+}
+
 async function loadRegionStatus(endpoint: string, id: number): Promise<void> {
   regionStatus.value = (
     await api.get<{ results: Obj[] }>(`${endpoint}${id}/region-status/`)
@@ -347,9 +460,12 @@ watch(
       applyRoute(ui, { view: 'list', table: r.table });
       return;
     }
-    const stillRebooting = (e.data as Record<string, unknown> | undefined)?._rebooting === true;
+    const data = e.data as Record<string, unknown> | undefined;
+    const stillRebooting = data?._rebooting === true;
+    const stillResizing = data?._resizing === true;
     statusRebooting.value = stillRebooting;
-    if (stillRebooting) return; // nothing persisted changed, just the transient hint above
+    statusResizing.value = stillResizing;
+    if (stillRebooting || stillResizing) return; // nothing persisted changed, just the hint above
     // the page just saved its own metadata: it already shows the result, a reload would flash
     if (savingMeta.value || Date.now() < ignoreLiveUntil) return;
     clearTimeout(liveTimer);
@@ -520,6 +636,9 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
           </button>
         </div>
       </div>
+      <button v-if="vmServer && resource.writable" class="btn" @click="openResizeModal">
+        Resize
+      </button>
       <button
         v-if="vmServer && resource.writable"
         class="btn btn-danger"
@@ -543,6 +662,12 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
             <StatusPill
               v-if="f.key === 'status' && vmServer && statusRebooting"
               label="Rebooting…"
+              tone="warn"
+              busy
+            />
+            <StatusPill
+              v-else-if="f.key === 'status' && vmServer && statusResizing"
+              label="Resizing…"
               tone="warn"
               busy
             />
@@ -782,6 +907,112 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
       @saved="onEditSaved"
       @cancel="editing = false"
     />
+
+    <Teleport to="body">
+      <div
+        v-if="resizeModalOpen"
+        class="confirm-overlay"
+        @click.self="closeResizeModal"
+        @keydown.esc="closeResizeModal"
+      >
+        <div
+          class="confirm-panel resize-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="resize-title"
+        >
+          <h3 id="resize-title">Resize "{{ title }}" on OpenStack</h3>
+          <p class="muted" style="margin-top: -6px">
+            Cloud "{{ vmServer?.cloud }}", region {{ vmServer?.region }}
+          </p>
+
+          <p v-if="flavorsLoading" class="muted">Loading flavors…</p>
+          <p v-else-if="flavorsError" class="error">{{ flavorsError }}</p>
+          <template v-else>
+            <label class="resize-field">
+              New flavor
+              <select v-model="selectedFlavorId">
+                <option value="" disabled>Choose a flavor…</option>
+                <optgroup v-for="g in groupedFlavors" :key="g.label" :label="g.label">
+                  <option
+                    v-for="f in g.items"
+                    :key="f.id"
+                    :value="f.id"
+                    :disabled="flavorDisabled(f)"
+                  >
+                    {{ f.name }} — {{ f.vcpus }} vCPU / {{ f.ram }} MB / {{ f.disk }} GB{{
+                      flavorDisabledReason(f)
+                    }}
+                  </option>
+                </optgroup>
+              </select>
+            </label>
+
+            <div v-if="selectedFlavor" class="resize-compare">
+              <div
+                v-for="row in [
+                  {
+                    label: 'vCPUs',
+                    unit: '',
+                    current: currentSizes.vcpus,
+                    next: selectedFlavor.vcpus,
+                  },
+                  { label: 'RAM', unit: 'MB', current: currentSizes.ram, next: selectedFlavor.ram },
+                  {
+                    label: 'Disk',
+                    unit: 'GB',
+                    current: currentSizes.disk,
+                    next: selectedFlavor.disk,
+                  },
+                ]"
+                :key="row.label"
+                class="resize-row"
+              >
+                <div class="resize-row-head">
+                  <span>{{ row.label }}</span>
+                  <span class="muted">
+                    {{ row.current }}{{ row.unit }} → {{ row.next }}{{ row.unit }}
+                  </span>
+                </div>
+                <div class="resize-bar">
+                  <div
+                    class="resize-bar-base"
+                    :style="{ width: compareBar(row.current, row.next).basePct + '%' }"
+                  />
+                  <div
+                    v-if="compareBar(row.current, row.next).deltaPct > 0"
+                    class="resize-bar-delta"
+                    :class="compareBar(row.current, row.next).tone"
+                    :style="{ width: compareBar(row.current, row.next).deltaPct + '%' }"
+                  />
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <p v-if="error" class="error">{{ error }}</p>
+
+          <div class="confirm-actions">
+            <button
+              type="button"
+              class="btn btn-ghost"
+              :disabled="resizing"
+              @click="closeResizeModal"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="btn btn-warn"
+              :disabled="!selectedFlavor || resizing"
+              @click="resizeOnOpenStack"
+            >
+              {{ resizing ? 'Resizing…' : 'Resize' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -1006,5 +1237,84 @@ th {
 .meta-ro td {
   padding: 3px 14px 3px 0;
   overflow-wrap: anywhere;
+}
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 10vh 16px 0;
+  overflow: auto;
+}
+.confirm-panel {
+  background: #fff;
+  border-radius: 10px;
+  border-top: 4px solid var(--primary);
+  padding: 20px 24px;
+  width: 440px;
+  max-width: 100%;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.25);
+}
+.confirm-panel h3 {
+  margin: 0 0 10px;
+}
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+.resize-panel {
+  border-top-color: var(--warn);
+  width: 480px;
+}
+.resize-field {
+  display: block;
+  margin: 14px 0 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.resize-field select {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  font-size: 0.9rem;
+}
+.resize-compare {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.resize-row-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  margin-bottom: 4px;
+}
+.resize-bar {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: #e2e8f0;
+  overflow: hidden;
+  display: flex;
+}
+.resize-bar-base {
+  height: 100%;
+  background: var(--primary);
+}
+.resize-bar-delta {
+  height: 100%;
+}
+.resize-bar-delta.more {
+  background: #22c55e;
+}
+.resize-bar-delta.less {
+  background: #ef4444;
 }
 </style>

@@ -7,6 +7,7 @@ import { api, ApiError, type Obj, type Page } from '../api/client.js';
 import { confirmDialog } from '../composables/confirm.js';
 import KeyValueEditor from './KeyValueEditor.vue';
 import { fromPairs, type Pair } from '../keyValue.js';
+import { flavorGroups, flavorLabel, type Flavor } from '../flavors.js';
 
 const emit = defineEmits<{
   (e: 'saved', vmId: number | null): void;
@@ -28,12 +29,6 @@ interface Network extends Named {
   external?: boolean;
   shared?: boolean;
 }
-interface Flavor extends Named {
-  vcpus: number;
-  ram: number;
-  disk: number;
-}
-
 const clouds = ref<Obj[]>([]);
 const regions = ref<string[]>([]);
 const flavors = ref<Flavor[]>([]);
@@ -104,43 +99,7 @@ const read = async <T,>(kind: string): Promise<T[]> =>
     )
   ).results;
 
-// Flavors are named "<family><generation>-<size>" (b2-7, d2-2, win-c3-8…): group them by
-// family so the list can be browsed. The families below are OVHcloud's; any other name
-// (m1.small…) is grouped by its prefix, and what has none goes under "Other".
-const FAMILIES: Record<string, string> = {
-  d: 'Discovery',
-  b: 'General purpose',
-  c: 'CPU optimised',
-  r: 'RAM optimised',
-  i: 'IOPS',
-  t: 'GPU',
-};
-const familyOf = (flavor: string): string =>
-  flavor.match(/^((?:win-)?[a-z]+\d*)[-.]/i)?.[1]?.toLowerCase() ?? '';
-function familyLabel(code: string): string {
-  if (!code) return 'Other';
-  const windows = code.startsWith('win-');
-  const base = windows ? code.slice(4) : code;
-  const name = FAMILIES[base[0] ?? ''];
-  return `${windows ? 'Windows — ' : ''}${name ? `${name} (${base})` : base}`;
-}
-const flavorGroups = computed(() => {
-  const byFamily = new Map<string, Flavor[]>();
-  for (const f of flavors.value) {
-    const code = familyOf(f.name);
-    byFamily.set(code, [...(byFamily.get(code) ?? []), f]);
-  }
-  const rank = (code: string): number => {
-    const i = Object.keys(FAMILIES).indexOf((code.replace('win-', '')[0] ?? '') as string);
-    return (code.startsWith('win-') ? 100 : 0) + (code ? (i < 0 ? 50 : i) : 99);
-  };
-  return [...byFamily.entries()]
-    .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
-    .map(([code, items]) => ({
-      label: familyLabel(code),
-      items: [...items].sort((a, b) => a.vcpus - b.vcpus || a.ram - b.ram),
-    }));
-});
+const groupedFlavors = computed(() => flavorGroups(flavors.value));
 
 // public networks first: they are what gives the VM an address reachable from the Internet
 const sortedNetworks = computed(() =>
@@ -150,9 +109,6 @@ const sortedNetworks = computed(() =>
 );
 const networkHint = (n: Network): string =>
   n.external ? 'public (Internet)' : n.shared ? 'private, shared' : 'private';
-
-const flavorLabel = (f: Flavor): string =>
-  `${f.name} — ${f.vcpus} vCPU · ${Math.round((f.ram / 1024) * 10) / 10} GB RAM · ${f.disk} GB disk`;
 
 onMounted(async () => {
   try {
@@ -299,7 +255,7 @@ async function submit(): Promise<void> {
             <div class="control">
               <select v-model="flavorId">
                 <option value="" disabled>—</option>
-                <optgroup v-for="g in flavorGroups" :key="g.label" :label="g.label">
+                <optgroup v-for="g in groupedFlavors" :key="g.label" :label="g.label">
                   <option v-for="f in g.items" :key="f.id" :value="f.id">
                     {{ flavorLabel(f) }}
                   </option>

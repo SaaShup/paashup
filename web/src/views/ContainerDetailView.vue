@@ -20,7 +20,7 @@ import CollectionTable from '../components/CollectionTable.vue';
 import ObjectForm from '../components/ObjectForm.vue';
 import ContainerLogs from '../components/ContainerLogs.vue';
 import StatusPill from '../components/StatusPill.vue';
-import { pillFor } from '../format.js';
+import { pillFor, formatUnit } from '../format.js';
 import { confirmDialog } from '../composables/confirm.js';
 import ContainerTerminal from '../components/ContainerTerminal.vue';
 
@@ -74,7 +74,7 @@ const image = computed(() => get('image'));
 const scalars = computed(() =>
   CONTAINER_SCALARS.map((s) => ({
     label: s.label,
-    value: scalarText(get(s.key)),
+    value: formatUnit('plugin_docker_container', s.key, get(s.key)) ?? scalarText(get(s.key)),
     pill: pillFor('plugin_docker_container', s.key, get(s.key)),
   })),
 );

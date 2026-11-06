@@ -6,6 +6,7 @@ import { formLabel } from '../format.js';
 import { parseVariables } from '../initScript.js';
 import { useUiStore } from '../stores/ui.js';
 import { formFields, modelEndpoints, getSchemaDoc, type FieldDef } from '../api/schema.js';
+import { CONTAINER_LIMIT_PRESETS, type LimitPreset } from '../views/containerDetail.js';
 
 const props = defineProps<{
   model: string;
@@ -43,6 +44,66 @@ const secret = ref<string[]>(
     ? [...((props.object as { secret_variables: string[] }).secret_variables ?? [])]
     : [],
 );
+// Resource-limit fields (container memory_limit/cpu_limit): a select of common presets
+// (incl. "Unlimited") plus a "Custom…" option that reveals a free-entry number input.
+const CUSTOM = '__custom__';
+const limitPreset = ref<Record<string, string>>({});
+function limitPresets(f: FieldDef): LimitPreset[] | undefined {
+  return table.value === 'plugin_docker_container' ? CONTAINER_LIMIT_PRESETS[f.name] : undefined;
+}
+function presetValueOf(f: FieldDef): string {
+  const list = limitPresets(f) ?? [];
+  const v = values.value[f.name];
+  const n = v === '' || v === null || v === undefined ? NaN : Number(v);
+  return list.some((p) => p.value === n) ? String(n) : CUSTOM;
+}
+function initLimit(f: FieldDef) {
+  if (values.value[f.name] === '' || values.value[f.name] === null || values.value[f.name] === undefined) {
+    values.value[f.name] = 0; // default to "Unlimited" rather than leaving the field blank
+  }
+  limitPreset.value[f.name] = presetValueOf(f);
+}
+function onPresetChange(f: FieldDef, raw: string) {
+  limitPreset.value[f.name] = raw;
+  if (raw !== CUSTOM) values.value[f.name] = Number(raw);
+}
+function customDisplay(f: FieldDef): string {
+  const v = values.value[f.name];
+  return v === '' || v === null || v === undefined ? '' : String(v);
+}
+function onCustomInput(f: FieldDef, raw: string) {
+  values.value[f.name] = raw.trim() === '' ? '' : Number(raw);
+}
+function customHint(f: FieldDef): string {
+  return f.name === 'memory_limit'
+    ? 'In bytes — 0 or at least 6291456 (6 MiB).'
+    : 'In CPU cores — 0 or a positive number (fractions allowed, e.g. 0.3).';
+}
+/**
+ * Mirrors the agent's own `resourceLimits()` check (mapping.js) so a bad value is caught
+ * here instead of silently failing the (fire-and-forget) webhook later: memory_limit must
+ * be a whole number of bytes (0, or ≥ 6 MiB — Docker/cgroups don't do fractional bytes),
+ * cpu_limit any non-negative number of cores (fractions allowed).
+ */
+function limitError(f: FieldDef, v: unknown): string | null {
+  if (!limitPresets(f) || v === '' || v === null || v === undefined) return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) return 'Must be 0 or a positive number.';
+  if (f.name === 'memory_limit' && n !== 0 && (!Number.isInteger(n) || n < 6291456)) {
+    return 'Must be 0 (unlimited) or a whole number of bytes, at least 6291456 (6 MiB).';
+  }
+  return null;
+}
+/**
+ * Live version of the same check, read straight from the current (reactive) value —
+ * shown as the user types, not only after they click Save. The HTML `min`/`step` on the
+ * input are cosmetic only (the form submits via `@submit.prevent`, so the browser never
+ * runs its own constraint validation); this is the actual, authoritative check.
+ */
+function liveLimitError(f: FieldDef): string | null {
+  return limitError(f, values.value[f.name]);
+}
+
 const fileInput = ref<HTMLInputElement | null>(null);
 /** Put an uploaded file's text in the script field (and name the script after it if unnamed). */
 async function loadFile(e: Event): Promise<void> {
@@ -141,6 +202,7 @@ function fkPlaceholder(f: FieldDef): string {
 onMounted(async () => {
   fields.value = await formFields(props.model);
   for (const f of fields.value) values.value[f.name] = initValue(f);
+  for (const f of fields.value) if (limitPresets(f)) initLimit(f);
   // load FK picker options (dependent ones filtered by their sibling's value)
   endpoints.value = await modelEndpoints();
   const doc = await getSchemaDoc();
@@ -206,11 +268,14 @@ function buildPayload(): Obj | null {
         out[f.name] = !!v;
         break;
       case 'number':
-      case 'fk':
+      case 'fk': {
+        // already shown live, next to the field (liveLimitError) — just block the submit
+        if (limitError(f, v)) return null;
         if (v === '' || v === null) {
           if (f.nullable) out[f.name] = null;
         } else out[f.name] = Number(v);
         break;
+      }
       case 'select':
         if (v !== '') out[f.name] = v;
         else if (f.nullable) out[f.name] = null;
@@ -359,6 +424,30 @@ async function submit() {
               rows="6"
               spellcheck="false"
             />
+            <div v-else-if="f.kind === 'number' && limitPresets(f)" class="limit">
+              <select
+                :value="limitPreset[f.name]"
+                @change="onPresetChange(f, ($event.target as HTMLSelectElement).value)"
+              >
+                <option v-for="p in limitPresets(f)" :key="p.value" :value="p.value">
+                  {{ p.label }}
+                </option>
+                <option :value="CUSTOM">Custom…</option>
+              </select>
+              <template v-if="limitPreset[f.name] === CUSTOM">
+                <input
+                  type="number"
+                  :step="f.name === 'memory_limit' ? '1' : 'any'"
+                  min="0"
+                  :class="{ invalid: liveLimitError(f) }"
+                  :value="customDisplay(f)"
+                  @input="onCustomInput(f, ($event.target as HTMLInputElement).value)"
+                  :placeholder="f.name === 'memory_limit' ? 'Bytes' : 'CPU cores'"
+                />
+                <span v-if="liveLimitError(f)" class="err">{{ liveLimitError(f) }}</span>
+                <span v-else class="hint">{{ customHint(f) }}</span>
+              </template>
+            </div>
             <input
               v-else
               :type="f.kind === 'number' ? 'number' : 'text'"
@@ -485,6 +574,9 @@ input[type='checkbox'] {
   color: var(--danger);
   font-size: 0.78rem;
 }
+input.invalid {
+  border-color: var(--danger);
+}
 .tags {
   display: flex;
   flex-wrap: wrap;
@@ -578,6 +670,11 @@ button.ghost {
 }
 .panel.wide {
   width: 860px;
+}
+.limit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .upload {
   display: flex;

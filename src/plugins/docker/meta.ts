@@ -581,6 +581,22 @@ const containerMeta: TableMeta = {
       plainValue: true, // the Docker agent consumes restart_policy as a bare string
     },
     {
+      name: 'memory_limit',
+      column: 'memory_limit',
+      tsKind: 'number',
+      nullable: false,
+      writable: true,
+      required: false,
+    },
+    {
+      name: 'cpu_limit',
+      column: 'cpu_limit',
+      tsKind: 'number',
+      nullable: false,
+      writable: true,
+      required: false,
+    },
+    {
       name: 'cap_add',
       column: 'cap_add',
       tsKind: 'json',
@@ -755,6 +771,8 @@ export const BRIEF_FIELDS: Record<string, string[]> = {
     'restart_policy',
     'operation',
     'hostname',
+    'memory_limit',
+    'cpu_limit',
     'cap_add',
     'cap_drop',
     'log_driver',

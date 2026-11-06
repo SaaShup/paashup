@@ -13,6 +13,7 @@ import {
   HOST_SCOPE_MIGRATION,
   HOST_TOKEN_MIGRATION,
   VM_SSH_KEY_MIGRATION,
+  CONTAINER_RESOURCE_LIMITS_MIGRATION,
 } from './migrations.js';
 import { readRoutes } from './routes/crud.js';
 import { containerWriteRoutes } from './routes/containers.js';
@@ -49,7 +50,13 @@ const dockerPlugin: Plugin = {
   name: 'docker',
   version: '0.1.0',
   entities: ENTITY_METAS.map((meta) => ({ meta })),
-  migrations: [INITIAL_MIGRATION, HOST_SCOPE_MIGRATION, HOST_TOKEN_MIGRATION, VM_SSH_KEY_MIGRATION],
+  migrations: [
+    INITIAL_MIGRATION,
+    HOST_SCOPE_MIGRATION,
+    HOST_TOKEN_MIGRATION,
+    VM_SSH_KEY_MIGRATION,
+    CONTAINER_RESOURCE_LIMITS_MIGRATION,
+  ],
   routes: [
     // GET list/detail overrides that embed the source's nested arrays.
     ...readRoutes(T.host, META.host.endpoint, serializeHost),

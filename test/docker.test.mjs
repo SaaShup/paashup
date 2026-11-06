@@ -82,6 +82,7 @@ test('plugin loads and registers its migration once', async () => {
       'plugin:docker:0002_host_scope',
       'plugin:docker:0003_host_token',
       'plugin:docker:0004_vm_ssh_key',
+      'plugin:docker:0005_container_resource_limits',
     ],
   );
 });
@@ -199,6 +200,33 @@ test('container PATCH replaces only the provided child arrays', async () => {
   assert.equal(res.body.ContainerID, 'abc123');
   // env was not in the PATCH body → left untouched
   assert.equal(res.body.env.length, 1);
+});
+
+test('container memory_limit/cpu_limit default to 0 (unlimited) and round-trip arbitrary custom values', async () => {
+  // default: a container created with neither field set is "unlimited" on both
+  assert.equal(ids.container != null, true);
+  const defaults = await api('GET', `/api/plugins/docker/containers/${ids.container}/`);
+  assert.equal(defaults.body.memory_limit, 0);
+  assert.equal(defaults.body.cpu_limit, 0);
+
+  // arbitrary (non-preset) values round-trip exactly, including a fractional cpu_limit
+  const res = await api('PATCH', `/api/plugins/docker/containers/${ids.container}/`, {
+    memory_limit: 65849851561,
+    cpu_limit: 0.9999,
+  });
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.equal(res.body.memory_limit, 65849851561);
+  assert.equal(res.body.cpu_limit, 0.9999);
+
+  const got = await api('GET', `/api/plugins/docker/containers/${ids.container}/`);
+  assert.equal(got.body.memory_limit, 65849851561);
+  assert.equal(got.body.cpu_limit, 0.9999);
+
+  // reset to unlimited for the tests that follow
+  await api('PATCH', `/api/plugins/docker/containers/${ids.container}/`, {
+    memory_limit: 0,
+    cpu_limit: 0,
+  });
 });
 
 test('host GET now lists the container under its nested arrays', async () => {

@@ -204,6 +204,26 @@ test('webhook payload — image data.host brief includes endpoint (for payload_u
   assert.equal(d.data.host.endpoint, 'http://agent:8080');
 });
 
+test('webhook payload — container data carries memory_limit/cpu_limit as plain numbers (agent contract)', async () => {
+  const r = await api('POST', '/api/plugins/docker/containers/', {
+    host: hostId,
+    image: imageId,
+    name: 'limited-container',
+    memory_limit: 536870912,
+    cpu_limit: 1.5,
+  });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const d = await waitFor(
+    'all',
+    (x) => x.model === 'plugins.dockercontainer' && x.data?.name === 'limited-container',
+    'limited container created',
+  );
+  // plain numbers, not wrapped choice objects — exactly what the agent's
+  // resourceLimits() expects on HostConfig.Memory / HostConfig.NanoCpus
+  assert.equal(d.data.memory_limit, 536870912);
+  assert.equal(d.data.cpu_limit, 1.5);
+});
+
 test('webhook payload — deleted host carries data.endpoint (for payload_url templating)', async () => {
   const ep = 'http://agent-del:8080';
   const id = (await api('POST', '/api/plugins/docker/hosts/', { endpoint: ep, name: 'del-host' }))

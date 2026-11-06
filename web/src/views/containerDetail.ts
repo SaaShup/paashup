@@ -124,6 +124,40 @@ export const CONTAINER_COLLECTIONS: CollectionDef[] = [
   },
 ];
 
+/** A ready-made choice for a resource-limit select, in the field's native unit. */
+export interface LimitPreset {
+  label: string;
+  value: number;
+}
+
+/** memory_limit presets, in bytes (the unit the agent/Docker API expects). */
+export const MEMORY_LIMIT_PRESETS: LimitPreset[] = [
+  { label: 'Unlimited', value: 0 },
+  { label: '128 MB', value: 128 * 1024 * 1024 },
+  { label: '256 MB', value: 256 * 1024 * 1024 },
+  { label: '512 MB', value: 512 * 1024 * 1024 },
+  { label: '1 GB', value: 1024 * 1024 * 1024 },
+  { label: '2 GB', value: 2 * 1024 * 1024 * 1024 },
+  { label: '4 GB', value: 4 * 1024 * 1024 * 1024 },
+];
+
+/** cpu_limit presets, in CPU cores. */
+export const CPU_LIMIT_PRESETS: LimitPreset[] = [
+  { label: 'Unlimited', value: 0 },
+  { label: '0.25', value: 0.25 },
+  { label: '0.5', value: 0.5 },
+  { label: '1', value: 1 },
+  { label: '1.5', value: 1.5 },
+  { label: '2', value: 2 },
+  { label: '4', value: 4 },
+];
+
+/** Preset lists for the create/edit form, keyed by field name. */
+export const CONTAINER_LIMIT_PRESETS: Record<string, LimitPreset[]> = {
+  memory_limit: MEMORY_LIMIT_PRESETS,
+  cpu_limit: CPU_LIMIT_PRESETS,
+};
+
 /** Scalar container fields shown in the detail header, in order (host/image handled apart). */
 export const CONTAINER_SCALARS: { key: string; label: string }[] = [
   { key: 'state', label: 'State' },
@@ -132,6 +166,8 @@ export const CONTAINER_SCALARS: { key: string; label: string }[] = [
   { key: 'restart_policy', label: 'Restart policy' },
   { key: 'hostname', label: 'Hostname' },
   { key: 'ContainerID', label: 'Container ID' },
+  { key: 'memory_limit', label: 'Memory limit' },
+  { key: 'cpu_limit', label: 'CPU limit' },
   { key: 'cap_add', label: 'cap_add' },
   { key: 'cap_drop', label: 'cap_drop' },
   { key: 'log_driver', label: 'Log driver' },

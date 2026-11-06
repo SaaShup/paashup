@@ -462,3 +462,23 @@ export const VM_SSH_KEY_MIGRATION: PluginMigration = {
   sqlite: sshKeySqlite,
   mariadb: sshKeyMariadb,
 };
+
+// Optional per-container resource limits, ported from the agent's 2.1.0 "add cpu and
+// memory limit" feature: memory_limit (bytes, → Docker HostConfig.Memory) and cpu_limit
+// (CPU cores, → HostConfig.NanoCpus). Both default to 0 (unlimited), matching the agent's
+// contract — it applies them only on create/recreate and treats 0/omitted as unlimited.
+const resourceLimitsSqlite = `
+ALTER TABLE plugin_docker_container ADD COLUMN memory_limit INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE plugin_docker_container ADD COLUMN cpu_limit REAL NOT NULL DEFAULT 0
+`;
+const resourceLimitsMariadb = `
+ALTER TABLE plugin_docker_container
+  ADD COLUMN memory_limit BIGINT NOT NULL DEFAULT 0,
+  ADD COLUMN cpu_limit DOUBLE NOT NULL DEFAULT 0
+`;
+
+export const CONTAINER_RESOURCE_LIMITS_MIGRATION: PluginMigration = {
+  version: '0005_container_resource_limits',
+  sqlite: resourceLimitsSqlite,
+  mariadb: resourceLimitsMariadb,
+};

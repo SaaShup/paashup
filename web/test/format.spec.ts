@@ -25,6 +25,21 @@ describe('formatUnit', () => {
     expect(formatUnit(VM, 'memory', '')).toBeNull();
     expect(formatUnit(VM, 'memory', 'lots')).toBeNull();
   });
+
+  it('shows a Docker container memory_limit in bytes, auto-scaled, and 0 as Unlimited', () => {
+    const DOCKER = 'plugin_docker_container';
+    expect(formatUnit(DOCKER, 'memory_limit', 536870912)).toBe('512 MB');
+    expect(formatUnit(DOCKER, 'memory_limit', 1073741824)).toBe('1 GB');
+    expect(formatUnit(DOCKER, 'memory_limit', 700)).toBe('700 Bytes');
+    expect(formatUnit(DOCKER, 'memory_limit', 0)).toBe('Unlimited');
+  });
+
+  it('shows a Docker container cpu_limit in cores, and 0 as Unlimited', () => {
+    const DOCKER = 'plugin_docker_container';
+    expect(formatUnit(DOCKER, 'cpu_limit', 1.5)).toBe('1.5 vCPU');
+    expect(formatUnit(DOCKER, 'cpu_limit', 0.9999)).toBe('1 vCPU'); // tidy() rounds to 1 decimal
+    expect(formatUnit(DOCKER, 'cpu_limit', 0)).toBe('Unlimited');
+  });
 });
 
 describe('labels', () => {
@@ -39,6 +54,11 @@ describe('labels', () => {
     expect(formLabel('virtualization_virtual_disk', 'size')).toBe('size (GB)');
     expect(formLabel(VM, 'vcpus')).toBe('vcpus');
     expect(formLabel(VM, 'name')).toBe('name');
+  });
+
+  it('spells out "Bytes" (not "B") on a container memory_limit form label', () => {
+    expect(formLabel('plugin_docker_container', 'memory_limit')).toBe('memory_limit (Bytes)');
+    expect(formLabel('plugin_docker_container', 'cpu_limit')).toBe('cpu_limit');
   });
 
   it('keeps the usual labels elsewhere', () => {

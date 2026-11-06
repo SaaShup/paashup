@@ -1,12 +1,29 @@
 // Units of the numeric fields, so a bare 7168 reads as "7 GB" in lists and details, and a
 // form says what to type. Keyed by table, then by field name.
-type Unit = 'MB' | 'GB' | 'vCPU';
+type Unit = 'MB' | 'GB' | 'vCPU' | 'B';
 
 const UNITS: Record<string, Record<string, Unit>> = {
   virtualization_virtual_machine: { memory: 'MB', disk: 'GB', vcpus: 'vCPU' },
   virtualization_virtual_machine_type: { default_memory: 'MB', default_vcpus: 'vCPU' },
   virtualization_virtual_disk: { size: 'GB' },
+  // Docker container resource limits (agent 2.1.0+): memory_limit is in bytes, cpu_limit
+  // in CPU cores; 0 means unlimited (see UNLIMITED_ZERO below), not a literal zero quantity.
+  plugin_docker_container: { memory_limit: 'B', cpu_limit: 'vCPU' },
 };
+
+/** Fields where 0 means "no limit" rather than a literal zero quantity. */
+const UNLIMITED_ZERO = new Set(['plugin_docker_container.memory_limit', 'plugin_docker_container.cpu_limit']);
+
+/** Bytes as the largest unit that keeps the number readable: "512 MB", "1.5 GB". */
+function bytesToHuman(n: number): string {
+  const steps = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0;
+  while (n >= 1024 && i < steps.length - 1) {
+    n /= 1024;
+    i++;
+  }
+  return `${tidy(n)} ${steps[i]}`;
+}
 
 /** Field names shown differently: a VM's `disk` is its root disk, the other disks are volumes. */
 const LABELS: Record<string, Record<string, string>> = {
@@ -25,6 +42,8 @@ export function formatUnit(
   if (!unit || value === null || value === undefined || value === '') return null;
   const n = Number(value);
   if (!Number.isFinite(n)) return null;
+  if (n === 0 && table && UNLIMITED_ZERO.has(`${table}.${field}`)) return 'Unlimited';
+  if (unit === 'B') return bytesToHuman(n);
   if (unit === 'MB') return n >= 1024 ? `${tidy(n / 1024)} GB` : `${tidy(n)} MB`;
   return `${tidy(n)} ${unit}`;
 }
@@ -33,11 +52,14 @@ export function formatUnit(
 export const fieldLabel = (table: string | undefined, field: string): string =>
   (table && LABELS[table]?.[field]) || field.replace(/_/g, ' ');
 
+/** Spelled-out unit names for the form-label suffix (abbreviations read as raw unit values). */
+const UNIT_LABELS: Partial<Record<Unit, string>> = { B: 'Bytes' };
+
 /** The label of a form field, with the unit to type the value in: "memory (MB)". */
 export function formLabel(table: string | undefined, field: string): string {
   const unit = table ? UNITS[table]?.[field] : undefined;
   const label = (table && LABELS[table]?.[field]) || field;
-  return unit && unit !== 'vCPU' ? `${label} (${unit})` : label;
+  return unit && unit !== 'vCPU' ? `${label} (${UNIT_LABELS[unit] ?? unit})` : label;
 }
 
 /** The header of a list column: the field name, or its special label (`disk` → "root disk"). */

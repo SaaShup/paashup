@@ -6,7 +6,7 @@ import type { Obj } from '../api/client.js';
 import type { FilterOptions } from '../api/columnFilters.js';
 import { useUiStore } from '../stores/ui.js';
 import { briefTarget } from '../views/objectDetail.js';
-import { columnLabel, formatUnit, pillFor } from '../format.js';
+import { columnLabel, formatUnit, pillFor, rowTone, valueLabel } from '../format.js';
 import StatusPill from './StatusPill.vue';
 
 const props = defineProps<{
@@ -31,6 +31,9 @@ const props = defineProps<{
   linkTo?: (row: Obj) => Route | null;
   /** Route of the extra-action link; when it returns null the button emits `action` instead. */
   actionTo?: (row: Obj) => Route | null;
+  /** Long text columns (e.g. a journal entry's comments) shown clipped with a "show more"
+   *  toggle instead of stretching the table or wrapping unreadably. */
+  expandable?: string[];
 }>();
 const emit = defineEmits<{
   (e: 'delete', id: number): void;
@@ -89,6 +92,19 @@ const CLIPPED_COLUMNS = new Set(['public_key']);
 const isLong = (column: string, value: unknown): boolean =>
   CLIPPED_COLUMNS.has(column) && typeof value === 'string' && value.length > 48;
 
+// Expandable columns (`expandable` prop): clipped by default, a "Show more" toggle reveals
+// the full text in place instead of stretching every row to the longest comment.
+const expandedKeys = ref(new Set<string>());
+const expandKey = (row: Obj, column: string): string => `${idOf(row)}:${column}`;
+const isExpandableLong = (column: string, value: unknown): boolean =>
+  !!props.expandable?.includes(column) && typeof value === 'string' && value.length > 120;
+function toggleExpand(key: string): void {
+  const s = new Set(expandedKeys.value);
+  if (s.has(key)) s.delete(key);
+  else s.add(key);
+  expandedKeys.value = s;
+}
+
 const copied = ref('');
 let copiedTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -110,9 +126,12 @@ async function copyValue(value: unknown, key: string): Promise<void> {
   copiedTimer = setTimeout(() => (copied.value = ''), 1500);
 }
 
-/** A cell's text: with its unit when the column has one (memory, disk…), else as is. */
+/** A cell's text: a friendlier label for known raw values, else with its unit when the
+ *  column has one (memory, disk…), else as is. */
 const show = (row: Obj, column: string): string =>
-  formatUnit(props.table, column, row[column]) ?? cell(row[column]);
+  valueLabel(props.table, column, row[column]) ??
+  formatUnit(props.table, column, row[column]) ??
+  cell(row[column]);
 
 function cell(value: unknown): string {
   if (value === null || value === undefined) return '—';
@@ -163,7 +182,10 @@ function cell(value: unknown): string {
       <tr
         v-for="row in items"
         :key="(row as any).id"
-        :class="{ selected: selectable && selectedSet.has(idOf(row)) }"
+        :class="[
+          { selected: selectable && selectedSet.has(idOf(row)) },
+          rowTone(table, row) && `tone-row-${rowTone(table, row)}`,
+        ]"
       >
         <td v-if="selectable" class="selcol">
           <input
@@ -172,7 +194,11 @@ function cell(value: unknown): string {
             @change="onToggle(row, $event)"
           />
         </td>
-        <td v-for="c in columns" :key="c" :class="{ long: isLong(c, row[c]) }">
+        <td
+          v-for="c in columns"
+          :key="c"
+          :class="{ long: isLong(c, row[c]) || isExpandableLong(c, row[c]) }"
+        >
           <RouteLink
             v-if="linkTo && (c === 'display' || c === 'id') && linkTo(row)"
             class="rowlink"
@@ -193,6 +219,14 @@ function cell(value: unknown): string {
               @click="copyValue(row[c], `${idOf(row)}:${c}`)"
             >
               {{ copied === `${idOf(row)}:${c}` ? '✓ Copied' : 'Copy' }}
+            </button>
+          </span>
+          <span v-else-if="isExpandableLong(c, row[c])" class="expand">
+            <span :class="{ 'expand-clamp': !expandedKeys.has(expandKey(row, c)) }">
+              {{ show(row, c) }}
+            </span>
+            <button type="button" class="expand-btn" @click="toggleExpand(expandKey(row, c))">
+              {{ expandedKeys.has(expandKey(row, c)) ? 'Show less' : 'Show more' }}
             </button>
           </span>
           <template v-else>{{ show(row, c) }}</template>
@@ -280,6 +314,45 @@ td.long {
   border-color: var(--primary);
   color: var(--primary);
 }
+.expand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  width: 100%;
+}
+/* Both the clamped (collapsed) and plain (expanded) text need this: an unbreakable "word"
+ * (a container id, a hash…) otherwise forces its line — and the row's action buttons —
+ * wider than the cell's `max-width`, clamped or not. */
+.expand > span {
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* Wraps onto a couple of lines instead of one unbreakable nowrap line: with `table-layout:
+ * auto`, an unbreakable line forces the column (and the row's action buttons) wider than
+ * its `max-width`, so wrapping is what actually keeps this column — and the row — in bounds. */
+.expand-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+}
+.expand-btn {
+  flex: none;
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--primary-d);
+  cursor: pointer;
+}
+.expand-btn:hover {
+  text-decoration: underline;
+}
 th,
 td {
   border-bottom: 1px solid var(--border);
@@ -316,6 +389,7 @@ tbody tr:hover {
   background: var(--surface);
 }
 .ops {
+  width: 1%;
   white-space: nowrap;
   text-align: right;
 }
@@ -329,6 +403,31 @@ tbody tr:hover {
 }
 tbody tr.selected {
   background: var(--surface-2);
+}
+/* row-level severity tint (journal entries): a soft tinted left border + background, same
+ * palette as StatusPill (see its comment) — never the only cue, since the Severity column's
+ * pill in the same row already carries its own colour + label. */
+tbody tr.tone-row-danger {
+  background: #fcebe9;
+  box-shadow: inset 3px 0 0 #b81c0e;
+}
+tbody tr.tone-row-warn {
+  background: #fbede2;
+  box-shadow: inset 3px 0 0 #dd8a55;
+}
+tbody tr.tone-row-ok {
+  background: #f0fdf4;
+  box-shadow: inset 3px 0 0 #16a34a;
+}
+tbody tr.tone-row-info {
+  background: #f5f8ff;
+  box-shadow: inset 3px 0 0 #3b82f6;
+}
+tbody tr.tone-row-danger:hover,
+tbody tr.tone-row-warn:hover,
+tbody tr.tone-row-ok:hover,
+tbody tr.tone-row-info:hover {
+  filter: brightness(0.98);
 }
 .api,
 .extra {

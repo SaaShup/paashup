@@ -1,7 +1,9 @@
 <script setup lang="ts">
 // A status (of a VM, a Docker container…) as a coloured pill; with a spinner while
-// something is still going on. The text is always shown, so the colour is never the only
-// signal. The look of each status is in format.ts (`pillFor`).
+// something is still going on. The text is always shown, so colour is never the only
+// signal. The look of each status is in format.ts (`pillFor`); tones use solid, saturated
+// colours (sage green / orange / red) picked from a reference palette so they stay clearly
+// separated by lightness and saturation, not just hue, for colour-blind readers.
 import type { StatusTone } from '../format.js';
 
 defineProps<{ label: string; tone: StatusTone; busy?: boolean }>();
@@ -31,12 +33,12 @@ defineProps<{ label: string; tone: StatusTone; busy?: boolean }>();
   color: #166534;
 }
 .tone-danger {
-  background: #fee2e2;
-  color: #991b1b;
+  background: #b81c0e;
+  color: #fff;
 }
 .tone-warn {
-  background: #fef3c7;
-  color: #92400e;
+  background: #dd8a55;
+  color: #43230d;
 }
 .tone-info {
   background: var(--primary-soft);

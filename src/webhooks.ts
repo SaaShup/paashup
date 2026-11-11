@@ -213,45 +213,6 @@ export async function ensureWebhooks(db: Db, seeds: readonly WebhookSeed[]): Pro
   }
 }
 
-// ---- the (read-only) delivery log entity ----
-export const DELIVERY_TABLE = 'extras_webhook_delivery';
-
-const col = (name: string, tsKind: 'string' | 'number' | 'boolean', nullable = false) => ({
-  name,
-  column: name,
-  tsKind,
-  nullable,
-  writable: false,
-  required: false,
-});
-
-const deliveryMeta: TableMeta = {
-  model: 'WebhookDelivery',
-  table: DELIVERY_TABLE,
-  section: 'extras',
-  endpoint: '/api/extras/webhook-deliveries/',
-  origin: 'core',
-  pk: 'id',
-  objectType: 'extras.webhookdelivery',
-  readOnly: true,
-  relations: [],
-  counts: [],
-  columns: [
-    col('webhook_name', 'string'),
-    col('event', 'string'),
-    col('object_type', 'string'),
-    col('object_id', 'string', true), // string to hold integer or UUID ids
-    col('payload_url', 'string'),
-    col('success', 'boolean'),
-    col('status_code', 'number', true),
-    col('attempts', 'number'),
-    col('error', 'string'),
-    col('created', 'string', true),
-  ],
-};
-
-registerEntity(deliveryMeta);
-
 // retry/backoff is configurable via env (kept small + deterministic for tests)
 const MAX_TRIES = Math.max(1, Number(process.env.PB_WEBHOOK_RETRIES ?? 2) + 1);
 const BACKOFF_MS = Math.max(0, Number(process.env.PB_WEBHOOK_BACKOFF_MS ?? 500));
@@ -595,7 +556,6 @@ export async function dispatchWebhooks(
   ctx?: WebhookEventContext,
 ): Promise<void> {
   if (meta.table === WEBHOOK_TABLE) cache = null; // config changed → reload next time
-  if (meta.table === DELIVERY_TABLE) return; // never recurse on the log itself
   cache ??= await loadCache(db);
   if (!cache.length) return;
 
@@ -638,37 +598,6 @@ export async function dispatchWebhooks(
           `[webhook] "${wh.name}" -> ${r.redacted} failed after ${r.attempts}: ${r.error}`,
         );
       }
-      await logDelivery(db, wh, meta, event, id, r);
     }),
   );
-}
-
-async function logDelivery(
-  db: Db,
-  wh: Webhook,
-  meta: TableMeta,
-  event: string,
-  id: number | string,
-  r: DeliveryResult,
-): Promise<void> {
-  try {
-    await db.execute(
-      `INSERT INTO ${DELIVERY_TABLE}
-         (webhook_name, event, object_type, object_id, payload_url, success, status_code, attempts, error)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        wh.name,
-        event,
-        meta.objectType,
-        id,
-        r.redacted, // the rendered target URL, password masked — never log the secret
-        r.success ? 1 : 0,
-        r.status,
-        r.attempts,
-        r.error,
-      ],
-    );
-  } catch {
-    /* delivery-log table absent → skip logging */
-  }
 }

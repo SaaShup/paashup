@@ -1,6 +1,6 @@
 {
   "name": "paashup",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "private": true,
   "license": "MIT",
   "description": "NetBox-compatible API (DCIM/IPAM/Virtualization) — no-ORM data layer over SQLite/MariaDB",

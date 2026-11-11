@@ -223,6 +223,7 @@ h3 {
 input[type='text'],
 input[type='number'],
 input[type='search'],
+input[type='date'],
 select,
 textarea {
   padding: 7px 10px;
@@ -239,6 +240,7 @@ textarea {
 input[type='text']:hover,
 input[type='number']:hover,
 input[type='search']:hover,
+input[type='date']:hover,
 select:hover,
 textarea:hover {
   border-color: #d1d5db;

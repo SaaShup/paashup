@@ -33,8 +33,11 @@ const journalMeta: TableMeta = {
   relations: [],
   counts: [],
   columns: [
-    col('assigned_object_type', 'string'),
-    col('assigned_object_id', 'number'),
+    // `genericRel` lets the serializer resolve a nested `assigned_object` brief (the
+    // actual VM / container / cloud name), instead of the UI only ever showing the raw
+    // type + id pair.
+    { ...col('assigned_object_type', 'string'), genericRel: 'assigned_object' },
+    { ...col('assigned_object_id', 'number'), genericRel: 'assigned_object' },
     // `kind` is a NetBox choice: clients (and the Docker agent) send a plain string, but
     // NetBox's own API returns `{value, label}`. Modelling it as an enum lets both shapes
     // validate (the migration's transform extracts `.value`) and serializes it as a choice.

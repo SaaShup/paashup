@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SqliteDb } from '../dist/db/sqlite.js';
 import { createApiServer } from '../dist/api/server.js';
+import { splitCredentials } from '../dist/webhooks.js';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const DB = join(ROOT, 'test', '.wh-cred.sqlite');
@@ -122,10 +123,8 @@ test('URL-embedded user:password becomes a Basic Authorization header', async ()
   const expected = `Basic ${Buffer.from('alice:s3cr3t').toString('base64')}`;
   assert.equal(hit.headers['authorization'], expected);
 
-  // and the password is NOT exposed in the read-only delivery log (it's redacted)
-  const log = await api('GET', '/api/extras/webhook-deliveries/?ordering=-id&limit=20');
-  const rec = log.body.results.find((d) => d.webhook_name === 'cred-url');
-  assert.ok(rec, 'cred-url delivery logged');
-  assert.ok(!rec.payload_url.includes('s3cr3t'), `password leaked in log: ${rec.payload_url}`);
-  assert.match(rec.payload_url, /alice:\*\*\*@/);
+  // and the password never appears in the `redacted` string used for failure logs
+  const { redacted } = splitCredentials(`http://alice:s3cr3t@${recvBase.replace('http://', '')}/u`);
+  assert.ok(!redacted.includes('s3cr3t'), `password leaked: ${redacted}`);
+  assert.match(redacted, /alice:\*\*\*@/);
 });

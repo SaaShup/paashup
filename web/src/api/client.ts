@@ -29,14 +29,25 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   });
   if (res.status === 204) return undefined as T;
   const text = await res.text();
-  const data = text ? JSON.parse(text) : undefined;
-  if (!res.ok) {
+  // Infrastructure in front of the API (e.g. Cloudflare) can return an HTML error page
+  // instead of JSON on a 50x; parse defensively so that ends up as a clean ApiError
+  // rather than a raw SyntaxError with the HTML body embedded in its message.
+  let data: unknown;
+  let parseFailed = false;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      parseFailed = true;
+    }
+  }
+  if (!res.ok || parseFailed) {
     // A 403 for anything other than "this key can't write" means our session itself
     // isn't accepted any more (typically: it expired) — drop it so the UI prompts for
     // a fresh login instead of leaving the user looking at a bare error.
-    const detail = (data as { detail?: unknown } | undefined)?.detail;
+    const detail = !parseFailed ? (data as { detail?: unknown } | undefined)?.detail : undefined;
     if (res.status === 403 && detail !== 'This token is read-only.') handleUnauthorized();
-    throw new ApiError(res.status, data);
+    throw new ApiError(res.status, detail ?? `Server error (${res.status})`);
   }
   return data as T;
 }
@@ -70,6 +81,12 @@ export const api = {
   update: <T = Obj>(endpoint: string, id: number, data: Obj) =>
     request<T>('PATCH', `${endpoint}${id}/`, data),
   remove: (endpoint: string, id: number) => request<void>('DELETE', `${endpoint}${id}/`),
+  bulkRemove: (endpoint: string, ids: number[]) =>
+    request<void>(
+      'DELETE',
+      endpoint,
+      ids.map((id) => ({ id })),
+    ),
   schema: () => request<OpenApiDoc>('GET', '/api/schema/'),
 };
 

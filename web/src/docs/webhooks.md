@@ -133,9 +133,9 @@ Operators: `eq`, `ne`, `in`, `contains`, `gt`, `gte`, `lt`, `lte`, `empty`.
 ### Reliability
 
 - Failed deliveries are **retried with exponential backoff**.
-- Every attempt is recorded in the read-only **delivery log**
-  (*Operations → Webhook Deliveries*, `/api/extras/webhook-deliveries/`): outcome,
-  HTTP status, attempt count, and any error — so you can audit what was sent.
+- A delivery that still fails after every retry is logged to the server's
+  console/process logs (webhook name, target, attempt count, error) — there is no
+  stored delivery history to query over the API.
 
 ## Realtime (WebSocket)
 

@@ -214,21 +214,6 @@ if (!ENABLED) {
     assert.equal(containerId, cid, 'agent never reported ContainerID');
     const { stdout } = await dind('ps', '--filter', `name=${cid}`, '--format', '{{.Names}}');
     assert.match(stdout, new RegExp(cid), `container not running in dind:\n${stdout}`);
-
-    // what paashup recorded for the webhook delivery (the agent's return code)
-    const deliveries = await pb('GET', '/api/extras/webhook-deliveries/?ordering=-id&limit=1');
-    const last = deliveries.results?.[0];
-    console.log('  [dind-test] docker agent returned (from paashup delivery log):');
-    console.log(
-      '    ' +
-        JSON.stringify({
-          model: last?.object_type,
-          event: last?.event,
-          status_code: last?.status_code,
-          success: last?.success,
-          attempts: last?.attempts,
-        }),
-    );
   });
 
   test('proxy: exec runs a command in the REAL container via the agent -> dockerd', async () => {

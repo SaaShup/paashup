@@ -12,7 +12,10 @@ const UNITS: Record<string, Record<string, Unit>> = {
 };
 
 /** Fields where 0 means "no limit" rather than a literal zero quantity. */
-const UNLIMITED_ZERO = new Set(['plugin_docker_container.memory_limit', 'plugin_docker_container.cpu_limit']);
+const UNLIMITED_ZERO = new Set([
+  'plugin_docker_container.memory_limit',
+  'plugin_docker_container.cpu_limit',
+]);
 
 /** Bytes as the largest unit that keeps the number readable: "512 MB", "1.5 GB". */
 function bytesToHuman(n: number): string {
@@ -28,7 +31,42 @@ function bytesToHuman(n: number): string {
 /** Field names shown differently: a VM's `disk` is its root disk, the other disks are volumes. */
 const LABELS: Record<string, Record<string, string>> = {
   virtualization_virtual_machine: { disk: 'root disk' },
+  extras_journalentry: {
+    assigned_object_type: 'source',
+    assigned_object: 'object',
+    kind: 'severity',
+    comments: 'details',
+    created: 'timestamp',
+  },
 };
+
+/** Raw stored values shown with a friendlier label: table -> field -> value -> label. */
+const VALUE_LABELS: Record<string, Record<string, Record<string, string>>> = {
+  extras_journalentry: {
+    assigned_object_type: {
+      'virtualization.virtualmachine': 'Virtual Machine',
+      'plugins.openstackcloud': 'OpenStack Cloud',
+      'plugins.dockerhost': 'Docker Host',
+      'plugins.dockercontainer': 'Docker Container',
+      'plugins.dockerimage': 'Docker Image',
+      'plugins.dockervolume': 'Docker Volume',
+      'plugins.dockernetwork': 'Docker Network',
+      'plugins.dockerregistry': 'Docker Registry',
+      'plugins.dockervmsshkey': 'Docker VM SSH Key',
+    },
+  },
+};
+
+/** A friendlier label for a raw stored value (e.g. a journal entry's object type), if one
+ *  is known; null when the raw value should be shown as is. */
+export function valueLabel(
+  table: string | undefined,
+  field: string,
+  value: unknown,
+): string | null {
+  if (typeof value !== 'string') return null;
+  return (table && VALUE_LABELS[table]?.[field]?.[value]) ?? null;
+}
 
 const tidy = (n: number): string => String(Math.round(n * 10) / 10);
 
@@ -89,9 +127,13 @@ const DANGER = { tone: 'danger', busy: false } as const;
 const INFO = { tone: 'info', busy: false } as const;
 const MUTED = { tone: 'muted', busy: false } as const;
 const BUSY = { tone: 'warn', busy: true } as const;
+const WARN = { tone: 'warn', busy: false } as const;
 
 /** Status fields drawn as a coloured pill: table → field → value → look. */
 const PILLS: Record<string, Record<string, Record<string, Omit<Pill, 'label'>>>> = {
+  extras_journalentry: {
+    kind: { info: INFO, success: OK, warning: WARN, danger: DANGER },
+  },
   virtualization_virtual_machine: {
     status: {
       active: OK,
@@ -134,4 +176,17 @@ export function pillFor(table: string | undefined, field: string, value: unknown
   if (!raw) return null;
   const label = choice?.label ?? raw.charAt(0).toUpperCase() + raw.slice(1);
   return { label, ...(looks[raw] ?? MUTED) };
+}
+
+/** Tables whose whole row is tinted by one of its fields (currently: a journal entry's
+ *  `kind`), rather than just showing a pill in that one column. */
+const ROW_TONE_FIELD: Record<string, string> = { extras_journalentry: 'kind' };
+
+/** The tone to tint a row with, or null when this table has no row-level tone. */
+export function rowTone(
+  table: string | undefined,
+  row: Record<string, unknown>,
+): StatusTone | null {
+  const field = table ? ROW_TONE_FIELD[table] : undefined;
+  return field ? (pillFor(table, field, row[field])?.tone ?? null) : null;
 }

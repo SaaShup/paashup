@@ -1,19 +1,53 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { marked } from 'marked';
 import { docs } from '../docs/index.js';
 
+const search = ref('');
 const current = ref(docs[0]!.id);
+
+/** Docs whose title or body (source Markdown, so headings/prose/code all count) matches
+ *  the query — the whole corpus is small (< 1000 lines total), so a client-side scan of
+ *  every page on each keystroke is cheap; no need for an index or a server round-trip. */
+const filtered = computed(() => {
+  const q = search.value.trim().toLowerCase();
+  if (!q) return docs;
+  return docs.filter((d) => d.title.toLowerCase().includes(q) || d.body.toLowerCase().includes(q));
+});
+
+// the selected page falling out of the filtered list (search narrowed it away) jumps to
+// the first remaining match, so the article shown always matches what's in the sidebar
+watch(filtered, (list) => {
+  if (list.length && !list.some((d) => d.id === current.value)) current.value = list[0]!.id;
+});
+
 const page = computed(() => docs.find((d) => d.id === current.value) ?? docs[0]!);
-const html = computed(() => marked.parse(page.value.body, { async: false }) as string);
+
+/** Wraps matches of the search query in `<mark>`, but only inside text content — never
+ *  inside a tag (so it can't land in an href/attribute and break the markup). */
+function highlight(html: string, query: string): string {
+  const q = query.trim();
+  if (!q) return html;
+  const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+  return html.replace(/(<[^>]+>)|([^<]+)/g, (_m, tag: string, text: string) =>
+    tag ? tag : text.replace(re, '<mark>$&</mark>'),
+  );
+}
+
+const html = computed(() => {
+  const rendered = marked.parse(page.value.body, { async: false }) as string;
+  return highlight(rendered, search.value);
+});
 </script>
 
 <template>
   <div class="docs">
     <nav class="toc">
       <div class="toc-title">Documentation</div>
+      <input class="toc-search" type="search" v-model="search" placeholder="Search docs…" />
+      <p v-if="!filtered.length" class="toc-empty muted">No matching page.</p>
       <button
-        v-for="d in docs"
+        v-for="d in filtered"
         :key="d.id"
         class="toc-item"
         :class="{ active: d.id === current }"
@@ -47,6 +81,14 @@ const html = computed(() => marked.parse(page.value.body, { async: false }) as s
   color: var(--muted);
   text-transform: uppercase;
   padding: 6px 10px;
+}
+.toc-search {
+  margin: 0 6px 6px;
+  font-size: 0.85rem;
+}
+.toc-empty {
+  padding: 4px 10px;
+  font-size: 0.82rem;
 }
 .toc-item {
   text-align: left;
@@ -156,5 +198,11 @@ const html = computed(() => marked.parse(page.value.body, { async: false }) as s
   color: var(--muted);
   background: var(--surface);
   border-radius: 0 6px 6px 0;
+}
+.md mark {
+  background: #fef9c3;
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
 }
 </style>

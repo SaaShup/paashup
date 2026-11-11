@@ -11,6 +11,7 @@ import AddVmForm from '../components/AddVmForm.vue';
 import { confirmDialog } from '../composables/confirm.js';
 import IpRangeAddresses from '../components/IpRangeAddresses.vue';
 import { DETAIL_TABLES } from './objectDetail.js';
+import { valueLabel } from '../format.js';
 
 const PAGE = 50;
 // Log-like tables (journal entries, event/log feeds) read newest-first.
@@ -67,10 +68,18 @@ const PREFERRED_COLUMNS: Record<string, string[]> = {
   virtualization_ssh_key: ['name', 'origin', 'deployed_on', 'owner', 'source', 'description'],
   virtualization_image: ['name', 'source', 'description'],
   virtualization_init_script: ['name', 'description', 'created'],
+  extras_journalentry: ['created', 'kind', 'assigned_object_type', 'assigned_object', 'comments'],
 };
 // Columns a list leaves out: an init script is listed by name, description and date only.
 const HIDDEN_COLUMNS: Record<string, string[]> = {
   virtualization_init_script: ['id', 'content', 'variables', 'required_variables', 'last_updated'],
+  // `display` is a meaningless "JournalEntry (123)" fallback here; `assigned_object_id` is
+  // redundant once `assigned_object` resolves the real object name.
+  extras_journalentry: ['display', 'assigned_object_id', 'last_updated'],
+};
+// Journal comments can be long operational messages: show them clipped with a toggle.
+const EXPANDABLE_COLUMNS: Record<string, string[]> = {
+  extras_journalentry: ['comments'],
 };
 const slot = computed(() => (resource.value ? objects.byTable[resource.value.table] : undefined));
 const isVm = computed(() => resource.value?.table === 'virtualization_virtual_machine');
@@ -92,6 +101,75 @@ async function loadVmServers() {
 }
 const isContainer = computed(() => resource.value?.table === 'plugin_docker_container');
 const isHost = computed(() => resource.value?.table === 'plugin_docker_host');
+const isJournal = computed(() => resource.value?.table === 'extras_journalentry');
+// Severity (`kind`) and the timestamp range get their own toolbar controls (below); keep
+// them out of ObjectTable's generic per-column header dropdowns to avoid showing both.
+const tableFilterOptions = computed<FilterOptions>(() => {
+  if (!isJournal.value) return filterOptions.value;
+  const { kind: _kind, created: _created, ...rest } = filterOptions.value;
+  return rest;
+});
+const SEVERITY_OPTIONS = [
+  { value: 'info', label: 'Info' },
+  { value: 'success', label: 'Success' },
+  { value: 'warning', label: 'Warning' },
+  { value: 'danger', label: 'Danger' },
+];
+const severity = computed({
+  get: () => filters.value['kind'] ?? '',
+  set: (v: string) => setFilter({ field: 'kind', value: v }),
+});
+const dateFrom = computed({
+  get: () => (filters.value['created__gte'] ?? '').slice(0, 10),
+  set: (v: string) => setFilter({ field: 'created__gte', value: v ? `${v}T00:00:00` : '' }),
+});
+const dateTo = computed({
+  get: () => (filters.value['created__lte'] ?? '').slice(0, 10),
+  set: (v: string) => setFilter({ field: 'created__lte', value: v ? `${v}T23:59:59` : '' }),
+});
+const PURGE_DAYS = [7, 30, 90] as const;
+const purging = ref(false);
+function cutoffIso(days: number): string {
+  return new Date(Date.now() - days * 86400000).toISOString();
+}
+/** Delete every journal entry matching `extra` (empty = all), in id-list batches so one
+ *  purge of a large journal doesn't send one giant request. */
+async function purgeJournal(message: string, extra: Record<string, string>) {
+  if (!resource.value) return;
+  const ok = await confirmDialog({
+    title: 'Purge journal entries',
+    message,
+    confirmLabel: 'Delete',
+    tone: 'danger',
+  });
+  if (!ok) return;
+  const endpoint = resource.value.endpoint;
+  purging.value = true;
+  error.value = '';
+  try {
+    const ids: number[] = [];
+    const batch = 500;
+    for (let off = 0; ; off += batch) {
+      const page = await api.list(endpoint, { limit: batch, offset: off, ...extra });
+      ids.push(...page.results.map((r) => Number((r as { id: number }).id)));
+      if (page.results.length < batch || ids.length >= page.count) break;
+    }
+    for (let i = 0; i < ids.length; i += batch)
+      await api.bulkRemove(endpoint, ids.slice(i, i + batch));
+    offset.value = 0;
+    await load();
+  } catch (e) {
+    error.value = String(e);
+  } finally {
+    purging.value = false;
+  }
+}
+const purgeOlderThan = (days: number) =>
+  purgeJournal(`Delete every journal entry older than ${days} days? This cannot be undone.`, {
+    created__lt: cutoffIso(days),
+  });
+const purgeAllJournal = () =>
+  purgeJournal('Delete ALL journal entries? This cannot be undone.', {});
 // Keycloak hierarchy: Server → Realms → Clients → Redirect URLs (same UX as Host → Containers)
 const isKcServer = computed(() => resource.value?.table === 'plugin_keycloak_server');
 const isKcRealm = computed(() => resource.value?.table === 'plugin_keycloak_realm');
@@ -160,7 +238,16 @@ async function loadFilterOptions() {
   const r = resource.value;
   if (!r?.model) return;
   try {
-    filterOptions.value = await buildFilterOptions(r.model, r.endpoint);
+    const opts = await buildFilterOptions(r.model, r.endpoint);
+    // friendlier labels for the "source" (assigned_object_type) dropdown than raw content-type strings
+    const assignedType = opts['assigned_object_type'];
+    if (assignedType) {
+      opts['assigned_object_type'] = assignedType.map((o) => ({
+        ...o,
+        label: valueLabel(r.table, 'assigned_object_type', o.value) ?? o.label,
+      }));
+    }
+    filterOptions.value = opts;
   } catch {
     /* filters are optional sugar; ignore failures */
   }
@@ -338,6 +425,21 @@ function onAction(row: Obj) {
         ✕ Clear filters ({{ Object.keys(filters).length }})
       </button>
       <span class="spacer" />
+      <template v-if="isJournal">
+        <button
+          v-for="d in PURGE_DAYS"
+          :key="d"
+          class="btn btn-ghost purge-btn"
+          :disabled="purging"
+          :title="`Delete every journal entry older than ${d} days`"
+          @click="purgeOlderThan(d)"
+        >
+          Purge &gt; {{ d }}d
+        </button>
+        <button class="btn btn-danger purge-btn" :disabled="purging" @click="purgeAllJournal">
+          Delete all
+        </button>
+      </template>
       <button v-if="resource.writable" class="btn btn-ok" @click="add">+ Add</button>
     </div>
 
@@ -351,6 +453,16 @@ function onAction(row: Obj) {
       />
       <button class="btn btn-ghost" @click="((offset = 0), load())">Search</button>
       <span v-if="slot?.loading" class="muted">loading…</span>
+      <template v-if="isJournal">
+        <label class="muted journal-label">From <input type="date" v-model="dateFrom" /></label>
+        <label class="muted journal-label">To <input type="date" v-model="dateTo" /></label>
+        <select class="journal-severity" v-model="severity" title="Filter by severity">
+          <option value="">All severities</option>
+          <option v-for="o in SEVERITY_OPTIONS" :key="o.value" :value="o.value">
+            {{ o.label }}
+          </option>
+        </select>
+      </template>
       <template v-if="opButtons.length">
         <span class="sel-count muted">{{ selectedIds.length }} selected</span>
         <button
@@ -412,7 +524,8 @@ function onAction(row: Obj) {
         :selectable="selectable"
         :selected="selectedIds"
         :filters="filters"
-        :filter-options="filterOptions"
+        :filter-options="tableFilterOptions"
+        :expandable="EXPANDABLE_COLUMNS[resource.table]"
         :link-to="openTo"
         :action-to="actionTo"
         @delete="del"
@@ -483,6 +596,20 @@ function onAction(row: Obj) {
 }
 .sel-count {
   font-size: 0.82rem;
+  white-space: nowrap;
+}
+.journal-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+.journal-severity {
+  font-size: 0.85rem;
+}
+.purge-btn {
+  font-size: 0.8rem;
   white-space: nowrap;
 }
 .clear-filters {

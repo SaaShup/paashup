@@ -111,6 +111,105 @@ test('a script needs a shebang, no NUL, and must fit what Nova accepts', () => {
   assert.match(checkScript('#!/bin/sh\n' + 'x'.repeat(60000)), /too large/);
 });
 
+// ---- multipart (cloud-config + shell) ----------------------------------------------------
+
+const multipart = (boundary, cloudConfig, shell) =>
+  [
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    'MIME-Version: 1.0',
+    '',
+    `--${boundary}`,
+    'Content-Type: text/cloud-config; charset="us-ascii"',
+    '',
+    cloudConfig,
+    `--${boundary}`,
+    'Content-Type: text/x-shellscript; charset="us-ascii"',
+    '',
+    shell,
+    `--${boundary}--`,
+    '',
+  ].join('\n');
+
+const CLOUD_CONFIG = ['#cloud-config', 'bootcmd:', '  - echo "${PCT:-70}" > /run/pct'].join('\n');
+const SHELL_PART = '#!/bin/bash\nset -e\nD="${D:-a.b}"\n';
+const MULTIPART_SAMPLE = multipart('===b===', CLOUD_CONFIG, SHELL_PART);
+
+test('a well-formed multipart script is accepted', () => {
+  assert.equal(checkScript(MULTIPART_SAMPLE), null);
+});
+
+test('a boundary value that itself contains the word "boundary" is still parsed right', () => {
+  const script = multipart('===paashup=boundary===', CLOUD_CONFIG, SHELL_PART);
+  assert.equal(checkScript(script), null);
+  const { script: rendered } = renderScript(script, { PCT: '40', D: 'a.b' });
+  assert.ok(rendered.includes('echo "40" > /run/pct'), rendered);
+});
+
+test('a multipart script needs at least one text/x-shellscript part starting with a shebang', () => {
+  assert.match(checkScript(multipart('===b===', CLOUD_CONFIG, '')), /shellscript.*shebang|shebang/);
+  const noShell = [
+    'Content-Type: multipart/mixed; boundary="===b==="',
+    'MIME-Version: 1.0',
+    '',
+    '--===b===',
+    'Content-Type: text/cloud-config; charset="us-ascii"',
+    '',
+    CLOUD_CONFIG,
+    '--===b===--',
+    '',
+  ].join('\n');
+  assert.match(checkScript(noShell), /needs a "text\/x-shellscript" part/);
+});
+
+test('a multipart script needs each text/cloud-config part to start with "#cloud-config"', () => {
+  const bad = multipart('===b===', 'bootcmd:\n  - echo hi', SHELL_PART);
+  assert.match(checkScript(bad), /#cloud-config/);
+});
+
+test('variables appear in both the cloud-config and shell parts', () => {
+  assert.deepEqual(parseVariables(MULTIPART_SAMPLE), [
+    { name: 'PCT', default: '70' },
+    { name: 'D', default: 'a.b' },
+  ]);
+});
+
+test('the cloud-config part is substituted literally, the shell part exports as before', () => {
+  const { script, changed } = renderScript(MULTIPART_SAMPLE, { PCT: '40', D: 'a.b' });
+  assert.deepEqual(changed, { PCT: '40' });
+  assert.ok(script.includes('echo "40" > /run/pct'), script);
+  assert.ok(!script.includes('${PCT:-70}'), script);
+  assert.ok(
+    !script.includes('export PCT='),
+    'PCT is not a shell variable, so it is never exported',
+  );
+});
+
+test('only variables a shell part itself declares are exported into it', () => {
+  const twoShells = [
+    `Content-Type: multipart/mixed; boundary="===b==="`,
+    'MIME-Version: 1.0',
+    '',
+    '--===b===',
+    'Content-Type: text/cloud-config; charset="us-ascii"',
+    '',
+    CLOUD_CONFIG,
+    '--===b===',
+    'Content-Type: text/x-shellscript; charset="us-ascii"',
+    '',
+    '#!/bin/bash\nD="${D:-a.b}"\n',
+    '--===b===',
+    'Content-Type: text/x-shellscript; charset="us-ascii"',
+    '',
+    '#!/bin/bash\nE="${E:-z}"\n',
+    '--===b===--',
+    '',
+  ].join('\n');
+  const { script } = renderScript(twoShells, { D: 'my.io', E: 'z' });
+  const [, first, second] = script.split('text/x-shellscript; charset="us-ascii"\n\n');
+  assert.ok(first.includes(`export D='my.io'`), first);
+  assert.ok(!second.includes('export D='), second);
+});
+
 // ---- the API ----------------------------------------------------------------------------
 
 test('a script is stored with the variables the server reads from it', async () => {

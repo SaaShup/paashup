@@ -606,6 +606,270 @@ test('the metadata of a VM imported from the cloud can be edited too', async () 
   assert.deepEqual(res.body.metadata, { team: 'ops' });
 });
 
+// ---- data volume --------------------------------------------------------------------------
+
+test('a bad data_volume_gb is refused before anything is created', async () => {
+  const created = gra.created.length;
+  for (const bad of [0, -1, 2001, 1.5, 'abc']) {
+    const res = await create({ name: 'never-vol', data_volume_gb: bad });
+    assert.equal(res.status, 400, JSON.stringify(bad));
+    assert.match(res.body.data_volume_gb[0], /between 1 and 2000/);
+  }
+  assert.equal(gra.created.length, created, 'nothing was created on the cloud');
+});
+
+test('a data volume is created and attached once the server is up, and journaled', async () => {
+  const res = await create({ name: 'with-disk', data_volume_gb: 10 });
+  assert.equal(res.status, 202, JSON.stringify(res.body));
+  const vm = await until(() => vmNamed('with-disk'), 'the VM');
+  await until(async () => (await statusOf(vm.id)) === 'active', 'the VM to be active');
+
+  const volume = await until(
+    () => gra.volumes.find((v) => v.name === 'with-disk-data'),
+    'the data volume to be created',
+  );
+  assert.equal(volume.size, 10);
+  await until(() => volume.status === 'in-use', 'the volume to be attached');
+  assert.deepEqual(gra.attached.at(-1), { server: vm.server_id, volume: volume.id });
+
+  const stored = await until(async () => {
+    const row = await db.get(
+      `SELECT data_volume_id FROM plugin_openstack_server WHERE server_id = ?`,
+      [vm.server_id],
+    );
+    return row?.data_volume_id ? row : null;
+  }, 'the volume id stored on the server row');
+  assert.equal(stored.data_volume_id, volume.id);
+
+  const log = await journalOf(vm.id);
+  assert.ok(log.some((e) => e.comments.includes(`Data volume attached (10 GB`)));
+
+  const disk = await until(
+    () =>
+      db.get(
+        `SELECT id, size FROM virtualization_virtual_disk WHERE virtual_machine_id = ? AND name = ?`,
+        [vm.id, 'with-disk-data'],
+      ),
+    'the virtual disk mirroring the Cinder volume, right away',
+  );
+  assert.equal(disk.size, 10);
+});
+
+test('a VM without data_volume_gb gets no extra volume', async () => {
+  const before = gra.volumes.length;
+  assert.equal((await create({ name: 'no-disk' })).status, 202);
+  const vm = await until(() => vmNamed('no-disk'), 'the VM');
+  await until(async () => (await statusOf(vm.id)) === 'active', 'the VM to be active');
+  assert.equal(gra.volumes.length, before, 'no volume was created');
+});
+
+// ---- data volume management on an already-running VM ---------------------------------------
+
+const dataVolUrl = (vmId) => `${SERVERS}${vmId}/data-volume/`;
+
+test('a data volume can be added later, resized, then detached and deleted', async () => {
+  const vm = await vmNamed('no-disk');
+
+  // bad size is refused before anything is created
+  const bad = await api('POST', dataVolUrl(vm.id), { size_gb: 0 });
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.size_gb[0], /between 1 and 2000/);
+  assert.equal((await api('POST', dataVolUrl(vm.id), {})).status, 400, 'size_gb is required');
+
+  const res = await api('POST', dataVolUrl(vm.id), { size_gb: 5 });
+  assert.equal(res.status, 202, JSON.stringify(res.body));
+  const volume = await until(
+    () => gra.volumes.find((v) => v.name === 'no-disk-data'),
+    'the data volume to be created',
+  );
+  assert.equal(volume.size, 5);
+  await until(() => volume.status === 'in-use', 'the volume to be attached');
+
+  // a second request is refused: this VM already has a data volume
+  const dup = await api('POST', dataVolUrl(vm.id), { size_gb: 5 });
+  assert.equal(dup.status, 400);
+  assert.match(dup.body.size_gb[0], /already has a data volume/);
+
+  // resize: must grow, never shrink
+  const shrink = await api('POST', `${dataVolUrl(vm.id)}resize/`, { size_gb: 5 });
+  assert.equal(shrink.status, 400);
+  assert.match(shrink.body.size_gb[0], /larger than the current size \(5 GB\)/);
+
+  const diskSize = () =>
+    db.get(
+      `SELECT size FROM virtualization_virtual_disk WHERE virtual_machine_id = ? AND name = ?`,
+      [vm.id, 'no-disk-data'],
+    );
+  const grow = await api('POST', `${dataVolUrl(vm.id)}resize/`, { size_gb: 20 });
+  assert.equal(grow.status, 202, JSON.stringify(grow.body));
+  await until(() => volume.size === 20, 'the volume to be resized on the cloud');
+  await until(
+    async () => (await diskSize())?.size === 20,
+    'the mirrored disk to reflect the new size',
+  );
+
+  // detach: kept by default (the volume survives, just unattached)
+  const keep = await api('DELETE', dataVolUrl(vm.id));
+  assert.equal(keep.status, 202, JSON.stringify(keep.body));
+  await until(() => volume.status === 'available', 'the volume to be detached but kept');
+  assert.ok(
+    gra.volumes.some((v) => v.id === volume.id),
+    'the volume still exists',
+  );
+  await until(
+    async () =>
+      !(await db.get(
+        `SELECT id FROM virtualization_virtual_disk WHERE virtual_machine_id = ? AND name = ?`,
+        [vm.id, 'no-disk-data'],
+      )),
+    'the mirrored disk to be removed even though the volume is kept',
+  );
+
+  // re-add a second one and this time ask for it to be deleted too
+  await api('POST', dataVolUrl(vm.id), { size_gb: 5 });
+  const volume2 = await until(
+    () => gra.volumes.find((v) => v.name === 'no-disk-data' && v.id !== volume.id),
+    'a second data volume to be created',
+  );
+  await until(() => volume2.status === 'in-use', 'the second volume to be attached');
+  const off = await api('DELETE', dataVolUrl(vm.id), { delete_volume: true });
+  assert.equal(off.status, 202, JSON.stringify(off.body));
+  await until(() => !gra.volumes.some((v) => v.id === volume2.id), 'the volume to be deleted');
+  assert.ok(gra.volumesDeleted.includes(volume2.id));
+  await until(
+    async () =>
+      !(await db.get(
+        `SELECT id FROM virtualization_virtual_disk WHERE virtual_machine_id = ? AND name = ?`,
+        [vm.id, 'no-disk-data'],
+      )),
+    'the mirrored disk to be removed',
+  );
+  const stored = await db.get(
+    `SELECT data_volume_id FROM plugin_openstack_server WHERE virtual_machine_id = ?`,
+    [vm.id],
+  );
+  assert.equal(stored.data_volume_id, null);
+
+  // nothing left to detach or resize
+  assert.equal((await api('DELETE', dataVolUrl(vm.id))).status, 404);
+  assert.match(
+    (await api('POST', `${dataVolUrl(vm.id)}resize/`, { size_gb: 5 })).body.size_gb[0],
+    /has no data volume/,
+  );
+});
+
+test('deleting a VM keeps its data volume by default (detached, not deleted)', async () => {
+  const vm = await vmNamed('with-disk');
+  const volumeId = (
+    await db.get(
+      `SELECT data_volume_id FROM plugin_openstack_server WHERE virtual_machine_id = ?`,
+      [vm.id],
+    )
+  ).data_volume_id;
+  assert.ok(volumeId);
+
+  const res = await api('DELETE', `${SERVERS}${vm.id}/`);
+  assert.equal(res.status, 202, JSON.stringify(res.body));
+  await until(async () => !(await vmNamed('with-disk')), 'the VM to be removed');
+  await until(
+    () => gra.volumes.find((v) => v.id === volumeId)?.status === 'available',
+    'the volume to be detached',
+  );
+  assert.ok(
+    gra.volumes.some((v) => v.id === volumeId),
+    'the volume still exists',
+  );
+  assert.ok(!gra.volumesDeleted.includes(volumeId));
+  const log = await db.query(
+    `SELECT comments FROM extras_journalentry WHERE assigned_object_type = 'plugins.openstackcloud'
+       AND assigned_object_id = ?`,
+    [cloudId],
+  );
+  assert.ok(log.some((e) => e.comments.includes('kept (detached, not deleted)')));
+});
+
+test('deleting a VM with delete_volumes also deletes its data volume', async () => {
+  const created = await create({ name: 'with-disk-2', data_volume_gb: 10 });
+  assert.equal(created.status, 202, JSON.stringify(created.body));
+  const vm = await until(() => vmNamed('with-disk-2'), 'the VM');
+  await until(async () => (await statusOf(vm.id)) === 'active', 'the VM to be active');
+  const volumeId = await until(
+    () => gra.volumes.find((v) => v.name === 'with-disk-2-data')?.id,
+    'the data volume to be created',
+  );
+
+  const res = await api('DELETE', `${SERVERS}${vm.id}/`, { delete_volumes: true });
+  assert.equal(res.status, 202, JSON.stringify(res.body));
+  await until(async () => !(await vmNamed('with-disk-2')), 'the VM to be removed');
+  await until(() => !gra.volumes.some((v) => v.id === volumeId), 'the data volume to be deleted');
+  assert.ok(gra.volumesDeleted.includes(volumeId));
+});
+
+// ---- attaching an existing unattached volume at creation time ----------------------------
+
+test('data_volume_gb and existing_volume_id are mutually exclusive', async () => {
+  gra.volumes.push({
+    id: 'vol-exist-conflict',
+    name: 'conflict',
+    size: 5,
+    status: 'available',
+    attachments: [],
+    reads: 0,
+  });
+  const res = await create({
+    name: 'never-both',
+    data_volume_gb: 5,
+    existing_volume_id: 'vol-exist-conflict',
+  });
+  assert.equal(res.status, 400);
+  assert.match(res.body.data_volume_gb[0], /either a new disk or an existing volume/);
+});
+
+test('an existing unattached volume is attached once the VM is up', async () => {
+  gra.volumes.push({
+    id: 'vol-exist-1',
+    name: 'standalone-data',
+    size: 12,
+    status: 'available',
+    attachments: [],
+    reads: 0,
+  });
+  const res = await create({ name: 'with-existing-vol', existing_volume_id: 'vol-exist-1' });
+  assert.equal(res.status, 202, JSON.stringify(res.body));
+  const vm = await until(() => vmNamed('with-existing-vol'), 'the VM');
+  await until(async () => (await statusOf(vm.id)) === 'active', 'the VM to be active');
+
+  const volume = gra.volumes.find((v) => v.id === 'vol-exist-1');
+  await until(() => volume.status === 'in-use', 'the volume to be attached');
+  assert.deepEqual(gra.attached.at(-1), { server: vm.server_id, volume: volume.id });
+
+  const disk = await until(
+    () => db.get(`SELECT size FROM virtualization_virtual_disk WHERE name = 'standalone-data'`),
+    'the virtual disk mirroring it',
+  );
+  assert.equal(disk.size, 12);
+});
+
+test('an already-attached volume given as existing_volume_id fails without blocking the VM', async () => {
+  gra.volumes.push({
+    id: 'vol-exist-busy',
+    name: 'busy',
+    size: 5,
+    status: 'in-use',
+    attachments: [{ server_id: 'someone-elses-server', device: '/dev/vdb' }],
+    reads: 0,
+  });
+  const res = await create({ name: 'with-busy-vol', existing_volume_id: 'vol-exist-busy' });
+  assert.equal(res.status, 202, JSON.stringify(res.body));
+  const vm = await until(() => vmNamed('with-busy-vol'), 'the VM');
+  await until(async () => (await statusOf(vm.id)) === 'active', 'the VM to be active');
+  const log = await until(async () => {
+    const entries = await journalOf(vm.id);
+    return entries.some((e) => e.kind === 'danger') ? entries : null;
+  }, 'the failure to be journaled on the VM');
+  assert.ok(log.some((e) => e.kind === 'danger' && e.comments.includes('already attached')));
+});
+
 test('a VM that existed before paashup can be deleted from here too', async () => {
   const legacy = await vmNamed('legacy');
   const res = await api('DELETE', `${SERVERS}${legacy.id}/`);

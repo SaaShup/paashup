@@ -1727,7 +1727,7 @@ export const tables = {
     ],
     counts: [],
     columns: [
-      { name: "virtual_machine", column: "virtual_machine_id", tsKind: "number", nullable: false, writable: true, required: true, references: "VirtualMachine" },
+      { name: "virtual_machine", column: "virtual_machine_id", tsKind: "number", nullable: true, writable: true, required: false, references: "VirtualMachine" },
       { name: "name", column: "name", tsKind: "string", nullable: false, writable: true, required: true, maxLength: 64 },
       { name: "description", column: "description", tsKind: "string", nullable: false, writable: true, required: false, maxLength: 200 },
       { name: "size", column: "size", tsKind: "number", nullable: false, writable: true, required: true },

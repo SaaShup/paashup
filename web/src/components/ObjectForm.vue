@@ -58,7 +58,11 @@ function presetValueOf(f: FieldDef): string {
   return list.some((p) => p.value === n) ? String(n) : CUSTOM;
 }
 function initLimit(f: FieldDef) {
-  if (values.value[f.name] === '' || values.value[f.name] === null || values.value[f.name] === undefined) {
+  if (
+    values.value[f.name] === '' ||
+    values.value[f.name] === null ||
+    values.value[f.name] === undefined
+  ) {
     values.value[f.name] = 0; // default to "Unlimited" rather than leaving the field blank
   }
   limitPreset.value[f.name] = presetValueOf(f);
@@ -102,6 +106,24 @@ function limitError(f: FieldDef, v: unknown): string | null {
  */
 function liveLimitError(f: FieldDef): string | null {
   return limitError(f, values.value[f.name]);
+}
+
+/**
+ * A Volume's size can only grow on OpenStack: shrinking it here would silently be reverted a
+ * moment later once the plugin's hook notices (see its 'updated' hook on
+ * virtualization_virtual_disk) — checked here first so nothing is even sent.
+ */
+function sizeShrinkError(f: FieldDef, v: unknown): string | null {
+  if (table.value !== 'virtualization_virtual_disk' || f.name !== 'size' || !isEdit) return null;
+  const current = Number((props.object as { size?: number } | null)?.size);
+  const next = Number(v);
+  if (!Number.isFinite(current) || !Number.isFinite(next)) return null;
+  return next < current
+    ? `A volume on OpenStack can only grow: must be at least ${current} GB.`
+    : null;
+}
+function liveSizeShrinkError(f: FieldDef): string | null {
+  return sizeShrinkError(f, values.value[f.name]);
 }
 
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -269,8 +291,9 @@ function buildPayload(): Obj | null {
         break;
       case 'number':
       case 'fk': {
-        // already shown live, next to the field (liveLimitError) — just block the submit
-        if (limitError(f, v)) return null;
+        // already shown live, next to the field (liveLimitError / liveSizeShrinkError) —
+        // just block the submit
+        if (limitError(f, v) || sizeShrinkError(f, v)) return null;
         if (v === '' || v === null) {
           if (f.nullable) out[f.name] = null;
         } else out[f.name] = Number(v);
@@ -454,7 +477,8 @@ async function submit() {
               v-model="values[f.name]"
               :maxlength="f.maxLength"
             />
-            <span v-if="fieldErr(f.name)" class="err">{{ fieldErr(f.name) }}</span>
+            <span v-if="liveSizeShrinkError(f)" class="err">{{ liveSizeShrinkError(f) }}</span>
+            <span v-else-if="fieldErr(f.name)" class="err">{{ fieldErr(f.name) }}</span>
           </div>
         </div>
         <div v-if="isScript" class="row">

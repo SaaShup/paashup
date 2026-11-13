@@ -6,7 +6,7 @@ import RouteLink from '../components/RouteLink.vue';
 import ObjectTable from '../components/ObjectTable.vue';
 import ObjectForm from '../components/ObjectForm.vue';
 import { api, type Obj } from '../api/client.js';
-import { confirmDialog } from '../composables/confirm.js';
+import { confirmDialog, confirmDialogChecked } from '../composables/confirm.js';
 import { scalarText } from './containerDetail.js';
 import { fieldLabel, formatUnit, pillFor } from '../format.js';
 import StatusPill from '../components/StatusPill.vue';
@@ -240,17 +240,18 @@ async function deleteOnOpenStack(): Promise<void> {
   const r = resource.value;
   const id = ui.detailId;
   if (!r || id == null || !vmServer.value) return;
-  const ok = await confirmDialog({
+  const { ok, checked: deleteVolumes } = await confirmDialogChecked({
     title: 'Delete on OpenStack',
-    message: `Delete "${title.value}" on OpenStack (cloud "${vmServer.value.cloud}")?\n\nThe server and its disk are destroyed, a Docker host registered on this VM is deleted too, and this cannot be undone.`,
+    message: `Delete "${title.value}" on OpenStack (cloud "${vmServer.value.cloud}")?\n\nThe server is destroyed, a Docker host registered on this VM is deleted too, and this cannot be undone.`,
     confirmLabel: 'Delete',
     tone: 'danger',
+    checkbox: { label: 'Also delete its data volume(s), if any (kept otherwise)' },
   });
   if (!ok) return;
   deleting.value = true;
   error.value = '';
   try {
-    await api.remove(OPENSTACK_SERVERS, id);
+    await api.del(`${OPENSTACK_SERVERS}${id}/`, { delete_volumes: deleteVolumes });
     notice.value = 'Deletion requested on OpenStack. This page closes when the server is gone.';
     const tick = async (): Promise<void> => {
       try {
@@ -262,6 +263,30 @@ async function deleteOnOpenStack(): Promise<void> {
       poll = setTimeout(tick, 4000);
     };
     poll = setTimeout(tick, 2000);
+  } catch (e) {
+    deleting.value = false;
+    const d = (e as { detail?: { detail?: unknown } }).detail;
+    error.value = typeof d?.detail === 'string' ? d.detail : String(e);
+  }
+}
+
+/** Delete a Volume: if it mirrors a Cinder volume, the backend detaches/deletes it there too. */
+async function deleteVolume(): Promise<void> {
+  const r = resource.value;
+  const id = ui.detailId;
+  if (!r || id == null) return;
+  const ok = await confirmDialog({
+    title: 'Delete volume',
+    message: `Delete "${title.value}"?\n\nIf it is backed by a cloud (OpenStack), the real volume is detached (if needed) and deleted there too — this cannot be undone.`,
+    confirmLabel: 'Delete',
+    tone: 'danger',
+  });
+  if (!ok) return;
+  deleting.value = true;
+  error.value = '';
+  try {
+    await api.remove(r.endpoint, id);
+    applyRoute(ui, { view: 'list', table: r.table });
   } catch (e) {
     deleting.value = false;
     const d = (e as { detail?: { detail?: unknown } }).detail;
@@ -645,6 +670,14 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
         :disabled="deleting"
         title="Delete the server on OpenStack"
         @click="deleteOnOpenStack"
+      >
+        {{ deleting ? 'Deleting…' : 'Delete' }}
+      </button>
+      <button
+        v-if="resource.table === 'virtualization_virtual_disk' && resource.writable"
+        class="btn btn-danger"
+        :disabled="deleting"
+        @click="deleteVolume"
       >
         {{ deleting ? 'Deleting…' : 'Delete' }}
       </button>

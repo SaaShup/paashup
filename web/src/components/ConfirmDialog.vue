@@ -13,9 +13,11 @@ const paragraphs = computed(() =>
 const tone = computed(() => dialog.value?.tone ?? 'primary');
 const confirmBtn = ref<HTMLButtonElement | null>(null);
 const cancelBtn = ref<HTMLButtonElement | null>(null);
+const checked = ref(false);
 
 // a destructive action starts on Cancel, so a stray Enter cannot confirm it
 watch(dialog, async (d) => {
+  checked.value = d?.checkbox?.default ?? false;
   if (!d) return;
   await nextTick();
   (tone.value === 'danger' ? cancelBtn : confirmBtn).value?.focus();
@@ -27,8 +29,8 @@ watch(dialog, async (d) => {
     <div
       v-if="dialog"
       class="confirm-overlay"
-      @click.self="answerConfirm(false)"
-      @keydown.esc="answerConfirm(false)"
+      @click.self="answerConfirm({ ok: false, checked: false })"
+      @keydown.esc="answerConfirm({ ok: false, checked: false })"
     >
       <div
         class="confirm-panel"
@@ -39,8 +41,17 @@ watch(dialog, async (d) => {
       >
         <h3 id="confirm-title">{{ dialog.title ?? 'Please confirm' }}</h3>
         <p v-for="(p, i) in paragraphs" :key="i" class="confirm-text">{{ p }}</p>
+        <label v-if="dialog.checkbox" class="confirm-checkbox">
+          <input type="checkbox" v-model="checked" />
+          {{ dialog.checkbox.label }}
+        </label>
         <div class="confirm-actions">
-          <button ref="cancelBtn" type="button" class="btn btn-ghost" @click="answerConfirm(false)">
+          <button
+            ref="cancelBtn"
+            type="button"
+            class="btn btn-ghost"
+            @click="answerConfirm({ ok: false, checked: false })"
+          >
             {{ dialog.cancelLabel ?? 'Cancel' }}
           </button>
           <button
@@ -48,7 +59,7 @@ watch(dialog, async (d) => {
             type="button"
             class="btn"
             :class="{ 'btn-danger': tone === 'danger', 'btn-warn': tone === 'warning' }"
-            @click="answerConfirm(true)"
+            @click="answerConfirm({ ok: true, checked })"
           >
             {{ dialog.confirmLabel ?? 'Confirm' }}
           </button>
@@ -93,6 +104,19 @@ h3 {
   color: var(--text);
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+.confirm-checkbox {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--text);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.confirm-checkbox input {
+  width: auto;
+  flex: none;
 }
 .confirm-actions {
   display: flex;

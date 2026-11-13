@@ -125,6 +125,27 @@ export const DETAIL: Record<string, DetailConfig> = {
   virtualization_image: { sections: [VMS('image_id')] },
   // the VMs it is on: a section of its own (SshKeyDeployments), to deploy / remove it
   virtualization_ssh_key: { sections: [] },
+  // an OpenStack-mirrored one may have no VM (attach/detach by editing this field — see the
+  // plugin's hook); no extra sections of its own.
+  virtualization_virtual_disk: {
+    sections: [
+      {
+        // what happened to it through paashup (created, attached/detached, resized…)
+        title: 'Journal',
+        table: 'extras_journalentry',
+        empty: 'No journal entries',
+        load: async (endpoint, id) =>
+          (
+            await api.list(endpoint, {
+              assigned_object_type: 'virtualization.virtualdisk',
+              assigned_object_id: id,
+              ordering: '-id',
+              limit: 20,
+            })
+          ).results,
+      },
+    ],
+  },
   virtualization_init_script: {
     hide: ['content', 'variables', 'featured_variables'],
     script: true,

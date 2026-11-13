@@ -5,6 +5,7 @@
 import type { Hook } from '../../plugins/types.js';
 import { T } from './meta.js';
 import { linkDockerHosts, syncCloud } from './sync.js';
+import { deleteLinkedCloudVolume, reconcileVolumeAttachment } from './volumes.js';
 
 // A Docker host registered (or re-pointed) after its VM was imported gets linked right away.
 const linkHost = ({ db, id }: { db: Parameters<typeof linkDockerHosts>[0]; id: number | string }) =>
@@ -30,5 +31,17 @@ export const hooks: Hook[] = [
       );
       if (cloud?.operation === 'refresh') void syncCloud(db, Number(id));
     },
+  },
+  {
+    table: 'virtualization_virtual_disk',
+    event: 'updated',
+    handler: ({ db, id }) => {
+      void reconcileVolumeAttachment(db, Number(id));
+    },
+  },
+  {
+    table: 'virtualization_virtual_disk',
+    event: 'deleting',
+    handler: ({ db, id }) => deleteLinkedCloudVolume(db, Number(id)),
   },
 ];

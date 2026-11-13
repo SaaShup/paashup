@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { answerConfirm, confirmDialog, confirmState } from '../src/composables/confirm';
 
 describe('confirmDialog', () => {
-  beforeEach(() => answerConfirm(false));
+  beforeEach(() => answerConfirm({ ok: false, checked: false }));
 
   it('opens a dialog with the options and resolves true on confirm', async () => {
     const answer = confirmDialog({ title: 'Delete', message: 'Sure?', tone: 'danger' });
@@ -11,14 +11,14 @@ describe('confirmDialog', () => {
       message: 'Sure?',
       tone: 'danger',
     });
-    answerConfirm(true);
+    answerConfirm({ ok: true, checked: false });
     expect(await answer).toBe(true);
     expect(confirmState.current).toBeNull();
   });
 
   it('resolves false on cancel', async () => {
     const answer = confirmDialog({ message: 'Sure?' });
-    answerConfirm(false);
+    answerConfirm({ ok: false, checked: false });
     expect(await answer).toBe(false);
     expect(confirmState.current).toBeNull();
   });
@@ -28,11 +28,11 @@ describe('confirmDialog', () => {
     const second = confirmDialog({ message: 'second' });
     expect(await first).toBe(false);
     expect(confirmState.current?.message).toBe('second');
-    answerConfirm(true);
+    answerConfirm({ ok: true, checked: false });
     expect(await second).toBe(true);
   });
 
   it('answering with nothing open does nothing', () => {
-    expect(() => answerConfirm(true)).not.toThrow();
+    expect(() => answerConfirm({ ok: true, checked: false })).not.toThrow();
   });
 });

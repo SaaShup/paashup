@@ -36,16 +36,27 @@ import {
 import { journal } from './journal.js';
 import { isSyncing, purgeCloud, syncCloud } from './sync.js';
 import {
+  addDataVolume,
   deleteVm,
   launchServer,
   listLinks,
+  listVolumeLinks,
   parseCreate,
   readVmMetadata,
   rebootVm,
+  removeDataVolume,
   renameVm,
+  resizeDataVolume,
   resizeVm,
   writeVmMetadata,
 } from './servers.js';
+import {
+  attachCloudVolume,
+  createCloudVolume,
+  deleteCloudVolume,
+  detachCloudVolume,
+  parseCreateVolume,
+} from './volumes.js';
 import { META, T } from './meta.js';
 
 type Obj = Record<string, unknown>;
@@ -288,9 +299,10 @@ const listServersRoute: PluginRoute = {
 const deleteServerRoute: PluginRoute = {
   method: 'DELETE',
   path: `${OPENSTACK_API}/servers/{vm_id}/`,
-  handler: async ({ db, params }) => {
+  handler: async ({ db, params, body }) => {
     try {
-      await deleteVm(db, Number(params.vm_id));
+      const deleteVolumes = Boolean((body as Obj | null)?.delete_volumes);
+      await deleteVm(db, Number(params.vm_id), deleteVolumes);
       return { status: 202, body: { detail: 'Deletion requested on OpenStack.' } };
     } catch (e) {
       if (e instanceof OpenStackError) return fail(e);
@@ -354,6 +366,169 @@ const resizeServerRoute: PluginRoute = {
   },
 };
 
+const sizeGbOf = (body: unknown): number => {
+  const raw = (body as Obj | null)?.size_gb;
+  if (raw == null)
+    throw new ValidationError('Invalid request', { size_gb: ['This field is required.'] });
+  return Number(raw);
+};
+
+const addDataVolumeRoute: PluginRoute = {
+  method: 'POST',
+  path: `${OPENSTACK_API}/servers/{vm_id}/data-volume/`,
+  handler: async ({ db, params, body }) => {
+    try {
+      await addDataVolume(db, Number(params.vm_id), sizeGbOf(body));
+      return { status: 202, body: { detail: 'Data volume requested on OpenStack.' } };
+    } catch (e) {
+      if (e instanceof OpenStackError) return fail(e);
+      throw e;
+    }
+  },
+};
+
+const resizeDataVolumeRoute: PluginRoute = {
+  method: 'POST',
+  path: `${OPENSTACK_API}/servers/{vm_id}/data-volume/resize/`,
+  handler: async ({ db, params, body }) => {
+    try {
+      await resizeDataVolume(db, Number(params.vm_id), sizeGbOf(body));
+      return { status: 202, body: { detail: 'Data volume resize requested on OpenStack.' } };
+    } catch (e) {
+      if (e instanceof OpenStackError) return fail(e);
+      throw e;
+    }
+  },
+};
+
+const removeDataVolumeRoute: PluginRoute = {
+  method: 'DELETE',
+  path: `${OPENSTACK_API}/servers/{vm_id}/data-volume/`,
+  handler: async ({ db, params, body }) => {
+    try {
+      const deleteVolume_ = Boolean((body as Obj | null)?.delete_volume);
+      await removeDataVolume(db, Number(params.vm_id), deleteVolume_);
+      return { status: 202, body: { detail: 'Data volume detachment requested on OpenStack.' } };
+    } catch (e) {
+      if (e instanceof OpenStackError) return fail(e);
+      throw e;
+    }
+  },
+};
+
+const listVolumeLinksRoute: PluginRoute = {
+  method: 'GET',
+  path: `${OPENSTACK_API}/volumes/`,
+  handler: async ({ db, query }) => {
+    const vm = query.get('virtual_machine_id');
+    return { status: 200, body: page(await listVolumeLinks(db, vm ? Number(vm) : undefined)) };
+  },
+};
+
+/** The cloud of `{id}`, or the 404 every route below shares. */
+async function cloudOf(
+  db: Db,
+  id: string | undefined,
+): Promise<(CloudConfig & { id: number; name: string }) | null> {
+  const row = await db.get<CloudConfig & { id: number; name: string }>(
+    `SELECT * FROM ${T.cloud} WHERE id = ?`,
+    [Number(id)],
+  );
+  return row ?? null;
+}
+
+const createCloudVolumeRoute: PluginRoute = {
+  method: 'POST',
+  path: `${META.cloud.endpoint}{id}/volumes/`,
+  handler: async ({ db, params, body }) => {
+    const cloud = await cloudOf(db, params.id);
+    if (!cloud) return { status: 404, body: { detail: 'Not found' } };
+    const input = parseCreateVolume(body);
+    try {
+      const { diskId } = await createCloudVolume(db, cloud, input);
+      return {
+        status: 201,
+        body: { id: diskId, detail: 'Volume created; attaching it may still be in progress.' },
+      };
+    } catch (e) {
+      if (e instanceof OpenStackError) return fail(e);
+      throw e;
+    }
+  },
+};
+
+const deleteCloudVolumeRoute: PluginRoute = {
+  method: 'DELETE',
+  path: `${META.cloud.endpoint}{id}/volumes/{volume_id}/`,
+  handler: async ({ db, params, query }) => {
+    const cloud = await cloudOf(db, params.id);
+    if (!cloud) return { status: 404, body: { detail: 'Not found' } };
+    const region = query.get('region');
+    if (!region) {
+      throw new ValidationError('Invalid request', { region: ['This field is required.'] });
+    }
+    try {
+      await deleteCloudVolume(cloud, region, params.volume_id!);
+      return { status: 204 };
+    } catch (e) {
+      if (e instanceof OpenStackError) return fail(e);
+      throw e;
+    }
+  },
+};
+
+const attachCloudVolumeRoute: PluginRoute = {
+  method: 'POST',
+  path: `${META.cloud.endpoint}{id}/volumes/{volume_id}/attach/`,
+  handler: async ({ db, params, body }) => {
+    const cloud = await cloudOf(db, params.id);
+    if (!cloud) return { status: 404, body: { detail: 'Not found' } };
+    const b = (body ?? {}) as Obj;
+    const region = str(b.region);
+    const vmId = Number(b.virtual_machine_id);
+    if (!region)
+      throw new ValidationError('Invalid request', { region: ['This field is required.'] });
+    if (!Number.isInteger(vmId) || vmId <= 0) {
+      throw new ValidationError('Invalid request', {
+        virtual_machine_id: ['This field is required.'],
+      });
+    }
+    try {
+      await attachCloudVolume(db, cloud, region, params.volume_id!, vmId);
+      return { status: 202, body: { detail: 'Attachment requested on OpenStack.' } };
+    } catch (e) {
+      if (e instanceof OpenStackError) return fail(e);
+      throw e;
+    }
+  },
+};
+
+const detachCloudVolumeRoute: PluginRoute = {
+  method: 'POST',
+  path: `${META.cloud.endpoint}{id}/volumes/{volume_id}/detach/`,
+  handler: async ({ db, params, body }) => {
+    const cloud = await cloudOf(db, params.id);
+    if (!cloud) return { status: 404, body: { detail: 'Not found' } };
+    const b = (body ?? {}) as Obj;
+    const region = str(b.region);
+    const vmId = Number(b.virtual_machine_id);
+    if (!region)
+      throw new ValidationError('Invalid request', { region: ['This field is required.'] });
+    if (!Number.isInteger(vmId) || vmId <= 0) {
+      throw new ValidationError('Invalid request', {
+        virtual_machine_id: ['This field is required.'],
+      });
+    }
+    try {
+      await detachCloudVolume(db, cloud, region, params.volume_id!, vmId, Boolean(b.delete_volume));
+      return { status: 202, body: { detail: 'Detachment requested on OpenStack.' } };
+    } catch (e) {
+      if (e instanceof OpenStackError) return fail(e);
+      throw e;
+    }
+  },
+};
+
 const getMetadataRoute: PluginRoute = {
   method: 'GET',
   path: `${OPENSTACK_API}/servers/{vm_id}/metadata/`,
@@ -384,6 +559,14 @@ const putMetadataRoute: PluginRoute = {
 export const cloudRoutes: PluginRoute[] = [
   getMetadataRoute,
   putMetadataRoute,
+  addDataVolumeRoute,
+  resizeDataVolumeRoute,
+  removeDataVolumeRoute,
+  listVolumeLinksRoute,
+  createCloudVolumeRoute,
+  deleteCloudVolumeRoute,
+  attachCloudVolumeRoute,
+  detachCloudVolumeRoute,
   createServerRoute,
   listServersRoute,
   deleteServerRoute,

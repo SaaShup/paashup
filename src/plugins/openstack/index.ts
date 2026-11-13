@@ -6,6 +6,7 @@
 import type { Plugin } from '../../plugins/types.js';
 import { ENTITY_METAS } from './meta.js';
 import {
+  DATA_VOLUME_MIGRATION,
   DROP_MANAGED_MIGRATION,
   INITIAL_MIGRATION,
   METADATA_MIGRATION,
@@ -18,7 +19,13 @@ const openstackPlugin: Plugin = {
   name: 'openstack',
   version: '0.1.0',
   entities: ENTITY_METAS.map((meta) => ({ meta })),
-  migrations: [INITIAL_MIGRATION, REGIONS_MIGRATION, METADATA_MIGRATION, DROP_MANAGED_MIGRATION],
+  migrations: [
+    INITIAL_MIGRATION,
+    REGIONS_MIGRATION,
+    METADATA_MIGRATION,
+    DROP_MANAGED_MIGRATION,
+    DATA_VOLUME_MIGRATION,
+  ],
   routes: cloudRoutes,
   hooks,
 };

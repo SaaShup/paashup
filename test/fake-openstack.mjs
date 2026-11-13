@@ -10,6 +10,7 @@ export const region = (extra = {}) => ({
   servers: [],
   images: [],
   volumes: [],
+  volumeTypes: [{ id: 'type-classic', name: 'classic' }],
   keypairs: [],
   flavors: [
     { id: 'fl-1', name: 'b2-7', vcpus: 2, ram: 7168, disk: 50 },
@@ -24,6 +25,9 @@ export const region = (extra = {}) => ({
     totalRAMUsed: 0,
   },
   buildReads: 0, // how many times a new server is read as BUILD before it turns ACTIVE
+  volumeCreateReads: 0, // how many times a new volume is read as "creating" before "available"
+  volumeDetachReads: 0, // how many times a detaching volume is read before "available"
+  volumeExtendReads: 0, // how many times an extending volume is read before "available"
   failBuild: null, // a message: a new server ends in ERROR with this fault
   rebootReads: 1, // how many times a rebooting server is read as (HARD_)REBOOT before ACTIVE
   failReboot: null, // a message: a rebooted server ends in ERROR with this fault
@@ -148,6 +152,13 @@ export async function startFakeOpenStack() {
           if (req.method === 'DELETE') {
             r.servers.splice(i, 1);
             r.deleted = [...(r.deleted ?? []), found.id];
+            // Nova detaches a server's volumes (back to "available") when it is deleted.
+            for (const v of r.volumes) {
+              if (v.attachments?.some((a) => a.server_id === found.id)) {
+                v.attachments = v.attachments.filter((a) => a.server_id !== found.id);
+                v.status = 'available';
+              }
+            }
             return send(204, {});
           }
           if (req.method === 'PUT') {
@@ -237,6 +248,36 @@ export async function startFakeOpenStack() {
           }
           return send(200, { metadata: found.metadata });
         }
+        const attach = rest.match(/^\/servers\/([^/]+)\/os-volume_attachments$/);
+        if (attach && req.method === 'POST') {
+          const found = r.servers.find((x) => x.id === attach[1]);
+          if (!found)
+            return send(404, { itemNotFound: { message: 'Instance could not be found' } });
+          const { volumeId } = JSON.parse(raw).volumeAttachment ?? {};
+          const volume = r.volumes.find((v) => v.id === volumeId);
+          const device = '/dev/vdb';
+          if (volume) {
+            volume.status = 'in-use';
+            volume.attachments = [...(volume.attachments ?? []), { server_id: found.id, device }];
+          }
+          r.attached = [...(r.attached ?? []), { server: attach[1], volume: volumeId }];
+          return send(200, {
+            volumeAttachment: { id: volumeId, volumeId, serverId: attach[1], device },
+          });
+        }
+        const detach = rest.match(/^\/servers\/([^/]+)\/os-volume_attachments\/([^/]+)$/);
+        if (detach && req.method === 'DELETE') {
+          const found = r.servers.find((x) => x.id === detach[1]);
+          if (!found)
+            return send(404, { itemNotFound: { message: 'Instance could not be found' } });
+          const volume = r.volumes.find((v) => v.id === detach[2]);
+          if (volume) {
+            volume.status = 'detaching';
+            volume.attachments = (volume.attachments ?? []).filter((a) => a.server_id !== found.id);
+          }
+          r.detached = [...(r.detached ?? []), { server: detach[1], volume: detach[2] }];
+          return send(202, {});
+        }
         if (req.method === 'POST' && rest === '/os-keypairs') {
           const k = JSON.parse(raw).keypair;
           r.keypairs.push({ name: k.name, public_key: k.public_key });
@@ -259,9 +300,73 @@ export async function startFakeOpenStack() {
         const found = r.images.find((i) => i.id === oneImage[1]);
         return found ? send(200, found) : send(404, { message: 'image not found' });
       }
-      if (type === 'volumev3' && rest === '/volumes/detail') {
+      if (type === 'volumev3') {
         if (r.volumesDown) return send(500, { error: { message: 'cinder is down' } });
-        return send(200, { volumes: r.volumes });
+        if (rest === '/volumes/detail') return send(200, { volumes: r.volumes });
+        if (rest === '/types') return send(200, { volume_types: r.volumeTypes });
+        if (req.method === 'POST' && rest === '/volumes') {
+          const spec = JSON.parse(raw).volume;
+          const created = {
+            id: `vol-${r.volumes.length + 1}-${Date.now()}`,
+            name: spec.name ?? '',
+            size: spec.size,
+            status: r.volumeCreateReads ? 'creating' : 'available',
+            attachments: [],
+            reads: 0,
+          };
+          r.volumes.push(created);
+          r.volumesCreated = [...(r.volumesCreated ?? []), spec];
+          return send(202, { volume: { id: created.id } });
+        }
+        const oneVolume = rest.match(/^\/volumes\/([^/]+)$/);
+        if (oneVolume) {
+          const found = r.volumes.find((v) => v.id === oneVolume[1]);
+          if (req.method === 'DELETE') {
+            if (!found)
+              return send(404, { itemNotFound: { message: 'Volume could not be found' } });
+            if (found.status === 'in-use') {
+              return send(400, { badRequest: { message: 'volume in use' } });
+            }
+            r.volumes = r.volumes.filter((v) => v.id !== oneVolume[1]);
+            r.volumesDeleted = [...(r.volumesDeleted ?? []), oneVolume[1]];
+            return send(202, {});
+          }
+          if (!found) return send(404, { itemNotFound: { message: 'Volume could not be found' } });
+          found.reads ??= 0;
+          if (found.status === 'creating' && found.reads++ >= (r.volumeCreateReads ?? 0)) {
+            found.status = 'available';
+          }
+          if (found.status === 'detaching' && found.reads++ >= (r.volumeDetachReads ?? 0)) {
+            found.status = 'available';
+          }
+          if (found.status === 'extending' && found.reads++ >= (r.volumeExtendReads ?? 0)) {
+            found.status = found.attachments?.length ? 'in-use' : 'available';
+          }
+          return send(200, { volume: found });
+        }
+        const action = rest.match(/^\/volumes\/([^/]+)\/action$/);
+        if (action && req.method === 'POST') {
+          const found = r.volumes.find((v) => v.id === action[1]);
+          if (!found) return send(404, { itemNotFound: { message: 'Volume could not be found' } });
+          const body = JSON.parse(raw);
+          if (body['os-extend']) {
+            // Cinder allows extending a settled volume (available or in-use/attached), but
+            // refuses one mid-transition (e.g. "reserved" while an attach is still in progress)
+            if (found.status !== 'available' && found.status !== 'in-use') {
+              return send(400, {
+                badRequest: {
+                  message: `Invalid volume: Volume ${action[1]} status must be 'available' to extend, currently ${found.status}.`,
+                },
+              });
+            }
+            found.size = Number(body['os-extend'].new_size);
+            found.status = 'extending';
+            found.reads = 0;
+            r.extended = [...(r.extended ?? []), { volume: action[1], size: found.size }];
+            return send(202, {});
+          }
+          return send(400, { badRequest: { message: 'unsupported action' } });
+        }
       }
       return send(404, { error: { message: 'not found' } });
     });

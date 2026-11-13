@@ -165,3 +165,12 @@ export const DROP_MANAGED_MIGRATION: PluginMigration = {
   sqlite: `ALTER TABLE plugin_openstack_server DROP COLUMN managed;`,
   mariadb: `ALTER TABLE plugin_openstack_server DROP COLUMN managed;`,
 };
+
+// 0005: the Cinder volume paashup creates and attaches as a VM's extra data disk, so it can
+// be deleted along with the server (Cinder volumes are not deleted on their own). Next sync
+// still mirrors it as a virtual disk like any other attached volume.
+export const DATA_VOLUME_MIGRATION: PluginMigration = {
+  version: '0005_data_volume',
+  sqlite: `ALTER TABLE plugin_openstack_server ADD COLUMN data_volume_id TEXT;`,
+  mariadb: `ALTER TABLE plugin_openstack_server ADD COLUMN data_volume_id VARCHAR(64) NULL;`,
+};

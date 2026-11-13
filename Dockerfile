@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- build stage: install all deps, compile TypeScript, prune to prod deps ----
-FROM node:24-slim AS build
+FROM node:26-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -11,7 +11,7 @@ RUN npm run build
 RUN npm prune --omit=dev
 
 # ---- web stage: build the Vue SPA ----
-FROM node:24-slim AS web
+FROM node:26-slim AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
@@ -19,7 +19,7 @@ COPY web/ ./
 RUN npm run build
 
 # ---- runtime stage: minimal image, non-root, SQLite-ready, serves API + SPA ----
-FROM node:24-slim AS runtime
+FROM node:26-slim AS runtime
 ENV NODE_ENV=production \
     PORT=8000 \
     PB_DIALECT=sqlite \

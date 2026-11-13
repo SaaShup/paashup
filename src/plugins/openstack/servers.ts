@@ -10,27 +10,42 @@ import { ApiError, ValidationError } from '../../errors.js';
 import { checkScript, renderScript } from '../../initscripts.js';
 import { NOVA_KEYPAIR_NAME } from '../../repository/validate.js';
 import {
+  attachVolume,
   authenticate,
   computeRegions,
   confirmResize,
   createKeypair,
   createServer,
+  createVolume,
   deleteServer,
+  deleteVolume,
+  detachVolume,
   getComputeLimits,
   getServerMetadata,
   getServerState,
+  getVolumeInfo,
+  getVolumeState,
   rebootServer,
   renameServer,
   resizeServer,
+  resizeVolume,
   updateServerMetadata,
   listFlavors,
   listKeypairs,
   type CloudConfig,
 } from './openstack.js';
 import { emitVm } from './events.js';
-import { journal, journalVm } from './journal.js';
+import { journal, journalDisk, journalVm } from './journal.js';
 import { T } from './meta.js';
-import { dropServer, importServer, vmStatus } from './sync.js';
+import { attachCloudVolume } from './volumes.js';
+import {
+  detachVolumeDisk,
+  dropServer,
+  importServer,
+  removeVolumeDisk,
+  upsertVolumeDisk,
+  vmStatus,
+} from './sync.js';
 
 interface CloudRow extends CloudConfig {
   id: number;
@@ -51,12 +66,28 @@ export interface CreateInput {
   metadata: Record<string, string>;
   /** an init script of the library, with the values given to its variables */
   script?: { id: number; variables: Record<string, string> };
+  /** size (GB) of an extra Cinder volume created and attached once the server is up */
+  dataVolumeGb?: number;
+  /** id of an existing, currently unattached Cinder volume to attach once the server is up */
+  existingVolumeId?: string;
 }
+
+const DATA_VOLUME_MIN_GB = 1;
+const DATA_VOLUME_MAX_GB = 2000;
 
 const POLL_MS = Number(process.env.PB_OPENSTACK_POLL_MS) || 5000;
 const POLL_LIMIT_MS = 10 * 60_000;
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+/** Like messageOf, but prefers a field-level detail message (e.g. a ValidationError's). */
+const detailOf = (e: unknown): string => {
+  const d = e && typeof e === 'object' ? (e as { detail?: unknown }).detail : undefined;
+  if (d && typeof d === 'object') {
+    const first = Object.values(d as Record<string, unknown>)[0];
+    if (Array.isArray(first) && typeof first[0] === 'string') return first[0];
+  }
+  return messageOf(e);
+};
 const fieldError = (field: string, msg: string): ValidationError =>
   new ValidationError('Invalid request', { [field]: [msg] });
 
@@ -161,6 +192,23 @@ export function parseCreate(body: unknown): CreateInput {
     }
   }
 
+  let dataVolumeGb: number | undefined;
+  if (b.data_volume_gb != null && b.data_volume_gb !== '') {
+    const n = Number(b.data_volume_gb);
+    if (!Number.isInteger(n) || n < DATA_VOLUME_MIN_GB || n > DATA_VOLUME_MAX_GB) {
+      errors.data_volume_gb = [
+        `Must be a whole number of GB between ${DATA_VOLUME_MIN_GB} and ${DATA_VOLUME_MAX_GB}.`,
+      ];
+    } else {
+      dataVolumeGb = n;
+    }
+  }
+
+  const existingVolumeId = str(b.existing_volume_id) || undefined;
+  if (existingVolumeId && dataVolumeGb != null) {
+    errors.data_volume_gb = ['Choose either a new disk or an existing volume, not both.'];
+  }
+
   if (Object.keys(errors).length || !sshKey) throw new ValidationError('Invalid request', errors);
   return {
     region,
@@ -172,6 +220,8 @@ export function parseCreate(body: unknown): CreateInput {
     sshKey,
     metadata,
     script,
+    dataVolumeGb,
+    existingVolumeId,
   };
 }
 
@@ -411,10 +461,122 @@ async function followCreate(
     } else {
       if (vmId != null) await journalVm(db, vmId, 'success', `Server is ${state.status}.`);
       await journal(db, cloud.id, 'success', `Server "${input.name}" is ${state.status}.`);
+      if (input.dataVolumeGb) {
+        await provisionDataVolume(
+          db,
+          cloud,
+          input.region,
+          serverId,
+          vmId,
+          input.name,
+          input.dataVolumeGb,
+        );
+      } else if (input.existingVolumeId) {
+        if (vmId != null) {
+          try {
+            await attachCloudVolume(db, cloud, input.region, input.existingVolumeId, vmId);
+          } catch (e) {
+            const msg = `Attaching the chosen volume to server "${input.name}": ${detailOf(e)}`;
+            await journalVm(db, vmId, 'danger', msg);
+            await journal(db, cloud.id, 'danger', msg);
+          }
+        } else {
+          await journal(
+            db,
+            cloud.id,
+            'warning',
+            `Server "${input.name}" built, but the chosen volume could not be attached: the VM was not imported yet.`,
+          );
+        }
+      }
     }
   } catch (e) {
     await journal(db, cloud.id, 'danger', `Following server "${input.name}": ${messageOf(e)}`);
   }
+}
+
+/**
+ * Create a Cinder volume and attach it to a server as an extra (non-boot) disk — at launch,
+ * or on demand for a server that is already up. Its id is kept on the server's row so it can
+ * be deleted along with the server, and it is mirrored right away as a virtual disk (no need
+ * to wait for the next sync).
+ */
+async function provisionDataVolume(
+  db: Db,
+  cloud: CloudRow,
+  region: string,
+  serverId: string,
+  vmId: number | null,
+  serverName: string,
+  sizeGb: number,
+): Promise<void> {
+  try {
+    const name = `${serverName}-data`;
+    const volumeId = await createVolume(cloud, region, { name, sizeGb });
+    let status = await getVolumeState(cloud, region, volumeId);
+    for (let waited = 0; status === 'creating' && waited < POLL_LIMIT_MS; waited += POLL_MS) {
+      await sleep(POLL_MS);
+      status = await getVolumeState(cloud, region, volumeId);
+    }
+    if (status !== 'available') {
+      throw new Error(`volume ${volumeId} ended up "${status ?? 'gone'}" instead of "available"`);
+    }
+    const { device } = await attachVolume(cloud, region, serverId, volumeId);
+    await db.execute(
+      `UPDATE ${T.server} SET data_volume_id = ? WHERE cloud_id = ? AND server_id = ?`,
+      [volumeId, cloud.id, serverId],
+    );
+    if (vmId != null) {
+      const diskId = await upsertVolumeDisk(
+        db,
+        cloud,
+        region,
+        vmId,
+        { id: volumeId, name, size: sizeGb },
+        device,
+      );
+      await journalVm(
+        db,
+        vmId,
+        'success',
+        `Data volume attached (${sizeGb} GB, OpenStack volume ${volumeId}).`,
+      );
+      await journalDisk(
+        db,
+        diskId,
+        'success',
+        `Created and attached (${sizeGb} GB, OpenStack volume ${volumeId}).`,
+      );
+      await emitVm(db, vmId, 'updated');
+    }
+    await journal(
+      db,
+      cloud.id,
+      'success',
+      `Data volume of ${sizeGb} GB attached to server "${serverName}" in ${region}.`,
+    );
+  } catch (e) {
+    const msg = `Data volume for server "${serverName}" failed in ${region}: ${messageOf(e)}`;
+    if (vmId != null) await journalVm(db, vmId, 'danger', msg);
+    await journal(db, cloud.id, 'danger', msg);
+  }
+}
+
+/**
+ * Create and attach a data volume to a VM that is already up. A VM that already has one, or a
+ * bad size, is the field-level 400.
+ */
+export async function addDataVolume(db: Db, vmId: number, sizeGb: number): Promise<void> {
+  if (!Number.isInteger(sizeGb) || sizeGb < DATA_VOLUME_MIN_GB || sizeGb > DATA_VOLUME_MAX_GB) {
+    throw fieldError(
+      'size_gb',
+      `Must be a whole number of GB between ${DATA_VOLUME_MIN_GB} and ${DATA_VOLUME_MAX_GB}.`,
+    );
+  }
+  const { link, cloud } = await serverOfVm(db, vmId);
+  if (link.data_volume_id) throw fieldError('size_gb', 'This VM already has a data volume.');
+  await journalVm(db, vmId, 'warning', `Data volume of ${sizeGb} GB requested in ${link.region}.`);
+  void provisionDataVolume(db, cloud, link.region, link.server_id, vmId, link.name, sizeGb);
 }
 
 interface Link {
@@ -423,12 +585,13 @@ interface Link {
   server_id: string;
   metadata?: unknown;
   name: string;
+  data_volume_id: string | null;
 }
 
 /** The OpenStack server behind a VM and its cloud, or the 404 when there is none. */
 async function serverOfVm(db: Db, vmId: number): Promise<{ link: Link; cloud: CloudRow }> {
   const link = await db.get<Link>(
-    `SELECT s.cloud_id, s.region, s.server_id, s.metadata, v.name
+    `SELECT s.cloud_id, s.region, s.server_id, s.metadata, s.data_volume_id, v.name
        FROM ${T.server} s JOIN virtualization_virtual_machine v ON v.id = s.virtual_machine_id
       WHERE s.virtual_machine_id = ?`,
     [vmId],
@@ -512,8 +675,19 @@ export async function renameVm(db: Db, vmId: number, name: string): Promise<void
  * Delete the OpenStack server behind a VM, whoever created it. A VM with no server behind it
  * is a 404.
  */
-export async function deleteVm(db: Db, vmId: number): Promise<void> {
+export async function deleteVm(db: Db, vmId: number, deleteVolumes = false): Promise<void> {
   const { link, cloud } = await serverOfVm(db, vmId);
+  // every Cinder volume mirrored under this VM (the quick-flow one and any attached later from
+  // the Volumes page): Nova detaches them when the server is deleted, but OpenStack never
+  // deletes a volume on its own, so this is the one chance to also ask for that, if wanted.
+  const volumeIds = (
+    await db.query<{ volume_id: string }>(
+      `SELECT DISTINCT v.volume_id FROM ${T.volume} v
+         JOIN virtualization_virtual_disk d ON d.id = v.virtual_disk_id
+        WHERE d.virtual_machine_id = ? AND v.cloud_id = ?`,
+      [vmId, cloud.id],
+    )
+  ).map((r) => r.volume_id);
 
   await deleteServer(cloud, link.region, link.server_id);
   await db.execute(
@@ -528,10 +702,16 @@ export async function deleteVm(db: Db, vmId: number): Promise<void> {
     'warning',
     `Deletion of server "${link.name}" requested in ${link.region}.`,
   );
-  void followDelete(db, cloud, link);
+  void followDelete(db, cloud, link, volumeIds, deleteVolumes);
 }
 
-async function followDelete(db: Db, cloud: CloudRow, link: Link): Promise<void> {
+async function followDelete(
+  db: Db,
+  cloud: CloudRow,
+  link: Link,
+  volumeIds: string[],
+  deleteVolumes: boolean,
+): Promise<void> {
   try {
     let gone = false;
     for (let waited = 0; waited < POLL_LIMIT_MS; waited += POLL_MS) {
@@ -550,8 +730,23 @@ async function followDelete(db: Db, cloud: CloudRow, link: Link): Promise<void> 
       );
       return;
     }
+    if (!deleteVolumes) {
+      // detach them from this VM in paashup's own records first: `dropServer` below deletes
+      // every disk still pointing at this VM, and these should survive it, unattached
+      for (const volumeId of volumeIds) await detachVolumeDisk(db, cloud.id, volumeId);
+    }
     await dropServer(db, cloud.id, link.server_id); // the VM goes with its server
     await journal(db, cloud.id, 'success', `Server "${link.name}" deleted in ${link.region}.`);
+    if (deleteVolumes) {
+      for (const volumeId of volumeIds) await deleteDetachedVolume(db, cloud, link, volumeId);
+    } else if (volumeIds.length) {
+      await journal(
+        db,
+        cloud.id,
+        'info',
+        `${volumeIds.length} data volume(s) of "${link.name}" kept (detached, not deleted) in ${link.region}.`,
+      );
+    }
   } catch (e) {
     await journal(
       db,
@@ -559,6 +754,170 @@ async function followDelete(db: Db, cloud: CloudRow, link: Link): Promise<void> 
       'danger',
       `Following the deletion of "${link.name}": ${messageOf(e)}`,
     );
+  }
+}
+
+/**
+ * Delete a volume once it is detached (Nova detaches it when its server is deleted, but
+ * doesn't delete it on its own), so this waits for it to leave "in-use" first.
+ */
+async function deleteDetachedVolume(
+  db: Db,
+  cloud: CloudRow,
+  link: Link,
+  volumeId: string,
+): Promise<void> {
+  try {
+    let status = await getVolumeState(cloud, link.region, volumeId);
+    for (let waited = 0; status === 'in-use' && waited < POLL_LIMIT_MS; waited += POLL_MS) {
+      await sleep(POLL_MS);
+      status = await getVolumeState(cloud, link.region, volumeId);
+    }
+    if (status == null) return; // already gone
+    await deleteVolume(cloud, link.region, volumeId);
+    await journal(
+      db,
+      cloud.id,
+      'success',
+      `Data volume ${volumeId} of "${link.name}" deleted in ${link.region}.`,
+    );
+  } catch (e) {
+    await journal(
+      db,
+      cloud.id,
+      'warning',
+      `Could not delete data volume ${volumeId} of "${link.name}": ${messageOf(e)}`,
+    );
+  }
+}
+
+/**
+ * Grow the data volume of a VM to `sizeGb`. OpenStack (Cinder) can only grow a volume, never
+ * shrink it: a size that is not strictly larger than the current one is the field-level 400.
+ */
+export async function resizeDataVolume(db: Db, vmId: number, sizeGb: number): Promise<void> {
+  if (!Number.isInteger(sizeGb) || sizeGb < DATA_VOLUME_MIN_GB || sizeGb > DATA_VOLUME_MAX_GB) {
+    throw fieldError(
+      'size_gb',
+      `Must be a whole number of GB between ${DATA_VOLUME_MIN_GB} and ${DATA_VOLUME_MAX_GB}.`,
+    );
+  }
+  const { link, cloud } = await serverOfVm(db, vmId);
+  if (!link.data_volume_id) throw fieldError('size_gb', 'This VM has no data volume.');
+  const info = await getVolumeInfo(cloud, link.region, link.data_volume_id);
+  if (!info) throw fieldError('size_gb', 'The data volume no longer exists on OpenStack.');
+  if (sizeGb <= info.size) {
+    throw fieldError(
+      'size_gb',
+      `Must be larger than the current size (${info.size} GB); OpenStack cannot shrink a volume.`,
+    );
+  }
+  await resizeVolume(cloud, link.region, link.data_volume_id, sizeGb);
+  await journalVm(
+    db,
+    vmId,
+    'warning',
+    `Data volume resize to ${sizeGb} GB requested in ${link.region}.`,
+  );
+  void followVolumeResize(db, cloud, link, vmId);
+}
+
+async function followVolumeResize(
+  db: Db,
+  cloud: CloudRow,
+  link: Link,
+  vmId: number,
+): Promise<void> {
+  const volumeId = link.data_volume_id!;
+  try {
+    let info = await getVolumeInfo(cloud, link.region, volumeId);
+    for (
+      let waited = 0;
+      info?.status === 'extending' && waited < POLL_LIMIT_MS;
+      waited += POLL_MS
+    ) {
+      await sleep(POLL_MS);
+      info = await getVolumeInfo(cloud, link.region, volumeId);
+    }
+    if (!info) throw new Error(`volume ${volumeId} is gone`);
+    if (info.status !== 'available' && info.status !== 'in-use') {
+      throw new Error(`volume ${volumeId} ended up "${info.status}" instead of resized`);
+    }
+    const diskId = await upsertVolumeDisk(db, cloud, link.region, vmId, {
+      id: volumeId,
+      name: info.name,
+      size: info.size,
+    });
+    await journalVm(db, vmId, 'success', `Data volume resized to ${info.size} GB.`);
+    await journal(
+      db,
+      cloud.id,
+      'success',
+      `Data volume of "${link.name}" resized to ${info.size} GB in ${link.region}.`,
+    );
+    await journalDisk(db, diskId, 'success', `Resized to ${info.size} GB.`);
+    await emitVm(db, vmId, 'updated');
+  } catch (e) {
+    const msg = `Resizing the data volume of "${link.name}": ${messageOf(e)}`;
+    await journalVm(db, vmId, 'danger', msg);
+    await journal(db, cloud.id, 'danger', msg);
+  }
+}
+
+/**
+ * Detach the data volume of a VM and delete it (paashup only ever created it to be that VM's
+ * extra disk, so there is nothing useful left to keep once it is detached). A VM with none is
+ * a 404.
+ */
+export async function removeDataVolume(db: Db, vmId: number, deleteVolume_ = false): Promise<void> {
+  const { link, cloud } = await serverOfVm(db, vmId);
+  if (!link.data_volume_id) throw new ApiError(404, 'This VM has no data volume.');
+  await journalVm(db, vmId, 'warning', `Data volume detachment requested in ${link.region}.`);
+  void followVolumeDetach(db, cloud, link, vmId, deleteVolume_);
+}
+
+async function followVolumeDetach(
+  db: Db,
+  cloud: CloudRow,
+  link: Link,
+  vmId: number,
+  deleteVolume_: boolean,
+): Promise<void> {
+  const volumeId = link.data_volume_id!;
+  const done = deleteVolume_ ? 'detached and deleted' : 'detached (kept)';
+  const diskLink = await db.get<{ virtual_disk_id: number }>(
+    `SELECT virtual_disk_id FROM ${T.volume} WHERE cloud_id = ? AND volume_id = ?`,
+    [cloud.id, volumeId],
+  );
+  const diskId = diskLink?.virtual_disk_id ?? null;
+  try {
+    await detachVolume(cloud, link.region, link.server_id, volumeId);
+    let status = await getVolumeState(cloud, link.region, volumeId);
+    for (let waited = 0; status === 'detaching' && waited < POLL_LIMIT_MS; waited += POLL_MS) {
+      await sleep(POLL_MS);
+      status = await getVolumeState(cloud, link.region, volumeId);
+    }
+    if (deleteVolume_ && status != null) await deleteVolume(cloud, link.region, volumeId);
+    await db.execute(
+      `UPDATE ${T.server} SET data_volume_id = NULL WHERE cloud_id = ? AND server_id = ?`,
+      [cloud.id, link.server_id],
+    );
+    if (diskId != null && !deleteVolume_) await journalDisk(db, diskId, 'success', `${done}.`);
+    if (deleteVolume_) await removeVolumeDisk(db, cloud.id, volumeId);
+    else await detachVolumeDisk(db, cloud.id, volumeId);
+    await journalVm(db, vmId, 'success', `Data volume ${volumeId} ${done} in ${link.region}.`);
+    await journal(
+      db,
+      cloud.id,
+      'success',
+      `Data volume ${volumeId} of "${link.name}" ${done} in ${link.region}.`,
+    );
+    await emitVm(db, vmId, 'updated');
+  } catch (e) {
+    const msg = `Detaching the data volume of "${link.name}": ${messageOf(e)}`;
+    await journalVm(db, vmId, 'danger', msg);
+    await journal(db, cloud.id, 'danger', msg);
+    if (diskId != null) await journalDisk(db, diskId, 'danger', msg);
   }
 }
 
@@ -755,10 +1114,30 @@ async function followResize(
 export async function listLinks(db: Db, vmId?: number): Promise<Record<string, unknown>[]> {
   const rows = await db.query<Record<string, unknown>>(
     `SELECT s.virtual_machine_id, s.cloud_id, c.name AS cloud, s.region, s.server_id,
-            s.metadata
+            s.metadata, s.data_volume_id
        FROM ${T.server} s JOIN ${T.cloud} c ON c.id = s.cloud_id
       ${vmId != null ? 'WHERE s.virtual_machine_id = ?' : ''} ORDER BY s.id`,
     vmId != null ? [vmId] : [],
   );
   return rows.map((r) => ({ ...r, metadata: storedMetadata(r.metadata) }));
+}
+
+/**
+ * The virtual disk of each data volume paashup created and attached (or one VM's), for the
+ * Volumes page: which disks are OpenStack-managed, so it can offer resize/detach there instead
+ * of the plain record form.
+ */
+export async function listVolumeLinks(db: Db, vmId?: number): Promise<Record<string, unknown>[]> {
+  return db.query<Record<string, unknown>>(
+    `SELECT d.id AS virtual_disk_id, s.virtual_machine_id, c.name AS cloud, s.region,
+            s.data_volume_id AS volume_id
+       FROM ${T.server} s
+       JOIN ${T.cloud} c ON c.id = s.cloud_id
+       JOIN ${T.volume} v ON v.cloud_id = s.cloud_id AND v.volume_id = s.data_volume_id
+       JOIN virtualization_virtual_disk d ON d.id = v.virtual_disk_id
+      WHERE s.data_volume_id IS NOT NULL
+        ${vmId != null ? 'AND s.virtual_machine_id = ?' : ''}
+      ORDER BY d.id`,
+    vmId != null ? [vmId] : [],
+  );
 }

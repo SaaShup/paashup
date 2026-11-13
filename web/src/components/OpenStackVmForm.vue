@@ -38,6 +38,13 @@ const groups = ref<Named[]>([]);
 const cloudKeys = ref<Named[]>([]);
 const paashupKeys = ref<Obj[]>([]);
 const scripts = ref<Obj[]>([]);
+interface Volume {
+  id: string;
+  name: string;
+  size: number;
+  attachments: { serverId: string }[];
+}
+const unattachedVolumes = ref<Volume[]>([]);
 
 const cloudId = ref<number | ''>('');
 const region = ref('');
@@ -48,6 +55,9 @@ const networkIds = ref<string[]>([]);
 const securityGroups = ref<string[]>([]);
 const sshKey = ref(''); // "cloud:<name>" or "paashup:<id>"
 const metadata = ref<Pair[]>([]);
+const diskMode = ref<'' | 'new' | 'existing'>('');
+const dataVolumeGb = ref<number | ''>('');
+const existingVolumeId = ref('');
 const scriptId = ref<number | ''>('');
 const varValues = ref<Record<string, string>>({}); // init script variable → value
 
@@ -136,22 +146,33 @@ watch(cloudId, async (id) => {
 });
 
 watch(region, async (r) => {
-  for (const list of [flavors, images, networks, groups, cloudKeys]) list.value = [];
+  for (const list of [flavors, images, networks, groups, cloudKeys, unattachedVolumes])
+    list.value = [];
   flavorId.value = imageId.value = sshKey.value = '';
   networkIds.value = [];
   securityGroups.value = [];
+  diskMode.value = '';
+  dataVolumeGb.value = '';
+  existingVolumeId.value = '';
   if (!r) return;
   loading.value = true;
   general.value = '';
   try {
-    [flavors.value, images.value, networks.value, groups.value, cloudKeys.value] =
+    const [flavorsRes, imagesRes, networksRes, groupsRes, keypairsRes, volumesRes] =
       await Promise.all([
         read<Flavor>('flavors'),
         read<Named>('images'),
         read<Network>('networks'),
         read<Named>('security-groups'),
         read<Named>('keypairs'),
+        read<Volume>('volumes'),
       ]);
+    flavors.value = flavorsRes;
+    images.value = imagesRes;
+    networks.value = networksRes;
+    groups.value = groupsRes;
+    cloudKeys.value = keypairsRes;
+    unattachedVolumes.value = volumesRes.filter((v) => !v.attachments.length);
   } catch (e) {
     general.value = e instanceof ApiError ? detailOf(e) : String(e);
   } finally {
@@ -193,6 +214,12 @@ async function submit(): Promise<void> {
       security_groups: securityGroups.value,
       ssh_key: source === 'cloud' ? { source, name: value } : { source, id: Number(value) },
       metadata: meta.value,
+      ...(diskMode.value === 'new' && dataVolumeGb.value
+        ? { data_volume_gb: dataVolumeGb.value }
+        : {}),
+      ...(diskMode.value === 'existing' && existingVolumeId.value
+        ? { existing_volume_id: existingVolumeId.value }
+        : {}),
       ...(scriptId.value
         ? { init_script: { id: scriptId.value, variables: varValues.value } }
         : {}),
@@ -321,6 +348,37 @@ async function submit(): Promise<void> {
                 </optgroup>
               </select>
               <span v-for="m in errors.ssh_key" :key="m" class="err">{{ m }}</span>
+            </div>
+          </div>
+          <div class="row">
+            <label>data disk</label>
+            <div class="control">
+              <select v-model="diskMode">
+                <option value="">None</option>
+                <option value="new">Create a new disk</option>
+                <option value="existing" :disabled="!unattachedVolumes.length">
+                  Attach an existing (unattached) volume{{
+                    unattachedVolumes.length ? '' : ' — none available'
+                  }}
+                </option>
+              </select>
+              <template v-if="diskMode === 'new'">
+                <input v-model.number="dataVolumeGb" type="number" min="1" max="2000" step="1" />
+                <span class="hint">
+                  GB of an extra Cinder volume, created and attached once the VM is up. Billed
+                  separately by the cloud provider.
+                </span>
+                <span v-for="m in errors.data_volume_gb" :key="m" class="err">{{ m }}</span>
+              </template>
+              <template v-else-if="diskMode === 'existing'">
+                <select v-model="existingVolumeId">
+                  <option value="" disabled>—</option>
+                  <option v-for="v in unattachedVolumes" :key="v.id" :value="v.id">
+                    {{ v.name || v.id }} ({{ v.size }} GB)
+                  </option>
+                </select>
+                <span class="hint">Attached once the VM is up. Already billed on its own.</span>
+              </template>
             </div>
           </div>
           <div class="row">

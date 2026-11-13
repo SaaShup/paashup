@@ -51,7 +51,7 @@ describe('VM reboot (ObjectDetailView)', () => {
   });
   afterEach(() => {
     vi.restoreAllMocks();
-    answerConfirm(false); // never leave a dialog pending across tests
+    answerConfirm({ ok: false, checked: false }); // never leave a dialog pending across tests
   });
 
   it('shows a Reboot button with a Soft/Hard menu, for a VM backed by an OpenStack server', async () => {
@@ -79,7 +79,7 @@ describe('VM reboot (ObjectDetailView)', () => {
       .findAll('button')
       .find((b) => b.text() === 'Soft reboot')!
       .trigger('click');
-    answerConfirm(true);
+    answerConfirm({ ok: true, checked: false });
     await confirmed;
     await flushPromises();
 
@@ -106,7 +106,7 @@ describe('VM reboot (ObjectDetailView)', () => {
       .findAll('button')
       .find((b) => b.text() === 'Hard reboot')!
       .trigger('click');
-    answerConfirm(false);
+    answerConfirm({ ok: false, checked: false });
     await confirmed;
     await flushPromises();
 

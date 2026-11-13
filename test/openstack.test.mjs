@@ -261,12 +261,16 @@ test('addresses become interfaces and IPs; the floating IP is primary', async ()
   );
 });
 
-test('an attached volume becomes a disk of its VM; an unattached one is skipped', async () => {
+test('an attached volume becomes a disk of its VM; an unattached one is mirrored too, without one', async () => {
   const disks = await all(
     `SELECT d.name, d.size, v.name AS vm FROM virtualization_virtual_disk d
-       JOIN virtualization_virtual_machine v ON v.id = d.virtual_machine_id`,
+       LEFT JOIN virtualization_virtual_machine v ON v.id = d.virtual_machine_id
+      ORDER BY d.name`,
   );
-  assert.deepEqual(disks, [{ name: 'data', size: 100, vm: 'web' }]);
+  assert.deepEqual(disks, [
+    { name: 'data', size: 100, vm: 'web' },
+    { name: 'spare', size: 10, vm: null },
+  ]);
 });
 
 test('keypairs become SSH keys owned by the cloud; x509 keypairs are ignored', async () => {

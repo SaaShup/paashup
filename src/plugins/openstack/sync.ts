@@ -8,7 +8,8 @@
 //   server's flavor   → virtualization_virtual_machine_type (by name, only flavors in use)
 //   Nova server       → virtualization_virtual_machine (+ vminterface per network)
 //   server addresses  → ipam_ipaddress assigned to the vminterface, primary_ip4/6 set
-//   Cinder volume     → virtualization_virtual_disk of the server it is attached to
+//   Cinder volume     → virtualization_virtual_disk (its VM if attached to one paashup
+//                       tracks, none otherwise — a Volume no longer needs a VM)
 // OpenStack ids are kept in the plugin's link tables so a later sync updates in place
 // and a server deleted in OpenStack is removed here. A region that fails is reported
 // and skipped — its existing data is left untouched. Every step only reads from the
@@ -52,8 +53,8 @@ interface RegionResult {
   region: string;
   servers: number;
   disks: number;
-  /** volumes not imported: a virtual disk needs a VM, so unattached volumes are skipped */
-  unattached: number;
+  /** volumes attached to a server this sync doesn't track (not a paashup VM): skipped */
+  foreignAttached: number;
   warnings: string[];
   /** time spent reading the region from OpenStack */
   fetchMs: number;
@@ -281,8 +282,8 @@ export async function syncCloud(db: Db, cloudId: number): Promise<void> {
 function summary(done: RegionResult[], failed: string[]): string {
   const lines = done.map((r) => {
     const extra = [
-      r.unattached
-        ? `${r.unattached} unattached volume${r.unattached === 1 ? '' : 's'} not imported`
+      r.foreignAttached
+        ? `${r.foreignAttached} volume${r.foreignAttached === 1 ? '' : 's'} attached elsewhere, not imported`
         : '',
       ...r.warnings,
     ].filter(Boolean);
@@ -356,7 +357,7 @@ async function syncRegion(
     region,
     servers: servers.byServer.size,
     disks: 0,
-    unattached: 0,
+    foreignAttached: 0,
     warnings: [],
     fetchMs: data.fetchMs,
   };
@@ -365,7 +366,7 @@ async function syncRegion(
   } else if (data.volumes) {
     const v = await syncVolumes(db, cloud, region, servers.byServer, data.volumes);
     result.disks = v.disks;
-    result.unattached = v.unattached;
+    result.foreignAttached = v.foreignAttached;
   }
   return result;
 }
@@ -812,72 +813,130 @@ async function syncVolumes(
   region: string,
   byServer: Map<string, number>,
   volumes: Volume[],
-): Promise<{ disks: number; unattached: number }> {
+): Promise<{ disks: number; foreignAttached: number }> {
   const links = await db.query<{ volume_id: string; virtual_disk_id: number }>(
     `SELECT volume_id, virtual_disk_id FROM ${T.volume} WHERE cloud_id = ? AND region = ?`,
     [cloud.id, region],
   );
   const known = new Map(links.map((l) => [l.volume_id, Number(l.virtual_disk_id)]));
   const kept = new Set<string>();
-  let unattached = 0;
+  let foreignAttached = 0;
 
   for (const v of volumes) {
+    if (!v.attachments.length) {
+      // not attached to anything: mirrored too, just without a VM
+      await upsertVolumeDisk(db, cloud, region, null, v);
+      kept.add(v.id);
+      continue;
+    }
     const att = v.attachments.find((a) => byServer.has(a.serverId));
     if (!att) {
-      unattached++;
+      // attached to a server this sync doesn't track (not a paashup VM): left alone
+      foreignAttached++;
       continue;
     }
     const vmId = byServer.get(att.serverId)!;
-    const description = `OpenStack volume ${v.id}${att.device ? ` (${att.device})` : ''}`;
-    let diskId = known.get(v.id);
-
-    if (diskId != null) {
-      await db.execute(
-        `UPDATE virtualization_virtual_disk
-            SET virtual_machine_id = ?, name = ?, size = ?, description = ? WHERE id = ?`,
-        [vmId, await diskName(db, v, vmId, diskId), v.size, description, diskId],
-      );
-    } else {
-      diskId = Number(
-        (
-          await db.execute(
-            `INSERT INTO virtualization_virtual_disk (virtual_machine_id, name, size, description)
-             VALUES (?, ?, ?, ?)`,
-            [vmId, await diskName(db, v, vmId), v.size, description],
-          )
-        ).insertId,
-      );
-      await db.execute(
-        `INSERT INTO ${T.volume} (cloud_id, region, volume_id, virtual_disk_id) VALUES (?, ?, ?, ?)`,
-        [cloud.id, region, v.id, diskId],
-      );
-    }
+    await upsertVolumeDisk(db, cloud, region, vmId, v, att.device);
     kept.add(v.id);
   }
 
-  // Volumes detached or deleted: drop their disk (the link goes with it).
+  // Volumes deleted, or now attached elsewhere: drop their disk (the link goes with it).
   for (const [volumeId, diskId] of known) {
     if (!kept.has(volumeId)) {
       await db.execute(`DELETE FROM virtualization_virtual_disk WHERE id = ?`, [diskId]);
     }
   }
-  return { disks: kept.size, unattached };
+  return { disks: kept.size, foreignAttached };
 }
 
 /** Volume name, made unique among the VM's disks. */
 async function diskName(
   db: Db,
   v: { id: string; name: string },
-  vmId: number,
+  vmId: number | null,
   selfId?: number,
 ): Promise<string> {
   const base = (v.name || `volume-${v.id.slice(0, 8)}`).slice(0, 64);
+  // an unattached volume has no VM to clash within; its name just doesn't need to be unique
+  if (vmId == null) return base;
   const clash = await db.get(
     `SELECT id FROM virtualization_virtual_disk
       WHERE virtual_machine_id = ? AND lower(name) = lower(?) AND id <> ?`,
     [vmId, base, selfId ?? 0],
   );
   return clash ? `${base.slice(0, 55)}-${v.id.slice(0, 8)}` : base;
+}
+
+/**
+ * Mirror one Cinder volume as the virtual disk of the VM it is attached to: update it in place
+ * if it is already linked, insert it (and its link) otherwise. Used by the sync and by servers.ts
+ * so a volume paashup creates and attaches shows up right away, without waiting for the next sync.
+ */
+export async function upsertVolumeDisk(
+  db: Db,
+  cloud: CloudRow,
+  region: string,
+  vmId: number | null,
+  v: { id: string; name: string; size: number },
+  device?: string,
+): Promise<number> {
+  const description = `OpenStack volume ${v.id}${device ? ` (${device})` : ''}`;
+  const existing = await db.get<{ virtual_disk_id: number }>(
+    `SELECT virtual_disk_id FROM ${T.volume} WHERE cloud_id = ? AND volume_id = ?`,
+    [cloud.id, v.id],
+  );
+  if (existing) {
+    const diskId = Number(existing.virtual_disk_id);
+    await db.execute(
+      `UPDATE virtualization_virtual_disk
+          SET virtual_machine_id = ?, name = ?, size = ?, description = ? WHERE id = ?`,
+      [vmId, await diskName(db, v, vmId, diskId), v.size, description, diskId],
+    );
+    return diskId;
+  }
+  const diskId = Number(
+    (
+      await db.execute(
+        `INSERT INTO virtualization_virtual_disk (virtual_machine_id, name, size, description)
+         VALUES (?, ?, ?, ?)`,
+        [vmId, await diskName(db, v, vmId), v.size, description],
+      )
+    ).insertId,
+  );
+  await db.execute(
+    `INSERT INTO ${T.volume} (cloud_id, region, volume_id, virtual_disk_id) VALUES (?, ?, ?, ?)`,
+    [cloud.id, region, v.id, diskId],
+  );
+  return diskId;
+}
+
+/** Drop the virtual disk mirroring a Cinder volume (and its link), once the volume is gone. */
+export async function removeVolumeDisk(db: Db, cloudId: number, volumeId: string): Promise<void> {
+  const row = await db.get<{ virtual_disk_id: number }>(
+    `SELECT virtual_disk_id FROM ${T.volume} WHERE cloud_id = ? AND volume_id = ?`,
+    [cloudId, volumeId],
+  );
+  if (row) {
+    await db.execute(`DELETE FROM virtualization_virtual_disk WHERE id = ?`, [row.virtual_disk_id]);
+  }
+}
+
+/**
+ * Detach a mirrored disk from its VM without forgetting it: the volume (and its paashup
+ * record) survives, now unattached — unlike `removeVolumeDisk`, used only when the Cinder
+ * volume itself is gone for good.
+ */
+export async function detachVolumeDisk(db: Db, cloudId: number, volumeId: string): Promise<void> {
+  const row = await db.get<{ virtual_disk_id: number }>(
+    `SELECT virtual_disk_id FROM ${T.volume} WHERE cloud_id = ? AND volume_id = ?`,
+    [cloudId, volumeId],
+  );
+  if (row) {
+    await db.execute(
+      `UPDATE virtualization_virtual_disk SET virtual_machine_id = NULL WHERE id = ?`,
+      [row.virtual_disk_id],
+    );
+  }
 }
 
 /** Delete a VM with everything hanging off it (IPs, interfaces, disks). Throws if it is still referenced. */

@@ -1306,7 +1306,7 @@ CREATE TABLE virtualization_vminterface (
 
 CREATE TABLE virtualization_virtual_disk (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    virtual_machine_id BIGINT NOT NULL,
+    virtual_machine_id BIGINT,
     name VARCHAR(64) NOT NULL,
     description VARCHAR(200),
     size INT NOT NULL,

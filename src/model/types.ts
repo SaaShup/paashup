@@ -2137,7 +2137,7 @@ export type VMInterfaceUpdate = Partial<VMInterfaceCreate>;
 /** VirtualDisk — `/api/virtualization/virtual-disks/` */
 export interface VirtualDisk {
   id: number;
-  virtual_machine: number;
+  virtual_machine: number | null;
   name: string;
   description: string;
   size: number;
@@ -2147,7 +2147,7 @@ export interface VirtualDisk {
   last_updated?: string | null;
 }
 export interface VirtualDiskCreate {
-  virtual_machine: number;
+  virtual_machine?: number | null;
   name: string;
   description?: string;
   size: number;

@@ -1307,7 +1307,7 @@ CREATE TABLE virtualization_vminterface (
 
 CREATE TABLE virtualization_virtual_disk (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    virtual_machine_id INTEGER NOT NULL,
+    virtual_machine_id INTEGER,
     name TEXT NOT NULL,
     description TEXT,
     size INTEGER NOT NULL,

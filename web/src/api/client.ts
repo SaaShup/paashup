@@ -81,6 +81,7 @@ export const api = {
   update: <T = Obj>(endpoint: string, id: number, data: Obj) =>
     request<T>('PATCH', `${endpoint}${id}/`, data),
   remove: (endpoint: string, id: number) => request<void>('DELETE', `${endpoint}${id}/`),
+  del: (path: string, data?: Obj) => request<void>('DELETE', path, data),
   bulkRemove: (endpoint: string, ids: number[]) =>
     request<void>(
       'DELETE',

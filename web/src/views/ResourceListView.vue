@@ -8,7 +8,8 @@ import { applyRoute, type Route } from '../router.js';
 import ObjectTable from '../components/ObjectTable.vue';
 import ObjectForm from '../components/ObjectForm.vue';
 import AddVmForm from '../components/AddVmForm.vue';
-import { confirmDialog } from '../composables/confirm.js';
+import AddVolumeForm from '../components/AddVolumeForm.vue';
+import { confirmDialog, confirmDialogChecked } from '../composables/confirm.js';
 import IpRangeAddresses from '../components/IpRangeAddresses.vue';
 import { DETAIL_TABLES } from './objectDetail.js';
 import { valueLabel } from '../format.js';
@@ -99,6 +100,7 @@ async function loadVmServers() {
     /* no OpenStack plugin: every VM is deleted as a plain record */
   }
 }
+const isVolume = computed(() => resource.value?.table === 'virtualization_virtual_disk');
 const isContainer = computed(() => resource.value?.table === 'plugin_docker_container');
 const isHost = computed(() => resource.value?.table === 'plugin_docker_host');
 const isJournal = computed(() => resource.value?.table === 'extras_journalentry');
@@ -281,16 +283,17 @@ async function del(id: number) {
   if (server) {
     const row = slot.value?.items.find((r) => idOf(r) === id);
     const name = String(row?.name ?? `#${id}`);
-    const ok = await confirmDialog({
+    const { ok, checked: deleteVolumes } = await confirmDialogChecked({
       title: 'Delete on OpenStack',
-      message: `Delete "${name}" on OpenStack (cloud "${server.cloud}")?\n\nThe server and its disk are destroyed, a Docker host registered on this VM is deleted too, and this cannot be undone.`,
+      message: `Delete "${name}" on OpenStack (cloud "${server.cloud}")?\n\nThe server is destroyed, a Docker host registered on this VM is deleted too, and this cannot be undone.`,
       confirmLabel: 'Delete',
       tone: 'danger',
+      checkbox: { label: 'Also delete its data volume(s)' },
     });
     if (!ok) return;
     error.value = '';
     try {
-      await api.remove(OPENSTACK_SERVERS, id);
+      await api.del(`${OPENSTACK_SERVERS}${id}/`, { delete_volumes: deleteVolumes });
       reloadSoon();
     } catch (e) {
       error.value = errorText(e);
@@ -313,7 +316,22 @@ async function del(id: number) {
     });
     if (!ok) return;
   }
-  await objects.remove(resource.value.table, id);
+  if (isVolume.value) {
+    const volRow = slot.value?.items.find((r) => idOf(r) === id);
+    const ok = await confirmDialog({
+      title: 'Delete volume',
+      message: `Delete "${String(volRow?.name ?? volRow?.display ?? `#${id}`)}"?\n\nThe real OpenStack volume will be detached (if needed) and deleted — this cannot be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
+  }
+  error.value = '';
+  try {
+    await objects.remove(resource.value.table, id);
+  } catch (e) {
+    error.value = errorText(e);
+  }
 }
 /** The deletion / creation finishes in the background: refresh the list while it does. */
 /** A VM was created on a cloud: open its page, which follows it until it is built. */
@@ -325,12 +343,23 @@ function onVmCreated(vmId?: number | null) {
     reloadSoon();
   }
 }
+/** A volume was created: open its page, visible right away without waiting for a resync. */
+function onVolumeCreated(diskId?: number) {
+  formOpen.value = false;
+  if (diskId != null && resource.value) {
+    applyRoute(ui, { view: 'detail', table: resource.value.table, id: diskId });
+  } else {
+    reloadSoon();
+  }
+}
 function reloadSoon() {
   for (const ms of [1500, 6000, 15000, 40000]) {
     setTimeout(() => {
       if (isVm.value) {
         load();
         loadVmServers();
+      } else if (isVolume.value) {
+        load();
       }
     }, ms);
   }
@@ -548,6 +577,13 @@ function onAction(row: Obj) {
       :model="resource.model"
       :endpoint="resource.endpoint"
       @saved="onVmCreated"
+      @cancel="formOpen = false"
+    />
+    <AddVolumeForm
+      v-else-if="formOpen && resource.model && isVolume && !editing"
+      :model="resource.model"
+      :endpoint="resource.endpoint"
+      @saved="onVolumeCreated"
       @cancel="formOpen = false"
     />
     <ObjectForm

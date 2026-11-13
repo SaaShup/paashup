@@ -471,6 +471,17 @@ export async function listVolumes(c: CloudConfig, region: string): Promise<Volum
   }));
 }
 
+export interface VolumeType {
+  id: string;
+  name: string;
+}
+
+/** The Cinder volume types available (storage tiers/backends), e.g. OVH's "classic". */
+export async function listVolumeTypes(c: CloudConfig, region: string): Promise<VolumeType[]> {
+  const rows = await getAll(c, region, 'volume', '/types', 'volume_types');
+  return rows.map((t) => ({ id: String(t.id), name: String(t.name ?? t.id) }));
+}
+
 // ---- writes ---------------------------------------------------------------------
 
 export interface NewServer {
@@ -506,6 +517,113 @@ export async function createServer(c: CloudConfig, region: string, s: NewServer)
   if (!id)
     throw new OpenStackError(`OpenStack did not return the id of the new server in ${region}`);
   return String(id);
+}
+
+export interface NewVolume {
+  name: string;
+  sizeGb: number;
+  /** a Cinder volume type (storage tier/backend); omitted = the cloud's default. */
+  volumeType?: string;
+}
+
+/** Create a Cinder volume; returns its id (it may still be "creating"). */
+export async function createVolume(c: CloudConfig, region: string, v: NewVolume): Promise<string> {
+  const res = await send(c, region, 'volume', 'POST', '/volumes', {
+    volume: {
+      name: v.name,
+      size: v.sizeGb,
+      ...(v.volumeType ? { volume_type: v.volumeType } : {}),
+    },
+  });
+  const id = (res.volume as Json | undefined)?.id;
+  if (!id)
+    throw new OpenStackError(`OpenStack did not return the id of the new volume in ${region}`);
+  return String(id);
+}
+
+/** A volume's status (e.g. "creating", "available", "in-use"), or null once it no longer exists. */
+export async function getVolumeState(
+  c: CloudConfig,
+  region: string,
+  id: string,
+): Promise<string | null> {
+  return (await getVolumeInfo(c, region, id))?.status ?? null;
+}
+
+/** Attach an existing (available) volume to a server, as an extra (non-boot) disk. */
+export async function attachVolume(
+  c: CloudConfig,
+  region: string,
+  serverId: string,
+  volumeId: string,
+): Promise<{ device: string }> {
+  const res = await send(
+    c,
+    region,
+    'compute',
+    'POST',
+    `/servers/${encodeURIComponent(serverId)}/os-volume_attachments`,
+    { volumeAttachment: { volumeId } },
+  );
+  const device = (res.volumeAttachment as Json | undefined)?.device;
+  return { device: device ? String(device) : '' };
+}
+
+/** Detach a volume from the server it is attached to (the Cinder volume itself is left as is). */
+export async function detachVolume(
+  c: CloudConfig,
+  region: string,
+  serverId: string,
+  volumeId: string,
+): Promise<void> {
+  await send(
+    c,
+    region,
+    'compute',
+    'DELETE',
+    `/servers/${encodeURIComponent(serverId)}/os-volume_attachments/${encodeURIComponent(volumeId)}`,
+  );
+}
+
+/** A volume's status, size (GB) and name, or null once it no longer exists. */
+export async function getVolumeInfo(
+  c: CloudConfig,
+  region: string,
+  id: string,
+): Promise<{ status: string; size: number; name: string } | null> {
+  try {
+    const res = await get(c, region, 'volume', `/volumes/${encodeURIComponent(id)}`);
+    const v = (res.volume as Json | undefined) ?? {};
+    return {
+      status: String(v.status ?? ''),
+      size: Number(v.size ?? 0),
+      name: String(v.name ?? ''),
+    };
+  } catch (e) {
+    if (e instanceof OpenStackError && e.status === 404) return null;
+    throw e;
+  }
+}
+
+/** Ask Cinder to grow a volume to `newSizeGb`. Cinder can only grow a volume, never shrink it. */
+export async function resizeVolume(
+  c: CloudConfig,
+  region: string,
+  id: string,
+  newSizeGb: number,
+): Promise<void> {
+  await send(c, region, 'volume', 'POST', `/volumes/${encodeURIComponent(id)}/action`, {
+    'os-extend': { new_size: newSizeGb },
+  });
+}
+
+/** Delete a Cinder volume; a volume that is already gone is not an error. */
+export async function deleteVolume(c: CloudConfig, region: string, id: string): Promise<void> {
+  try {
+    await send(c, region, 'volume', 'DELETE', `/volumes/${encodeURIComponent(id)}`);
+  } catch (e) {
+    if (!(e instanceof OpenStackError) || e.status !== 404) throw e;
+  }
 }
 
 /** Ask for the deletion of a server; a server that is already gone is not an error. */
@@ -652,6 +770,7 @@ export async function getComputeLimits(c: CloudConfig, region: string): Promise<
 export const READS: Record<string, (c: CloudConfig, region: string) => Promise<unknown[]>> = {
   flavors: (c, r) => listFlavors(c, r),
   volumes: (c, r) => listVolumes(c, r),
+  'volume-types': (c, r) => listVolumeTypes(c, r),
   networks: async (c, r) =>
     (await getAll(c, r, 'network', '/v2.0/networks', 'networks')).map((n) => ({
       id: n.id,

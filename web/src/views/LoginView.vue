@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { login, loadProviders, type Provider } from '../auth/oidc.js';
 import { withBase } from '../base.js';
+import { theme, setTheme, THEMES } from '../theme.js';
 
 // Public files are served under the mount base (e.g. /datacenter), like the API.
 const logoSrc = withBase('/paashup-logo.svg');
@@ -38,6 +39,22 @@ async function signIn(id: string) {
       </div>
     </div>
     <div class="bg" aria-hidden="true" />
+    <div class="theme-switch" role="radiogroup" aria-label="Colour theme">
+      <button
+        v-for="t in THEMES"
+        :key="t.id"
+        type="button"
+        class="theme-btn"
+        role="radio"
+        :aria-checked="theme === t.id"
+        :aria-label="t.label"
+        :title="t.label"
+        :class="{ active: theme === t.id }"
+        @click="setTheme(t.id)"
+      >
+        <span aria-hidden="true">{{ t.icon }}</span>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -55,7 +72,7 @@ async function signIn(id: string) {
 .card {
   position: relative;
   z-index: 1;
-  background: #fff;
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 18px;
   padding: 32px 40px 36px;
@@ -105,7 +122,38 @@ async function signIn(id: string) {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  opacity: 0.04;
-  background: v-bind(markBg) right -80px bottom -60px / min(520px, 60vw) no-repeat;
+  opacity: var(--watermark-opacity);
+  background: v-bind(markBg) center / min(560px, 55vw) no-repeat;
+}
+.theme-switch {
+  position: absolute;
+  z-index: 1;
+  left: 16px;
+  bottom: 16px;
+  display: flex;
+  gap: 8px;
+}
+.theme-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease;
+}
+.theme-btn:hover {
+  background: var(--surface-2);
+}
+.theme-btn.active {
+  border-color: var(--primary);
+  box-shadow: var(--ring);
 }
 </style>

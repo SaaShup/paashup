@@ -91,7 +91,7 @@ const frameStyle = computed(() => {
   width: 28px;
   height: 28px;
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--bg);
   border-radius: 6px;
   cursor: pointer;
   color: var(--text);

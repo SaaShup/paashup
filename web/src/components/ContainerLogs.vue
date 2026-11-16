@@ -172,11 +172,11 @@ onUnmounted(() => {
   padding: 10px 14px;
   border: none;
   border-radius: 0;
-  background: #2d2e2c;
+  background: var(--terminal-bg);
 }
 .console.fullscreen h4,
 .console.fullscreen .follow {
-  color: #e2e8f0;
+  color: var(--terminal-fg);
 }
 h4 {
   display: flex;
@@ -217,7 +217,7 @@ h4 {
   height: 60vh;
   min-height: 240px;
   padding: 6px;
-  background: #2d2e2c;
+  background: var(--terminal-bg);
   border-radius: 6px;
   overflow: hidden;
 }

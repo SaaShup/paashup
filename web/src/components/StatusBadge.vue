@@ -4,7 +4,7 @@ import { useConnectionStore } from '../stores/connection.js';
 
 const conn = useConnectionStore();
 const color = computed(
-  () => ({ open: '#16a34a', connecting: '#d97706', closed: '#dc2626' })[conn.status],
+  () => ({ open: 'var(--ok)', connecting: 'var(--warn)', closed: 'var(--danger)' })[conn.status],
 );
 </script>
 

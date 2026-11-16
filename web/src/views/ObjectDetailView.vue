@@ -8,7 +8,7 @@ import ObjectForm from '../components/ObjectForm.vue';
 import { api, type Obj } from '../api/client.js';
 import { confirmDialog, confirmDialogChecked } from '../composables/confirm.js';
 import { scalarText } from './containerDetail.js';
-import { fieldLabel, formatUnit, pillFor } from '../format.js';
+import { fieldLabel, formatUnit, maskSecret, pillFor } from '../format.js';
 import StatusPill from '../components/StatusPill.vue';
 import KeyValueEditor from '../components/KeyValueEditor.vue';
 import SshKeyDeployments from '../components/SshKeyDeployments.vue';
@@ -72,7 +72,7 @@ const fields = computed(() => {
     .map(([k, v]) => ({
       key: k,
       label: fieldLabel(resource.value?.table, k),
-      text: formatUnit(resource.value?.table, k, v) ?? scalarText(v),
+      text: maskSecret(k, v) ?? formatUnit(resource.value?.table, k, v) ?? scalarText(v),
       pill: pillFor(resource.value?.table, k, v),
       to: routeOfBrief(v),
     }));
@@ -1141,7 +1141,7 @@ th {
   font-weight: 600;
 }
 .term {
-  background: #0f172a;
+  background: var(--surface-2);
   border-radius: 10px;
   overflow: hidden;
   margin-bottom: 14px;
@@ -1152,7 +1152,7 @@ th {
   align-items: center;
   gap: 7px;
   padding: 9px 14px;
-  background: #1e293b;
+  background: var(--border);
 }
 .dot {
   width: 11px;
@@ -1170,20 +1170,20 @@ th {
 }
 .term-title {
   margin-left: 8px;
-  color: #cbd5e1;
+  color: var(--muted);
   font-size: 0.82rem;
   font-weight: 600;
 }
 .term-meta {
   margin-left: auto;
   margin-right: 6px;
-  color: #64748b;
+  color: var(--muted);
   font-size: 0.75rem;
 }
 .term-body {
   margin: 0;
   padding: 14px 16px;
-  color: #e2e8f0;
+  color: var(--text);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.82rem;
   line-height: 1.5;
@@ -1205,6 +1205,8 @@ th {
   padding: 5px 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85rem;
 }
@@ -1217,15 +1219,15 @@ th {
 .term-btn {
   padding: 3px 12px;
   border-radius: 6px;
-  border: 1px solid #475569;
+  border: 1px solid var(--border);
   background: transparent;
-  color: #e2e8f0;
+  color: var(--text);
   font: inherit;
   font-size: 0.78rem;
   cursor: pointer;
 }
 .term-btn:hover:not(:disabled) {
-  background: #334155;
+  background: var(--surface);
 }
 .term-btn.primary {
   background: var(--primary);
@@ -1283,7 +1285,7 @@ th {
   overflow: auto;
 }
 .confirm-panel {
-  background: #fff;
+  background: var(--bg);
   border-radius: 10px;
   border-top: 4px solid var(--primary);
   padding: 20px 24px;
@@ -1333,7 +1335,7 @@ th {
   position: relative;
   height: 8px;
   border-radius: 4px;
-  background: #e2e8f0;
+  background: var(--surface-2);
   overflow: hidden;
   display: flex;
 }
@@ -1345,9 +1347,9 @@ th {
   height: 100%;
 }
 .resize-bar-delta.more {
-  background: #22c55e;
+  background: var(--ok-solid-bg);
 }
 .resize-bar-delta.less {
-  background: #ef4444;
+  background: var(--danger-solid-bg);
 }
 </style>

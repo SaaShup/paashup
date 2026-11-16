@@ -89,7 +89,7 @@ watch(
   text-align: left;
   text-decoration: none;
   color: inherit;
-  background: #fff;
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 14px 16px;
@@ -101,7 +101,7 @@ watch(
     transform 0.15s ease;
 }
 .usage-card:hover {
-  border-color: #d1d5db;
+  border-color: var(--border-hover);
   box-shadow: var(--shadow-lg);
   transform: translateY(-1px);
 }

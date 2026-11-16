@@ -28,25 +28,31 @@ defineProps<{ label: string; tone: StatusTone; busy?: boolean }>();
   line-height: 1.5;
   white-space: nowrap;
 }
+/* The "soft" tones (ok/info/muted: a tinted background, not a solid fill) get a thin border
+ * in their own foreground colour — on the dark theme a soft tint sits close in lightness to
+ * the page behind it, and without a border the chip's shape disappears into the row. */
 .tone-ok {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--ok-soft-bg);
+  color: var(--ok-soft-fg);
+  border: 1px solid var(--ok-soft-fg);
 }
 .tone-danger {
-  background: #b81c0e;
+  background: var(--danger-solid-bg);
   color: #fff;
 }
 .tone-warn {
-  background: #dd8a55;
-  color: #43230d;
+  background: var(--warn-solid-bg);
+  color: var(--warn-solid-fg);
 }
 .tone-info {
   background: var(--primary-soft);
   color: var(--primary-d);
+  border: 1px solid var(--primary-d);
 }
 .tone-muted {
-  background: #f1f5f9;
-  color: #475569;
+  background: var(--muted-soft-bg);
+  color: var(--muted-soft-fg);
+  border: 1px solid var(--muted-soft-fg);
 }
 .spin {
   width: 10px;

@@ -82,7 +82,7 @@ watch(dialog, async (d) => {
   overflow: auto;
 }
 .confirm-panel {
-  background: #fff;
+  background: var(--bg);
   border-radius: 10px;
   border-top: 4px solid var(--primary);
   padding: 20px 24px;

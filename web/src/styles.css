@@ -23,6 +23,87 @@
   --font:
     'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
     sans-serif;
+  --scrollbar: #d1d5db;
+  --scrollbar-hover: #9ca3af;
+  --border-hover: #d1d5db;
+  /* Live container logs/terminal: always a dark "real terminal" surface, independent of
+   * light/dark page theme. */
+  --terminal-bg: #2d2e2c;
+  --terminal-fg: #e2e8f0;
+  /* Faint logo watermark behind page content (App.vue): more visible against the light
+   * theme's near-white background than it would need to be against the dark theme. */
+  --watermark-opacity: 0.07;
+
+  /* Status tints (pills, row shading, banners): a soft background + readable foreground,
+   * and a solid/strong pair for filled chips. Green/red stay the light-theme default; the
+   * dark-protanopia-deuteranopia theme below swaps them for a blue/gold pair instead. */
+  --ok-soft-bg: #dcfce7;
+  --ok-soft-fg: #166534;
+  --ok-solid-bg: #16a34a;
+  --danger-soft-bg: #fcebe9;
+  --danger-soft-fg: #b42318;
+  --danger-solid-bg: #b81c0e;
+  --warn-soft-bg: #fef3c7;
+  --warn-soft-fg: #92400e;
+  --warn-solid-bg: var(--warn);
+  --warn-solid-fg: #fff;
+  --muted-soft-bg: #f1f5f9;
+  --muted-soft-fg: #475569;
+  --ok-hover: #15803d;
+  --warn-hover: #b45309;
+  --danger-hover: #b91c1c;
+  --danger-deep: #991b1b;
+  --danger-deep-hover: #7f1d1d;
+}
+
+/* Dark theme with colour-blind-safe accents (protanopia/deuteranopia): success/failure are
+ * told apart by blue vs. gold instead of green vs. red, and "in progress" is a third,
+ * unrelated hue (violet) so all three status colours stay distinguishable. Picked via the
+ * sidebar theme switcher and stored in localStorage (see theme.ts). */
+:root[data-theme='dark-cb'] {
+  --primary: #a371f7;
+  --primary-d: #8957e5;
+  --secondary: #bc8cff;
+  --brand-ink: #e6edf3;
+  --primary-soft: #2d1f47;
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface-2: #21262d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --border: #30363d;
+  --danger: #9e6a03;
+  --ok: #1f6feb;
+  --warn: #6e40c9;
+  --ring: 0 0 0 3px rgba(163, 113, 247, 0.35);
+  --shadow:
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 32px -10px rgba(0, 0, 0, 0.7);
+  --scrollbar: #30363d;
+  --scrollbar-hover: #484f58;
+  --border-hover: #484f58;
+  --terminal-bg: #010409;
+  --terminal-fg: #e6edf3;
+  --watermark-opacity: 0.035;
+
+  --ok-soft-bg: #0d2d52;
+  --ok-soft-fg: #79c0ff;
+  --ok-solid-bg: #1f6feb;
+  --danger-soft-bg: #3b2e05;
+  --danger-soft-fg: #e3b341;
+  --danger-solid-bg: #9e6a03;
+  --warn-soft-bg: #2d1f47;
+  --warn-soft-fg: #d2a8ff;
+  --warn-solid-bg: #6e40c9;
+  --warn-solid-fg: #f3e8ff;
+  --muted-soft-bg: #21262d;
+  --muted-soft-fg: #8b949e;
+  --ok-hover: #388bfd;
+  --warn-hover: #8957e5;
+  --danger-hover: #bb8009;
+  --danger-deep: #6e4802;
+  --danger-deep-hover: #513401;
 }
 
 * {
@@ -51,20 +132,20 @@ body {
 /* thin, unobtrusive scrollbars */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #d1d5db transparent;
+  scrollbar-color: var(--scrollbar) transparent;
 }
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d1d5db;
+  background: var(--scrollbar);
   border-radius: 10px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: #9ca3af;
+  background-color: var(--scrollbar-hover);
 }
 
 /* Responsive media: never let an image/svg force horizontal page scroll. */
@@ -131,37 +212,37 @@ h3 {
   cursor: default;
 }
 .btn-ghost {
-  background: #fff;
+  background: var(--bg);
   color: var(--text);
   border-color: var(--border);
 }
 .btn-ghost:hover {
   background: var(--surface);
-  border-color: #d1d5db;
+  border-color: var(--border-hover);
 }
 .btn-ok {
   background: var(--ok);
   border-color: var(--ok);
 }
 .btn-ok:hover {
-  background: #15803d;
-  border-color: #15803d;
+  background: var(--ok-hover);
+  border-color: var(--ok-hover);
 }
 .btn-warn {
   background: var(--warn);
   border-color: var(--warn);
 }
 .btn-warn:hover {
-  background: #b45309;
-  border-color: #b45309;
+  background: var(--warn-hover);
+  border-color: var(--warn-hover);
 }
 .btn-danger {
   background: var(--danger);
   border-color: var(--danger);
 }
 .btn-danger:hover {
-  background: #b91c1c;
-  border-color: #b91c1c;
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
 }
 
 /* Docker container / host operation buttons — colour-coded by intent. */
@@ -175,16 +256,16 @@ h3 {
   border-color: var(--ok);
 }
 .op-start:hover {
-  background: #15803d;
-  border-color: #15803d;
+  background: var(--ok-hover);
+  border-color: var(--ok-hover);
 }
 .op-restart {
   background: var(--warn);
   border-color: var(--warn);
 }
 .op-restart:hover {
-  background: #b45309;
-  border-color: #b45309;
+  background: var(--warn-hover);
+  border-color: var(--warn-hover);
 }
 .op-recreate {
   background: var(--primary);
@@ -199,16 +280,16 @@ h3 {
   border-color: var(--danger);
 }
 .op-stop:hover {
-  background: #b91c1c;
-  border-color: #b91c1c;
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
 }
 .op-kill {
-  background: #991b1b;
-  border-color: #991b1b;
+  background: var(--danger-deep);
+  border-color: var(--danger-deep);
 }
 .op-kill:hover {
-  background: #7f1d1d;
-  border-color: #7f1d1d;
+  background: var(--danger-deep-hover);
+  border-color: var(--danger-deep-hover);
 }
 .op-refresh {
   background: #0891b2;
@@ -229,7 +310,7 @@ textarea {
   padding: 7px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--bg);
   color: var(--text);
   font: inherit;
   transition:
@@ -243,7 +324,7 @@ input[type='search']:hover,
 input[type='date']:hover,
 select:hover,
 textarea:hover {
-  border-color: #d1d5db;
+  border-color: var(--border-hover);
 }
 .input:focus,
 input:focus,
@@ -256,7 +337,7 @@ textarea:focus {
 
 /* card / surface */
 .card {
-  background: #fff;
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) + 2px);
   box-shadow: var(--shadow);

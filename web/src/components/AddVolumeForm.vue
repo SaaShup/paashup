@@ -60,7 +60,7 @@ const stack = ref<(typeof STACKS)[number]['id'] | ''>('');
   overflow: auto;
 }
 .panel {
-  background: white;
+  background: var(--bg);
   border-radius: 10px;
   padding: 20px 24px;
   width: 520px;
@@ -84,12 +84,12 @@ h3 {
 }
 label {
   font-size: 0.85rem;
-  color: #555;
+  color: var(--muted);
   padding-top: 6px;
 }
 label.req::after {
   content: ' *';
-  color: #dc2626;
+  color: var(--danger);
 }
 select {
   padding: 6px 8px;
@@ -109,7 +109,7 @@ button {
   padding: 7px 14px;
   border-radius: 6px;
   border: 1px solid var(--border);
-  background: white;
+  background: var(--bg);
   color: var(--text);
   cursor: pointer;
 }

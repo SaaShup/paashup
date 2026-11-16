@@ -154,7 +154,7 @@ onMounted(async () => {
   padding: 0 20px;
   position: relative;
   z-index: 50;
-  background: #fff;
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
   color: var(--text);
 }
@@ -191,7 +191,7 @@ onMounted(async () => {
 }
 .sso-btn {
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--bg);
   color: var(--text);
   border-radius: 999px;
   padding: 5px 12px;
@@ -226,7 +226,7 @@ onMounted(async () => {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  opacity: 0.035;
+  opacity: var(--watermark-opacity);
   background-image: v-bind(markBg);
   background-repeat: no-repeat;
   background-position: center;

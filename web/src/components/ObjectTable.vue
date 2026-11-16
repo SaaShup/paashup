@@ -6,7 +6,7 @@ import type { Obj } from '../api/client.js';
 import type { FilterOptions } from '../api/columnFilters.js';
 import { useUiStore } from '../stores/ui.js';
 import { briefTarget } from '../views/objectDetail.js';
-import { columnLabel, formatUnit, pillFor, rowTone, valueLabel } from '../format.js';
+import { columnLabel, formatUnit, maskSecret, pillFor, rowTone, valueLabel } from '../format.js';
 import StatusPill from './StatusPill.vue';
 
 const props = defineProps<{
@@ -126,9 +126,10 @@ async function copyValue(value: unknown, key: string): Promise<void> {
   copiedTimer = setTimeout(() => (copied.value = ''), 1500);
 }
 
-/** A cell's text: a friendlier label for known raw values, else with its unit when the
- *  column has one (memory, disk…), else as is. */
+/** A cell's text: a masked value for a secret field, else a friendlier label for known raw
+ *  values, else with its unit when the column has one (memory, disk…), else as is. */
 const show = (row: Obj, column: string): string =>
+  maskSecret(column, row[column]) ??
   valueLabel(props.table, column, row[column]) ??
   formatUnit(props.table, column, row[column]) ??
   cell(row[column]);
@@ -408,20 +409,20 @@ tbody tr.selected {
  * palette as StatusPill (see its comment) — never the only cue, since the Severity column's
  * pill in the same row already carries its own colour + label. */
 tbody tr.tone-row-danger {
-  background: #fcebe9;
-  box-shadow: inset 3px 0 0 #b81c0e;
+  background: var(--danger-soft-bg);
+  box-shadow: inset 3px 0 0 var(--danger-solid-bg);
 }
 tbody tr.tone-row-warn {
-  background: #fbede2;
-  box-shadow: inset 3px 0 0 #dd8a55;
+  background: var(--warn-soft-bg);
+  box-shadow: inset 3px 0 0 var(--warn-solid-bg);
 }
 tbody tr.tone-row-ok {
-  background: #f0fdf4;
-  box-shadow: inset 3px 0 0 #16a34a;
+  background: var(--ok-soft-bg);
+  box-shadow: inset 3px 0 0 var(--ok-solid-bg);
 }
 tbody tr.tone-row-info {
-  background: #f5f8ff;
-  box-shadow: inset 3px 0 0 #3b82f6;
+  background: var(--primary-soft);
+  box-shadow: inset 3px 0 0 var(--primary);
 }
 tbody tr.tone-row-danger:hover,
 tbody tr.tone-row-warn:hover,
@@ -440,7 +441,7 @@ tbody tr.tone-row-info:hover {
   padding: 1px 6px;
   margin-right: 8px;
   cursor: pointer;
-  background: #fff;
+  background: var(--bg);
 }
 .api:hover,
 .extra:hover {

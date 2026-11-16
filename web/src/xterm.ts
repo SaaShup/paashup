@@ -27,19 +27,53 @@ export const XTERM_THEME = {
   brightWhite: '#FFFFFF',
 };
 
+/** Same console, recoloured for the dark theme: the muddy olive-grey of XTERM_THEME reads
+ *  fine against a light page, but clashes next to the dark theme's cool blue-greys. */
+export const XTERM_THEME_DARK = {
+  foreground: '#e6edf3',
+  background: '#0d1117',
+  cursor: '#e6edf3',
+  selectionBackground: '#3b82f655',
+  black: '#484f58',
+  brightBlack: '#6e7681',
+  red: '#ff7b72',
+  brightRed: '#ffa198',
+  green: '#3fb950',
+  brightGreen: '#56d364',
+  yellow: '#d29922',
+  brightYellow: '#e3b341',
+  blue: '#58a6ff',
+  brightBlue: '#79c0ff',
+  magenta: '#bc8cff',
+  brightMagenta: '#d2a8ff',
+  cyan: '#39c5cf',
+  brightCyan: '#56d4dd',
+  white: '#e6edf3',
+  brightWhite: '#ffffff',
+};
+
+/** The xterm theme matching the current page theme (see theme.ts / styles.css). */
+export function currentXtermTheme(): typeof XTERM_THEME {
+  return document.documentElement.getAttribute('data-theme') === 'dark-cb'
+    ? XTERM_THEME_DARK
+    : XTERM_THEME;
+}
+
 export const XTERM_FONT = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 
 export function hasXterm(): boolean {
   return typeof Terminal !== 'undefined' && typeof FitAddon !== 'undefined';
 }
 
-/** A terminal opened in `el` with the fit addon attached and fitted once. */
+/** A terminal opened in `el` with the fit addon attached and fitted once. Its colours track
+ *  the page theme live (see watchXtermTheme), so flipping the theme switcher re-colours an
+ *  already-open console instead of leaving it on whichever theme was active when it opened. */
 export function openTerminal(
   el: HTMLElement,
   options: Record<string, unknown> = {},
 ): { term: XTerminal; fit: XFitAddon } {
   const term = new Terminal({
-    theme: XTERM_THEME,
+    theme: currentXtermTheme(),
     fontFamily: XTERM_FONT,
     fontSize: 13,
     ...options,
@@ -48,7 +82,23 @@ export function openTerminal(
   term.loadAddon(fit);
   term.open(el);
   safeFit(fit);
+  watchXtermTheme(term);
   return { term, fit };
+}
+
+/** Re-applies the current theme to `term` whenever the page's `data-theme` attribute
+ *  changes, and stops watching once `term` is disposed (xterm.js has no public `onDispose`
+ *  hook, so `dispose` itself is wrapped to also stop the observer). */
+function watchXtermTheme(term: XTerminal): void {
+  const observer = new MutationObserver(() => {
+    term.options.theme = currentXtermTheme();
+  });
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  const dispose = term.dispose.bind(term);
+  term.dispose = () => {
+    observer.disconnect();
+    dispose();
+  };
 }
 
 /** fit() throws while the element has no layout (hidden tab) — ignore that. */

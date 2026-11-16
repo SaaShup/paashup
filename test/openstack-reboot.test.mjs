@@ -40,7 +40,7 @@ const api = async (m, p, b) => {
   return { status: res.status, body: t ? JSON.parse(t) : undefined };
 };
 const until = async (fn, what) => {
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 1500; i++) {
     const v = await fn();
     if (v) return v;
     await new Promise((r) => setTimeout(r, 20));

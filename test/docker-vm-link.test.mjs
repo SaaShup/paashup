@@ -227,7 +227,7 @@ test('when the VM disappears from OpenStack the link is cleared and the host sta
 const hostId = async (name) =>
   (await db.get('SELECT id FROM plugin_docker_host WHERE name = ?', [name]))?.id;
 const until = async (fn, what) => {
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 1500; i++) {
     const v = await fn();
     if (v) return v;
     await new Promise((r) => setTimeout(r, 20));

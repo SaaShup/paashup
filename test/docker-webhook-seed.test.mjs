@@ -43,6 +43,15 @@ test('ensureWebhooks creates all docker webhooks on first run', async () => {
   assert.deepEqual(JSON.parse(addHost.object_types), ['plugins.dockerhost']);
   assert.deepEqual(JSON.parse(addHost.events), ['created']);
   assert.match(addHost.payload_url, /^\{\{ data\.endpoint \}\}\/api\/engine\/endpoint\?id=/);
+
+  // the volume update webhook (no "Modify volume" existed before — added alongside
+  // host/image/container so a resize, e.g. of max_size, reaches the agent too)
+  const modifyVolume = await byName('[Docker] Modify volume');
+  assert.ok(modifyVolume, '[Docker] Modify volume should be seeded');
+  assert.equal(modifyVolume.http_method, 'PUT');
+  assert.deepEqual(JSON.parse(modifyVolume.object_types), ['plugins.dockervolume']);
+  assert.deepEqual(JSON.parse(modifyVolume.events), ['updated']);
+  assert.equal(modifyVolume.payload_url, '{{ data.host.endpoint }}/api/engine/volumes');
 });
 
 test('ensureWebhooks is idempotent (second run creates nothing)', async () => {

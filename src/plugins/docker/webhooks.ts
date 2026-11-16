@@ -125,4 +125,12 @@ export const DOCKER_WEBHOOKS: readonly WebhookSeed[] = [
     httpMethod: 'PUT',
     payloadUrl: '{{ data.host.endpoint }}/api/engine/containers',
   },
+  {
+    ...base,
+    name: '[Docker] Modify volume',
+    objectTypes: [OT.volume],
+    events: ['updated'],
+    httpMethod: 'PUT',
+    payloadUrl: '{{ data.host.endpoint }}/api/engine/volumes',
+  },
 ];

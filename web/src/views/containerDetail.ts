@@ -158,6 +158,22 @@ export const CONTAINER_LIMIT_PRESETS: Record<string, LimitPreset[]> = {
   cpu_limit: CPU_LIMIT_PRESETS,
 };
 
+/** max_size presets, in MiB (the unit the docker agent expects). */
+export const VOLUME_MAX_SIZE_PRESETS: LimitPreset[] = [
+  { label: 'Unlimited', value: 0 },
+  { label: '512 MiB', value: 512 },
+  { label: '1 GiB', value: 1024 },
+  { label: '5 GiB', value: 5 * 1024 },
+  { label: '10 GiB', value: 10 * 1024 },
+  { label: '20 GiB', value: 20 * 1024 },
+  { label: '50 GiB', value: 50 * 1024 },
+];
+
+/** Preset lists for the volume create/edit form, keyed by field name. */
+export const VOLUME_LIMIT_PRESETS: Record<string, LimitPreset[]> = {
+  max_size: VOLUME_MAX_SIZE_PRESETS,
+};
+
 /** Scalar container fields shown in the detail header, in order (host/image handled apart). */
 export const CONTAINER_SCALARS: { key: string; label: string }[] = [
   { key: 'state', label: 'State' },

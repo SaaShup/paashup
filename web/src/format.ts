@@ -1,6 +1,6 @@
 // Units of the numeric fields, so a bare 7168 reads as "7 GB" in lists and details, and a
 // form says what to type. Keyed by table, then by field name.
-type Unit = 'MB' | 'GB' | 'vCPU' | 'B';
+type Unit = 'MB' | 'GB' | 'vCPU' | 'B' | 'MiB';
 
 const UNITS: Record<string, Record<string, Unit>> = {
   virtualization_virtual_machine: { memory: 'MB', disk: 'GB', vcpus: 'vCPU' },
@@ -9,12 +9,15 @@ const UNITS: Record<string, Record<string, Unit>> = {
   // Docker container resource limits (agent 2.1.0+): memory_limit is in bytes, cpu_limit
   // in CPU cores; 0 means unlimited (see UNLIMITED_ZERO below), not a literal zero quantity.
   plugin_docker_container: { memory_limit: 'B', cpu_limit: 'vCPU' },
+  // max_size is in MiB (binary), unlike the decimal MB/GB used elsewhere; 0 means unlimited.
+  plugin_docker_volume: { max_size: 'MiB' },
 };
 
 /** Fields where 0 means "no limit" rather than a literal zero quantity. */
 const UNLIMITED_ZERO = new Set([
   'plugin_docker_container.memory_limit',
   'plugin_docker_container.cpu_limit',
+  'plugin_docker_volume.max_size',
 ]);
 
 /** Bytes as the largest unit that keeps the number readable: "512 MB", "1.5 GB". */
@@ -85,6 +88,7 @@ export function formatUnit(
   if (n === 0 && table && UNLIMITED_ZERO.has(`${table}.${field}`)) return 'Unlimited';
   if (unit === 'B') return bytesToHuman(n);
   if (unit === 'MB') return n >= 1024 ? `${tidy(n / 1024)} GB` : `${tidy(n)} MB`;
+  if (unit === 'MiB') return n >= 1024 ? `${tidy(n / 1024)} GiB` : `${tidy(n)} MiB`;
   return `${tidy(n)} ${unit}`;
 }
 

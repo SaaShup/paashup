@@ -49,6 +49,14 @@ describe('formatUnit', () => {
     expect(formatUnit(DOCKER, 'cpu_limit', 0.9999)).toBe('1 vCPU'); // tidy() rounds to 1 decimal
     expect(formatUnit(DOCKER, 'cpu_limit', 0)).toBe('Unlimited');
   });
+
+  it('shows a Docker volume max_size in MiB, auto-scaled to GiB, and 0 as Unlimited', () => {
+    const VOLUME = 'plugin_docker_volume';
+    expect(formatUnit(VOLUME, 'max_size', 512)).toBe('512 MiB');
+    expect(formatUnit(VOLUME, 'max_size', 1024)).toBe('1 GiB');
+    expect(formatUnit(VOLUME, 'max_size', 5120)).toBe('5 GiB');
+    expect(formatUnit(VOLUME, 'max_size', 0)).toBe('Unlimited');
+  });
 });
 
 describe('labels', () => {
@@ -68,6 +76,10 @@ describe('labels', () => {
   it('spells out "Bytes" (not "B") on a container memory_limit form label', () => {
     expect(formLabel('plugin_docker_container', 'memory_limit')).toBe('memory_limit (Bytes)');
     expect(formLabel('plugin_docker_container', 'cpu_limit')).toBe('cpu_limit');
+  });
+
+  it('labels a Docker volume max_size in MiB, distinct from the decimal MB/GB units', () => {
+    expect(formLabel('plugin_docker_volume', 'max_size')).toBe('max_size (MiB)');
   });
 
   it('keeps the usual labels elsewhere', () => {

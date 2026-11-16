@@ -6,7 +6,11 @@ import { formLabel, isSecretField } from '../format.js';
 import { parseVariables } from '../initScript.js';
 import { useUiStore } from '../stores/ui.js';
 import { formFields, modelEndpoints, getSchemaDoc, type FieldDef } from '../api/schema.js';
-import { CONTAINER_LIMIT_PRESETS, type LimitPreset } from '../views/containerDetail.js';
+import {
+  CONTAINER_LIMIT_PRESETS,
+  VOLUME_LIMIT_PRESETS,
+  type LimitPreset,
+} from '../views/containerDetail.js';
 import { BASE } from '../base.js';
 
 const props = defineProps<{
@@ -50,7 +54,9 @@ const secret = ref<string[]>(
 const CUSTOM = '__custom__';
 const limitPreset = ref<Record<string, string>>({});
 function limitPresets(f: FieldDef): LimitPreset[] | undefined {
-  return table.value === 'plugin_docker_container' ? CONTAINER_LIMIT_PRESETS[f.name] : undefined;
+  if (table.value === 'plugin_docker_container') return CONTAINER_LIMIT_PRESETS[f.name];
+  if (table.value === 'plugin_docker_volume') return VOLUME_LIMIT_PRESETS[f.name];
+  return undefined;
 }
 function presetValueOf(f: FieldDef): string {
   const list = limitPresets(f) ?? [];
@@ -80,9 +86,9 @@ function onCustomInput(f: FieldDef, raw: string) {
   values.value[f.name] = raw.trim() === '' ? '' : Number(raw);
 }
 function customHint(f: FieldDef): string {
-  return f.name === 'memory_limit'
-    ? 'In bytes — 0 or at least 6291456 (6 MiB).'
-    : 'In CPU cores — 0 or a positive number (fractions allowed, e.g. 0.3).';
+  if (f.name === 'memory_limit') return 'In bytes — 0 or at least 6291456 (6 MiB).';
+  if (f.name === 'max_size') return 'In MiB — 0 for unlimited, or a whole number of MiB.';
+  return 'In CPU cores — 0 or a positive number (fractions allowed, e.g. 0.3).';
 }
 /**
  * Mirrors the agent's own `resourceLimits()` check (mapping.js) so a bad value is caught
@@ -96,6 +102,9 @@ function limitError(f: FieldDef, v: unknown): string | null {
   if (!Number.isFinite(n) || n < 0) return 'Must be 0 or a positive number.';
   if (f.name === 'memory_limit' && n !== 0 && (!Number.isInteger(n) || n < 6291456)) {
     return 'Must be 0 (unlimited) or a whole number of bytes, at least 6291456 (6 MiB).';
+  }
+  if (f.name === 'max_size' && !Number.isInteger(n)) {
+    return 'Must be 0 (unlimited) or a whole number of MiB.';
   }
   return null;
 }

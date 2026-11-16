@@ -544,7 +544,7 @@ async function onSaved() {
   border: 1px solid var(--border);
   border-radius: 5px;
   font: inherit;
-  background: #fff;
+  background: var(--bg);
 }
 .edit-table td.tight,
 .edit-table td:last-child {

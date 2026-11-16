@@ -31,6 +31,8 @@ function bytesToHuman(n: number): string {
 /** Field names shown differently: a VM's `disk` is its root disk, the other disks are volumes. */
 const LABELS: Record<string, Record<string, string>> = {
   virtualization_virtual_machine: { disk: 'root disk' },
+  // it's paashup's own public URL (used by the agent to reach back), not NetBox's
+  plugin_docker_host: { netbox_base_url: 'paashup URL' },
   extras_journalentry: {
     assigned_object_type: 'source',
     assigned_object: 'object',
@@ -189,4 +191,22 @@ export function rowTone(
 ): StatusTone | null {
   const field = table ? ROW_TONE_FIELD[table] : undefined;
   return field ? (pillFor(table, field, row[field])?.tone ?? null) : null;
+}
+
+const MASK = '••••••••';
+const SECRET_FIELD = /(^|_)(password|passwd|secret|token|api_?key)(_|$)/i;
+const URL_USERINFO = /^([a-z][a-z0-9+.-]*:\/\/)[^/?#@\s]*@/i;
+
+/** True when the field's value is a secret that should never be shown in clear. */
+export const isSecretField = (field: string): boolean => SECRET_FIELD.test(field);
+
+/**
+ * The text to display for a value that may hold a secret: a password/secret/token field is
+ * replaced by dots, and the credentials of a URL are dropped (`http://admin:pw@host:1880`
+ * → `http://host:1880`) so the rest can be copied as is. Returns null when there is nothing to hide.
+ */
+export function maskSecret(field: string, value: unknown): string | null {
+  if (typeof value !== 'string' || value === '') return null;
+  if (isSecretField(field)) return MASK;
+  return URL_USERINFO.test(value) ? value.replace(URL_USERINFO, '$1') : null;
 }

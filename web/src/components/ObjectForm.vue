@@ -2,11 +2,12 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { api, ApiError, type Obj } from '../api/client.js';
 import { currentUsername } from '../auth/oidc.js';
-import { formLabel } from '../format.js';
+import { formLabel, isSecretField } from '../format.js';
 import { parseVariables } from '../initScript.js';
 import { useUiStore } from '../stores/ui.js';
 import { formFields, modelEndpoints, getSchemaDoc, type FieldDef } from '../api/schema.js';
 import { CONTAINER_LIMIT_PRESETS, type LimitPreset } from '../views/containerDetail.js';
+import { BASE } from '../base.js';
 
 const props = defineProps<{
   model: string;
@@ -157,10 +158,11 @@ function initValue(f: FieldDef): unknown {
       if (f.kind === 'tags') return Array.isArray(dv) ? dv.map(tagName) : [];
       return f.kind === 'multiselect' ? (Array.isArray(dv) ? [...dv] : []) : dv;
     }
-    // prefill an origin-defaulted field (e.g. a host's netbox_base_url) with the current
-    // browser origin; the user can still override it before saving.
+    // prefill an origin-defaulted field (e.g. a host's netbox_base_url, shown as "paashup
+    // URL") with the current browser origin plus the mount-path prefix paashup is served
+    // under behind a reverse proxy (e.g. /datacenter) — the user can still override it.
     if (f.defaultOrigin && (v === undefined || v === null || v === '')) {
-      return window.location.origin;
+      return window.location.origin + BASE;
     }
   }
   if (f.kind === 'tags') return Array.isArray(v) ? v.map(tagName).filter(Boolean) : [];
@@ -473,7 +475,7 @@ async function submit() {
             </div>
             <input
               v-else
-              :type="f.kind === 'number' ? 'number' : 'text'"
+              :type="f.kind === 'number' ? 'number' : isSecretField(f.name) ? 'password' : 'text'"
               v-model="values[f.name]"
               :maxlength="f.maxLength"
             />
@@ -526,7 +528,7 @@ async function submit() {
   overflow: auto;
 }
 .panel {
-  background: white;
+  background: var(--bg);
   border-radius: 10px;
   padding: 20px 24px;
   width: 520px;
@@ -555,13 +557,13 @@ h3 {
 }
 label {
   font-size: 0.85rem;
-  color: #555;
+  color: var(--muted);
   padding-top: 6px;
   overflow-wrap: anywhere;
 }
 label.req::after {
   content: ' *';
-  color: #dc2626;
+  color: var(--danger);
 }
 .control {
   display: flex;
@@ -644,6 +646,8 @@ input.invalid {
   border: none;
   padding: 3px 2px;
   width: auto;
+  background: var(--bg);
+  color: var(--text);
 }
 .tag-input:focus {
   border: none;
@@ -671,7 +675,7 @@ button:hover {
   background: var(--primary-d);
 }
 button.ghost {
-  background: white;
+  background: var(--bg);
   color: var(--text);
   border-color: var(--border);
 }

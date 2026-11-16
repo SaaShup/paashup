@@ -71,7 +71,7 @@ const remove = (i: number) => model.value.splice(i, 1);
   border: 1px solid var(--border);
   border-radius: 5px;
   font: inherit;
-  background: #fff;
+  background: var(--bg);
 }
 .kv-table input:disabled {
   background: var(--surface-2);

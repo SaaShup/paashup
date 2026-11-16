@@ -13,12 +13,16 @@ import {
   fullscreenSupported,
   isFullscreen,
   toggleFullscreen,
+  currentXtermTheme,
+  XTERM_THEME,
+  XTERM_THEME_DARK,
 } from '../src/xterm';
 
 function installFakeXterm() {
   const opened: unknown[] = [];
   const loadedAddons: unknown[] = [];
   const fitCalls: number[] = [];
+  const disposeCalls: number[] = [];
   class FakeTerminal {
     options: Record<string, unknown>;
     constructor(options: Record<string, unknown>) {
@@ -30,6 +34,9 @@ function installFakeXterm() {
     loadAddon(addon: unknown) {
       loadedAddons.push(addon);
     }
+    dispose() {
+      disposeCalls.push(1);
+    }
   }
   class FakeFitAddon {
     fit() {
@@ -38,12 +45,19 @@ function installFakeXterm() {
   }
   (globalThis as Record<string, unknown>).Terminal = FakeTerminal;
   (globalThis as Record<string, unknown>).FitAddon = { FitAddon: FakeFitAddon };
-  return { opened, loadedAddons, fitCalls, FakeTerminal, FakeFitAddon };
+  return { opened, loadedAddons, fitCalls, disposeCalls, FakeTerminal, FakeFitAddon };
 }
 function uninstallFakeXterm() {
   delete (globalThis as Record<string, unknown>).Terminal;
   delete (globalThis as Record<string, unknown>).FitAddon;
 }
+function setPageTheme(theme: 'light' | 'dark-cb') {
+  if (theme === 'light') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', theme);
+}
+// MutationObserver callbacks run as a microtask checkpoint — flush it between an attribute
+// change and asserting the terminal picked it up.
+const flushMicrotasks = () => new Promise((r) => setTimeout(r, 0));
 
 describe('hasXterm', () => {
   afterEach(uninstallFakeXterm);
@@ -58,8 +72,29 @@ describe('hasXterm', () => {
   });
 });
 
+describe('currentXtermTheme', () => {
+  afterEach(() => setPageTheme('light'));
+
+  it('is the standard theme by default (no data-theme attribute)', () => {
+    expect(currentXtermTheme()).toBe(XTERM_THEME);
+  });
+
+  it('is the dark theme once data-theme is dark-cb', () => {
+    setPageTheme('dark-cb');
+    expect(currentXtermTheme()).toBe(XTERM_THEME_DARK);
+  });
+
+  it('is the standard theme for any other data-theme value', () => {
+    document.documentElement.setAttribute('data-theme', 'something-else');
+    expect(currentXtermTheme()).toBe(XTERM_THEME);
+  });
+});
+
 describe('openTerminal', () => {
-  afterEach(uninstallFakeXterm);
+  afterEach(() => {
+    uninstallFakeXterm();
+    setPageTheme('light');
+  });
 
   it('constructs a Terminal with the shared theme, loads the fit addon, opens it, and fits once', () => {
     const fake = installFakeXterm();
@@ -70,10 +105,48 @@ describe('openTerminal', () => {
     expect((term as unknown as { options: Record<string, unknown> }).options).toMatchObject({
       cursorBlink: true,
       fontFamily: expect.stringContaining('monospace'),
+      theme: XTERM_THEME,
     });
     expect(fake.opened).toEqual([el]);
     expect(fake.loadedAddons).toEqual([fit]);
     expect(fake.fitCalls).toHaveLength(1); // fitted once on open
+  });
+
+  it('opens with the dark theme already applied when the page is in dark-cb', () => {
+    setPageTheme('dark-cb');
+    installFakeXterm();
+    const { term } = openTerminal(document.createElement('div'));
+    expect((term as unknown as { options: { theme: unknown } }).options.theme).toBe(
+      XTERM_THEME_DARK,
+    );
+  });
+
+  it('re-colours an already-open terminal when the page theme flips', async () => {
+    installFakeXterm();
+    const { term } = openTerminal(document.createElement('div'));
+    const options = () => (term as unknown as { options: { theme: unknown } }).options;
+    expect(options().theme).toBe(XTERM_THEME);
+
+    setPageTheme('dark-cb');
+    await flushMicrotasks();
+    expect(options().theme).toBe(XTERM_THEME_DARK);
+
+    setPageTheme('light');
+    await flushMicrotasks();
+    expect(options().theme).toBe(XTERM_THEME);
+  });
+
+  it('stops re-colouring and calls through to the real dispose once the terminal is disposed', async () => {
+    const fake = installFakeXterm();
+    const { term } = openTerminal(document.createElement('div'));
+    const options = () => (term as unknown as { options: { theme: unknown } }).options;
+
+    term.dispose();
+    expect(fake.disposeCalls).toHaveLength(1);
+
+    setPageTheme('dark-cb');
+    await flushMicrotasks();
+    expect(options().theme).toBe(XTERM_THEME); // unchanged: observer was disconnected
   });
 });
 

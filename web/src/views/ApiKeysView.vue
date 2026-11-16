@@ -138,7 +138,7 @@ onMounted(load);
             <input v-model="description" type="text" placeholder="e.g. CI deploy bot" />
           </label>
           <label>
-            Expiration <span class="opt">(optional)</span>
+            <span>Expiration <span class="opt">(optional)</span></span>
             <input v-model="expires" type="date" />
           </label>
           <label class="check">
@@ -194,24 +194,21 @@ onMounted(load);
 </template>
 
 <style scoped>
-.api-keys {
-  max-width: 960px;
-}
 .head h2 {
   margin: 0 0 4px;
 }
 .sub {
-  color: #555;
+  color: var(--muted);
   margin: 0 0 16px;
   font-size: 0.9rem;
 }
 code {
-  background: #f1f5f9;
+  background: var(--muted-soft-bg);
   padding: 1px 5px;
   border-radius: 4px;
 }
 .card {
-  background: white;
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 16px 18px;
@@ -246,7 +243,7 @@ label {
   flex-direction: column;
   gap: 4px;
   font-size: 0.85rem;
-  color: #555;
+  color: var(--muted);
 }
 label.check {
   flex-direction: row;
@@ -255,7 +252,7 @@ label.check {
   align-self: flex-end;
 }
 .opt {
-  color: #999;
+  color: var(--muted);
 }
 input[type='text'],
 input[type='date'] {
@@ -276,7 +273,7 @@ input[type='date'] {
   background: var(--primary-d);
 }
 .btn.ghost {
-  background: white;
+  background: var(--bg);
   color: var(--text);
   border-color: var(--border);
 }
@@ -307,15 +304,17 @@ input[type='date'] {
   border-radius: 999px;
 }
 .badge.rw {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--ok-soft-bg);
+  color: var(--ok-soft-fg);
+  border: 1px solid var(--ok-soft-fg);
 }
 .badge.ro {
-  background: #f1f5f9;
-  color: #475569;
+  background: var(--muted-soft-bg);
+  color: var(--muted-soft-fg);
+  border: 1px solid var(--muted-soft-fg);
 }
 .muted {
-  color: #888;
+  color: var(--muted);
 }
 .notice {
   padding: 10px 12px;
@@ -324,11 +323,11 @@ input[type='date'] {
   font-size: 0.9rem;
 }
 .notice.warn {
-  background: #fef9c3;
-  color: #854d0e;
+  background: var(--warn-soft-bg);
+  color: var(--warn-soft-fg);
 }
 .notice.err {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--danger-soft-bg);
+  color: var(--danger-soft-fg);
 }
 </style>

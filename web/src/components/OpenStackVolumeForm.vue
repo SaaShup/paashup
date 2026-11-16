@@ -237,7 +237,7 @@ async function submit(): Promise<void> {
   overflow: auto;
 }
 .panel {
-  background: white;
+  background: var(--bg);
   border-radius: 10px;
   padding: 20px 24px;
   width: 520px;
@@ -263,12 +263,12 @@ h3 {
 label {
   overflow-wrap: anywhere;
   font-size: 0.85rem;
-  color: #555;
+  color: var(--muted);
   padding-top: 6px;
 }
 label.req::after {
   content: ' *';
-  color: #dc2626;
+  color: var(--danger);
 }
 .control {
   display: flex;
@@ -280,6 +280,8 @@ select {
   padding: 6px 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
   font: inherit;
   width: 100%;
   box-sizing: border-box;
@@ -335,7 +337,7 @@ button:disabled {
   cursor: not-allowed;
 }
 button.ghost {
-  background: white;
+  background: var(--bg);
   color: var(--text);
   border-color: var(--border);
 }

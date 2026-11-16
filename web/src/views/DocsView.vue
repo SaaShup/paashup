@@ -164,8 +164,8 @@ const html = computed(() => {
   font-size: 0.85em;
 }
 .md pre {
-  background: #0f172a;
-  color: #e2e8f0;
+  background: var(--surface-2);
+  color: var(--text);
   padding: 14px 16px;
   border-radius: 8px;
   overflow-x: auto;
@@ -200,7 +200,7 @@ const html = computed(() => {
   border-radius: 0 6px 6px 0;
 }
 .md mark {
-  background: #fef9c3;
+  background: var(--warn-soft-bg);
   color: inherit;
   border-radius: 2px;
   padding: 0 1px;

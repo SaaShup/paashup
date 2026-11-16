@@ -211,7 +211,7 @@ async function save(row: { ip: string; existing: Obj | null }) {
   z-index: 50;
 }
 .panel {
-  background: #fff;
+  background: var(--bg);
   border-radius: 10px;
   padding: 18px 20px;
   width: 860px;
@@ -246,9 +246,9 @@ async function save(row: { ip: string; existing: Obj | null }) {
   padding: 14px 0;
 }
 .warn {
-  background: #fef3c7;
-  color: #92400e;
-  border: 1px solid #fde68a;
+  background: var(--warn-soft-bg);
+  color: var(--warn-soft-fg);
+  border: 1px solid var(--warn-solid-bg);
   border-radius: 6px;
   padding: 8px 12px;
   font-size: 0.85rem;
@@ -262,7 +262,7 @@ async function save(row: { ip: string; existing: Obj | null }) {
   font-family: ui-monospace, monospace;
 }
 tr.gw {
-  background: #eff6ff;
+  background: var(--primary-soft);
 }
 .gwcell {
   text-align: center;
@@ -299,6 +299,8 @@ input {
   padding: 4px 6px;
   border: 1px solid var(--border);
   border-radius: 5px;
+  background: var(--bg);
+  color: var(--text);
 }
 .tag {
   font-size: 0.72rem;
@@ -307,12 +309,14 @@ input {
   border-radius: 10px;
 }
 .tag.on {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--ok-soft-bg);
+  color: var(--ok-soft-fg);
+  border: 1px solid var(--ok-soft-fg);
 }
 .tag.off {
   background: var(--surface-2);
   color: var(--muted);
+  border: 1px solid var(--muted);
 }
 .save {
   border: 1px solid var(--primary);
@@ -334,7 +338,7 @@ input {
 }
 .btn-ghost {
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--bg);
   border-radius: 6px;
   padding: 5px 10px;
   cursor: pointer;

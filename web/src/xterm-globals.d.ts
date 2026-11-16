@@ -21,6 +21,7 @@ interface XTerminal {
   readonly cols: number;
   readonly rows: number;
   readonly element: HTMLElement | undefined;
+  options: XTerminalOptions;
   open(parent: HTMLElement): void;
   write(data: string | Uint8Array, callback?: () => void): void;
   writeln(data: string | Uint8Array, callback?: () => void): void;

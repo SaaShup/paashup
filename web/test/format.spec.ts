@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { choiceOf, columnLabel, fieldLabel, formLabel, formatUnit, pillFor } from '../src/format';
+import {
+  choiceOf,
+  columnLabel,
+  fieldLabel,
+  formLabel,
+  formatUnit,
+  pillFor,
+  isSecretField,
+  maskSecret,
+} from '../src/format';
 
 const VM = 'virtualization_virtual_machine';
 
@@ -65,6 +74,58 @@ describe('labels', () => {
     expect(fieldLabel(VM, 'virtual_machine_type')).toBe('virtual machine type');
     expect(columnLabel(VM, 'virtual_machine_type')).toBe('virtual_machine_type');
     expect(fieldLabel(undefined, 'disk')).toBe('disk');
+  });
+
+  it('calls a Docker host\'s netbox_base_url its paashup URL (it is paashup\'s own, not NetBox\'s)', () => {
+    const HOST = 'plugin_docker_host';
+    expect(fieldLabel(HOST, 'netbox_base_url')).toBe('paashup URL');
+    expect(columnLabel(HOST, 'netbox_base_url')).toBe('paashup URL');
+    expect(formLabel(HOST, 'netbox_base_url')).toBe('paashup URL');
+  });
+});
+
+describe('isSecretField', () => {
+  it('matches password/secret/token/api_key fields, in any casing or position', () => {
+    for (const name of [
+      'password',
+      'PASSWORD',
+      'passwd',
+      'secret',
+      'client_secret',
+      'token',
+      'auth_token',
+      'api_key',
+      'apikey',
+    ]) {
+      expect(isSecretField(name)).toBe(true);
+    }
+  });
+
+  it('does not match unrelated fields, including ones that merely contain the word', () => {
+    for (const name of ['name', 'endpoint', 'description', 'tokenized', 'passwordless']) {
+      expect(isSecretField(name)).toBe(false);
+    }
+  });
+});
+
+describe('maskSecret', () => {
+  it('masks a secret field\'s value with dots', () => {
+    expect(maskSecret('password', 'hunter2')).toBe('••••••••');
+    expect(maskSecret('api_key', 'abc123')).toBe('••••••••');
+  });
+
+  it('strips the userinfo out of a URL, in any other field', () => {
+    expect(maskSecret('endpoint', 'http://admin:pw@host:1880')).toBe('http://host:1880');
+    expect(maskSecret('endpoint', 'https://user:pw@example.com/path')).toBe(
+      'https://example.com/path',
+    );
+  });
+
+  it('gives nothing to hide for a plain value, a non-string, or an empty string', () => {
+    expect(maskSecret('endpoint', 'http://host:1880')).toBeNull();
+    expect(maskSecret('password', null)).toBeNull();
+    expect(maskSecret('password', 42)).toBeNull();
+    expect(maskSecret('password', '')).toBeNull();
   });
 });
 

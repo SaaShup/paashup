@@ -7,7 +7,7 @@ import RouteLink from '../components/RouteLink.vue';
 import type { Resource } from '../api/resources.js';
 import { api, type Obj } from '../api/client.js';
 import { scalarText } from './containerDetail.js';
-import { pillFor } from '../format.js';
+import { maskSecret, pillFor } from '../format.js';
 import StatusPill from '../components/StatusPill.vue';
 import ObjectTable from '../components/ObjectTable.vue';
 import ObjectForm from '../components/ObjectForm.vue';
@@ -55,12 +55,12 @@ const HEADER_FIELDS = [
   ['operation', 'Operation'],
   ['agent_version', 'Agent version'],
   ['docker_api_version', 'Docker API'],
-  ['netbox_base_url', 'NetBox base URL'],
+  ['netbox_base_url', 'paashup URL'],
 ] as const;
 const scalars = computed(() =>
   HEADER_FIELDS.map(([k, label]) => ({
     label,
-    value: scalarText(get(k)),
+    value: maskSecret(k, get(k)) ?? scalarText(get(k)),
     pill: pillFor('plugin_docker_host', k, get(k)),
   })),
 );
@@ -411,7 +411,7 @@ async function bulkOp(op: string) {
   border-color: var(--danger);
 }
 .op-kill {
-  background: #991b1b;
-  border-color: #991b1b;
+  background: var(--danger-deep);
+  border-color: var(--danger-deep);
 }
 </style>

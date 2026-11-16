@@ -4,6 +4,7 @@ import { useUiStore } from '../stores/ui.js';
 import type { Route } from '../router.js';
 import RouteLink from './RouteLink.vue';
 import { sectionLabel, isPage, type NavItem } from '../groups.js';
+import { theme, setTheme, THEMES } from '../theme.js';
 
 const ui = useUiStore();
 
@@ -40,6 +41,7 @@ const groupOpen = (section: string, label: string) => !!ui.expandedGroups[`${sec
 
 <template>
   <aside class="sidebar">
+    <div class="nav-scroll">
     <RouteLink
       class="nav-item top"
       :class="{ active: ui.view === 'dashboard' }"
@@ -102,16 +104,71 @@ const groupOpen = (section: string, label: string) => !!ui.expandedGroups[`${sec
         </template>
       </div>
     </div>
+    </div>
+
+    <div class="theme-switch" role="radiogroup" aria-label="Colour theme">
+      <button
+        v-for="t in THEMES"
+        :key="t.id"
+        type="button"
+        class="theme-btn"
+        role="radio"
+        :aria-checked="theme === t.id"
+        :aria-label="t.label"
+        :title="t.label"
+        :class="{ active: theme === t.id }"
+        @click="setTheme(t.id)"
+      >
+        <span aria-hidden="true">{{ t.icon }}</span>
+      </button>
+    </div>
   </aside>
 </template>
 
 <style scoped>
 .sidebar {
   width: var(--sidebar-w);
-  background: #fff;
+  background: var(--bg);
   border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.nav-scroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 14px 10px 40px;
+  padding: 14px 10px 20px;
+}
+.theme-switch {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid var(--border);
+}
+.theme-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease;
+}
+.theme-btn:hover {
+  background: var(--surface-2);
+}
+.theme-btn.active {
+  border-color: var(--primary);
+  box-shadow: var(--ring);
 }
 .group {
   margin-top: 2px;
@@ -206,7 +263,7 @@ const groupOpen = (section: string, label: string) => !!ui.expandedGroups[`${sec
   font-size: 0.7rem;
 }
 .nav-item.active .count {
-  background: #fff;
+  background: var(--bg);
   color: var(--primary-d);
 }
 .nav-item.deep {

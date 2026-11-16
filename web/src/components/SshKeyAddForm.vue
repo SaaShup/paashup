@@ -216,12 +216,12 @@ h3 {
 }
 label {
   font-size: 0.85rem;
-  color: #555;
+  color: var(--muted);
   padding-top: 6px;
 }
 label.req::after {
   content: ' *';
-  color: #dc2626;
+  color: var(--danger);
 }
 .control {
   display: flex;
@@ -247,6 +247,8 @@ textarea {
   padding: 6px 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
   font: inherit;
   width: 100%;
   box-sizing: border-box;
@@ -256,11 +258,11 @@ textarea {
   font-size: 0.85rem;
 }
 .err {
-  color: #dc2626;
+  color: var(--danger);
   font-size: 0.8rem;
 }
 .general {
-  color: #dc2626;
+  color: var(--danger);
   white-space: pre-line;
 }
 .actions {

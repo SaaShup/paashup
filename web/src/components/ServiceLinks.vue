@@ -294,7 +294,7 @@ onMounted(async () => {
 }
 .refresh {
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--bg);
   color: var(--text);
   border-radius: 999px;
   padding: 5px 12px;
@@ -305,13 +305,13 @@ onMounted(async () => {
   background: var(--surface);
 }
 .error {
-  color: #b42318;
+  color: var(--danger-soft-fg);
   font-size: 0.85rem;
 }
 .add-form input.invalid,
 .link-card input.invalid {
-  border-color: #b42318;
-  background: #fef2f2;
+  border-color: var(--danger-soft-fg);
+  background: var(--danger-soft-bg);
 }
 .add-form {
   display: flex;
@@ -324,6 +324,8 @@ onMounted(async () => {
   border-radius: 8px;
   padding: 6px 10px;
   font-size: 0.85rem;
+  background: var(--bg);
+  color: var(--text);
 }
 .add-form button {
   border: 1px solid var(--border);
@@ -335,7 +337,7 @@ onMounted(async () => {
   font-size: 0.85rem;
 }
 .add-form button.ghost {
-  background: #fff;
+  background: var(--bg);
   color: var(--text);
 }
 .link-grid {
@@ -346,7 +348,7 @@ onMounted(async () => {
 }
 .link-card {
   position: relative;
-  background: #fff;
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 14px 10px 10px;
@@ -367,6 +369,8 @@ onMounted(async () => {
   border-radius: 6px;
   padding: 4px 8px;
   font-size: 0.8rem;
+  background: var(--bg);
+  color: var(--text);
 }
 .empty-state {
   grid-column: 1 / -1;

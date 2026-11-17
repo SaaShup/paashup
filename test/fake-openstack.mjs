@@ -33,6 +33,8 @@ export const region = (extra = {}) => ({
   failReboot: null, // a message: a rebooted server ends in ERROR with this fault
   resizeReads: 1, // how many times a resizing server is read as RESIZE before VERIFY_RESIZE
   failResize: null, // a message: a resized server ends in ERROR with this fault
+  rebuildReads: 1, // how many times a rebuilding server is read as REBUILD before ACTIVE
+  failRebuild: null, // a message: a rebuilt server ends in ERROR with this fault
   down: false, // the whole compute API answers 500
   glanceDown: false,
   volumesDown: false,
@@ -186,6 +188,14 @@ export async function startFakeOpenStack() {
             found.status = r.failResize ? 'ERROR' : 'VERIFY_RESIZE';
             if (r.failResize) found.fault = { message: r.failResize };
           }
+          if (found.status === 'REBUILD' && found.rebuildReads++ >= r.rebuildReads) {
+            found.status = r.failRebuild ? 'ERROR' : 'ACTIVE';
+            if (r.failRebuild) found.fault = { message: r.failRebuild };
+            else if (found.pendingImage) {
+              found.image = { id: found.pendingImage.id };
+              found.pendingImage = null;
+            }
+          }
           return send(200, { server: found });
         }
         const action = rest.match(/^\/servers\/([^/]+)\/action$/);
@@ -220,6 +230,15 @@ export async function startFakeOpenStack() {
             found.status = 'ACTIVE';
             r.confirmed = [...(r.confirmed ?? []), found.id];
             return send(204, {});
+          }
+          if (body.rebuild) {
+            const image = r.images.find((i) => i.id === body.rebuild.imageRef);
+            if (!image) return send(400, { badRequest: { message: 'image not found' } });
+            found.status = 'REBUILD';
+            found.rebuildReads = 0;
+            found.pendingImage = image;
+            r.rebuilt = [...(r.rebuilt ?? []), { id: found.id, imageId: image.id }];
+            return send(202, {});
           }
           if ('revertResize' in body) {
             if (found.status !== 'VERIFY_RESIZE') {

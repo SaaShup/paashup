@@ -16,6 +16,8 @@
 //   POST   /servers/{vm_id}/reboot/      reboot the server of a VM, { type: 'soft' | 'hard' }
 //   PUT    /servers/{vm_id}/rename/      sync the server's Nova name to paashup's, { name }
 //   POST   /servers/{vm_id}/resize/      change the server's flavor, { flavor_id }
+//   POST   /servers/{vm_id}/reinstall/   rebuild the server from another image, { image_id }
+//   POST   /servers/{vm_id}/snapshot/    snapshot the server into a new image, { name }
 //   GET|PUT /servers/{vm_id}/metadata/   read / edit the metadata of the server behind a VM
 import type { Db } from '../../db/types.js';
 import type { PluginRoute } from '../../plugins/types.js';
@@ -44,10 +46,12 @@ import {
   parseCreate,
   readVmMetadata,
   rebootVm,
+  reinstallVm,
   removeDataVolume,
   renameVm,
   resizeDataVolume,
   resizeVm,
+  snapshotVm,
   writeVmMetadata,
 } from './servers.js';
 import {
@@ -366,6 +370,40 @@ const resizeServerRoute: PluginRoute = {
   },
 };
 
+const reinstallServerRoute: PluginRoute = {
+  method: 'POST',
+  path: `${OPENSTACK_API}/servers/{vm_id}/reinstall/`,
+  handler: async ({ db, params, body }) => {
+    const imageId = str((body as Obj | null)?.image_id);
+    if (!imageId) {
+      throw new ValidationError('Invalid request', { image_id: ['This field is required.'] });
+    }
+    try {
+      await reinstallVm(db, Number(params.vm_id), imageId);
+      return { status: 202, body: { detail: 'Reinstall requested on OpenStack.' } };
+    } catch (e) {
+      if (e instanceof OpenStackError) return fail(e);
+      throw e;
+    }
+  },
+};
+
+const snapshotServerRoute: PluginRoute = {
+  method: 'POST',
+  path: `${OPENSTACK_API}/servers/{vm_id}/snapshot/`,
+  handler: async ({ db, params, body }) => {
+    const name = str((body as Obj | null)?.name);
+    if (!name) throw new ValidationError('Invalid request', { name: ['This field is required.'] });
+    try {
+      await snapshotVm(db, Number(params.vm_id), name);
+      return { status: 202, body: { detail: 'Snapshot requested on OpenStack.' } };
+    } catch (e) {
+      if (e instanceof OpenStackError) return fail(e);
+      throw e;
+    }
+  },
+};
+
 const sizeGbOf = (body: unknown): number => {
   const raw = (body as Obj | null)?.size_gb;
   if (raw == null)
@@ -573,6 +611,8 @@ export const cloudRoutes: PluginRoute[] = [
   rebootServerRoute,
   renameServerRoute,
   resizeServerRoute,
+  reinstallServerRoute,
+  snapshotServerRoute,
   createRoute,
   ...updateRoutes,
   deleteRoute,

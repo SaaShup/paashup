@@ -675,6 +675,65 @@ export async function resizeServer(
   });
 }
 
+/** Ask Nova to rebuild a server from a different image, wiping its root disk. */
+export async function rebuildServer(
+  c: CloudConfig,
+  region: string,
+  id: string,
+  imageId: string,
+): Promise<void> {
+  await send(c, region, 'compute', 'POST', `/servers/${encodeURIComponent(id)}/action`, {
+    rebuild: { imageRef: imageId },
+  });
+}
+
+/** Ask Nova to snapshot a server into a new Glance image named `name`. Returns once Nova has
+ *  accepted the request; the image appears in Glance moments later and takes time to go active. */
+export async function createServerImage(
+  c: CloudConfig,
+  region: string,
+  id: string,
+  name: string,
+): Promise<void> {
+  await send(c, region, 'compute', 'POST', `/servers/${encodeURIComponent(id)}/action`, {
+    createImage: { name },
+  });
+}
+
+/** The Glance image Nova created from a snapshot of `serverId` named `name`, once it has
+ *  appeared (it can take a few seconds), with its current status. */
+export async function findSnapshotImage(
+  c: CloudConfig,
+  region: string,
+  serverId: string,
+  name: string,
+): Promise<{ id: string; status: string } | null> {
+  const rows = await getAll(
+    c,
+    region,
+    'image',
+    '/v2/images?limit=50&sort=created_at:desc',
+    'images',
+  );
+  const row = rows.find((i) => i.name === name && i.instance_uuid === serverId);
+  return row ? { id: String(row.id), status: String(row.status) } : null;
+}
+
+/** An image's current status (queued/saving/active/killed/...), or null once it is gone. */
+export async function getImageState(
+  c: CloudConfig,
+  region: string,
+  id: string,
+): Promise<string | null> {
+  try {
+    const image = await get(c, region, 'image', `/v2/images/${encodeURIComponent(id)}`);
+    return image.status ? String(image.status) : null;
+  } catch (e) {
+    if (e instanceof OpenStackError && e.status === 404) return null;
+    throw e;
+  }
+}
+
 /** Finish a resize: keep the new flavor, freeing the old one's resources. Irreversible. */
 export async function confirmResize(c: CloudConfig, region: string, id: string): Promise<void> {
   await send(c, region, 'compute', 'POST', `/servers/${encodeURIComponent(id)}/action`, {

@@ -16,21 +16,26 @@ import {
   confirmResize,
   createKeypair,
   createServer,
+  createServerImage,
   createVolume,
   deleteServer,
   deleteVolume,
   detachVolume,
+  findSnapshotImage,
   getComputeLimits,
+  getImageState,
   getServerMetadata,
   getServerState,
   getVolumeInfo,
   getVolumeState,
   rebootServer,
+  rebuildServer,
   renameServer,
   resizeServer,
   resizeVolume,
   updateServerMetadata,
   listFlavors,
+  listImageNames,
   listKeypairs,
   type CloudConfig,
 } from './openstack.js';
@@ -1107,6 +1112,213 @@ async function followResize(
     );
   } finally {
     await emitVm(db, vmId, 'updated'); // clear the "resizing" hint, whatever the outcome
+  }
+}
+
+/**
+ * Rebuild the OpenStack server behind a VM from another image, wiping its root disk and
+ * reinstalling the OS. Nova keeps the server's IP addresses, flavor and attached volumes.
+ */
+export async function reinstallVm(db: Db, vmId: number, imageId: string): Promise<void> {
+  const { link, cloud } = await serverOfVm(db, vmId);
+  const imageName = (await listImageNames(cloud, link.region)).get(imageId);
+  if (!imageName) throw fieldError('image_id', 'This image is not available in this region.');
+
+  await rebuildServer(cloud, link.region, link.server_id, imageId);
+  await journalVm(
+    db,
+    vmId,
+    'warning',
+    `Reinstall from "${imageName}" requested on OpenStack (region ${link.region}).`,
+  );
+  await journal(
+    db,
+    cloud.id,
+    'warning',
+    `Reinstall of server "${link.name}" from "${imageName}" requested in ${link.region}.`,
+  );
+  void followReinstall(db, cloud, link, vmId, imageName);
+}
+
+/**
+ * Poll the server behind a VM until its rebuild settles. While in progress, the VM is re-pushed
+ * with a transient `_reinstalling` hint (never stored). On success, the VM's image is refreshed
+ * via the same path used to follow a newly created server; a journal entry on both ends the
+ * story, and a final plain push clears the hint.
+ */
+async function followReinstall(
+  db: Db,
+  cloud: CloudRow,
+  link: Link,
+  vmId: number,
+  imageName: string,
+): Promise<void> {
+  try {
+    let settled: string | null = null;
+    for (let waited = 0; waited < POLL_LIMIT_MS; waited += POLL_MS) {
+      const state = await getServerState(cloud, link.region, link.server_id);
+      if (!state) break; // the server is gone; nothing left to follow
+      const upper = state.status.toUpperCase();
+      if (upper !== 'REBUILD' && upper !== 'REBUILD_SPAWNING') {
+        settled = state.status;
+        break;
+      }
+      await emitVm(db, vmId, 'updated', { _reinstalling: true });
+      await sleep(POLL_MS);
+    }
+    if (settled === 'ACTIVE') {
+      await importServer(db, cloud.id, link.region, link.server_id); // refreshes the synced image too
+      await journalVm(
+        db,
+        vmId,
+        'success',
+        `Server "${link.name}" reinstalled from "${imageName}".`,
+      );
+      await journal(
+        db,
+        cloud.id,
+        'success',
+        `Server "${link.name}" reinstalled from "${imageName}" in ${link.region}.`,
+      );
+    } else if (settled) {
+      await db.execute(`UPDATE virtualization_virtual_machine SET status = ? WHERE id = ?`, [
+        vmStatus(settled),
+        vmId,
+      ]);
+      await journalVm(
+        db,
+        vmId,
+        'danger',
+        `Server "${link.name}" ended up "${settled}" after the reinstall.`,
+      );
+      await journal(
+        db,
+        cloud.id,
+        'danger',
+        `Server "${link.name}" ended up "${settled}" after a reinstall from "${imageName}" in ${link.region}.`,
+      );
+    } else {
+      await journal(
+        db,
+        cloud.id,
+        'warning',
+        `Server "${link.name}" is still reinstalling ${POLL_LIMIT_MS / 60_000} minutes after it was requested.`,
+      );
+    }
+  } catch (e) {
+    await journal(
+      db,
+      cloud.id,
+      'danger',
+      `Following the reinstall of "${link.name}": ${messageOf(e)}`,
+    );
+  } finally {
+    await emitVm(db, vmId, 'updated'); // clear the "reinstalling" hint, whatever the outcome
+  }
+}
+
+/**
+ * Snapshot the OpenStack server behind a VM into a new Glance image named `name`. The server
+ * keeps running; the new image shows up as any other image once it finishes saving.
+ */
+export async function snapshotVm(db: Db, vmId: number, name: string): Promise<void> {
+  const trimmed = name.trim();
+  if (!trimmed) throw fieldError('name', 'This field is required.');
+  if (trimmed.length > 255) throw fieldError('name', 'Must be at most 255 characters.');
+
+  const { link, cloud } = await serverOfVm(db, vmId);
+  await createServerImage(cloud, link.region, link.server_id, trimmed);
+  await journalVm(
+    db,
+    vmId,
+    'warning',
+    `Snapshot "${trimmed}" requested on OpenStack (region ${link.region}).`,
+  );
+  await journal(
+    db,
+    cloud.id,
+    'warning',
+    `Snapshot "${trimmed}" of server "${link.name}" requested in ${link.region}.`,
+  );
+  void followSnapshot(db, cloud, link, vmId, trimmed);
+}
+
+/**
+ * Wait for the image Nova is saving the snapshot into to appear in Glance, then poll it until
+ * it goes active or fails. While in progress, the VM is re-pushed with a transient
+ * `_snapshotting` hint (never stored). A journal entry on both ends the story, and a final
+ * plain push clears the hint either way.
+ */
+async function followSnapshot(
+  db: Db,
+  cloud: CloudRow,
+  link: Link,
+  vmId: number,
+  name: string,
+): Promise<void> {
+  try {
+    let imageId: string | null = null;
+    for (let waited = 0; waited < POLL_LIMIT_MS; waited += POLL_MS) {
+      const found = await findSnapshotImage(cloud, link.region, link.server_id, name);
+      if (found) {
+        imageId = found.id;
+        break;
+      }
+      await emitVm(db, vmId, 'updated', { _snapshotting: true });
+      await sleep(POLL_MS);
+    }
+    if (!imageId) {
+      await journal(
+        db,
+        cloud.id,
+        'warning',
+        `No snapshot image named "${name}" appeared for "${link.name}" ${POLL_LIMIT_MS / 60_000} minutes after it was requested.`,
+      );
+      return;
+    }
+    let status = await getImageState(cloud, link.region, imageId);
+    for (
+      let waited = 0;
+      (status === 'queued' || status === 'saving') && waited < POLL_LIMIT_MS;
+      waited += POLL_MS
+    ) {
+      await emitVm(db, vmId, 'updated', { _snapshotting: true });
+      await sleep(POLL_MS);
+      status = await getImageState(cloud, link.region, imageId);
+    }
+    if (status === 'active') {
+      await journalVm(db, vmId, 'success', `Snapshot "${name}" created.`);
+      await journal(
+        db,
+        cloud.id,
+        'success',
+        `Server "${link.name}" snapshotted as "${name}" in ${link.region}.`,
+      );
+    } else if (status) {
+      await journalVm(db, vmId, 'danger', `Snapshot "${name}" ended up "${status}".`);
+      await journal(
+        db,
+        cloud.id,
+        'danger',
+        `Snapshot "${name}" of "${link.name}" ended up "${status}" in ${link.region}.`,
+      );
+    } else {
+      await journal(
+        db,
+        cloud.id,
+        'warning',
+        `Snapshot image "${name}" of "${link.name}" disappeared before becoming active.`,
+      );
+    }
+  } catch (e) {
+    await journal(
+      db,
+      cloud.id,
+      'danger',
+      `Following the snapshot of "${link.name}": ${messageOf(e)}`,
+    );
+  } finally {
+    await emitVm(db, vmId, 'updated'); // clear the "snapshotting" hint, whatever the outcome
   }
 }
 

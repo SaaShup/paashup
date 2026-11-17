@@ -60,6 +60,24 @@ const selectedFlavorId = ref('');
 // VM's status pill while OpenStack is still resizing it.
 const statusResizing = ref(false);
 
+interface Image {
+  id: string;
+  name: string;
+}
+const reinstalling = ref(false);
+const reinstallModalOpen = ref(false);
+const images = ref<Image[]>([]);
+const imagesLoading = ref(false);
+const imagesError = ref('');
+const selectedImageId = ref('');
+// Set from a transient `_reinstalling` hint on the live feed (never persisted): shown on the
+// VM's status pill while OpenStack is still reinstalling it.
+const statusReinstalling = ref(false);
+// Set from a transient `_snapshotting` hint on the live feed (never persisted): shown on the
+// VM's status pill while OpenStack is still saving a snapshot requested from the backend (no
+// UI button triggers this right now — see src/plugins/openstack/servers.ts's snapshotVm).
+const statusSnapshotting = ref(false);
+
 const HIDE = new Set(['id', 'url', 'display_url', 'display', 'custom_fields', 'tags']);
 const get = (k: string): unknown => (obj.value as Record<string, unknown> | null)?.[k];
 const title = computed(() => scalarText(get('display') ?? get('name')));
@@ -115,6 +133,8 @@ async function load(quiet = false): Promise<void> {
       metaError.value = '';
       statusRebooting.value = false;
       statusResizing.value = false;
+      statusReinstalling.value = false;
+      statusSnapshotting.value = false;
     }
     await Promise.all([
       ...sections.value.map(async (s) => {
@@ -417,6 +437,59 @@ async function resizeOnOpenStack(): Promise<void> {
   }
 }
 
+/** Fetch the region's images live from OpenStack, once, when the Reinstall modal is first opened. */
+async function loadImages(): Promise<void> {
+  if (!vmServer.value || images.value.length || imagesLoading.value) return;
+  imagesLoading.value = true;
+  imagesError.value = '';
+  try {
+    images.value = (
+      await api.get<{ results: Image[] }>(
+        `/api/plugins/openstack/clouds/${vmServer.value.cloudId}/images/?region=${encodeURIComponent(vmServer.value.region)}`,
+      )
+    ).results;
+  } catch (e) {
+    imagesError.value = String(e);
+  } finally {
+    imagesLoading.value = false;
+  }
+}
+
+const selectedImage = computed(
+  () => images.value.find((i) => i.id === selectedImageId.value) ?? null,
+);
+
+/** Open the reinstall popup and fetch the region's images live from OpenStack, once. */
+function openReinstallModal(): void {
+  reinstallModalOpen.value = true;
+  selectedImageId.value = '';
+  void loadImages();
+}
+
+function closeReinstallModal(): void {
+  reinstallModalOpen.value = false;
+}
+
+/** Reinstall the VM's server on OpenStack from the image picked in the popup: this wipes its
+ *  root disk and reinstalls the OS. The popup itself (its warning text and red button) is the
+ *  confirmation step, same as Resize — no second dialog, which would stack behind this modal. */
+async function reinstallOnOpenStack(): Promise<void> {
+  const id = ui.detailId;
+  const i = selectedImage.value;
+  if (id == null || !vmServer.value || !i) return;
+  reinstalling.value = true;
+  error.value = '';
+  try {
+    await api.post(`${OPENSTACK_SERVERS}${id}/reinstall/`, { image_id: i.id });
+    reinstallModalOpen.value = false;
+  } catch (e) {
+    const d = (e as { detail?: { detail?: unknown } }).detail;
+    error.value = typeof d?.detail === 'string' ? d.detail : String(e);
+  } finally {
+    reinstalling.value = false;
+  }
+}
+
 async function loadRegionStatus(endpoint: string, id: number): Promise<void> {
   regionStatus.value = (
     await api.get<{ results: Obj[] }>(`${endpoint}${id}/region-status/`)
@@ -488,9 +561,13 @@ watch(
     const data = e.data as Record<string, unknown> | undefined;
     const stillRebooting = data?._rebooting === true;
     const stillResizing = data?._resizing === true;
+    const stillReinstalling = data?._reinstalling === true;
+    const stillSnapshotting = data?._snapshotting === true;
     statusRebooting.value = stillRebooting;
     statusResizing.value = stillResizing;
-    if (stillRebooting || stillResizing) return; // nothing persisted changed, just the hint above
+    statusReinstalling.value = stillReinstalling;
+    statusSnapshotting.value = stillSnapshotting;
+    if (stillRebooting || stillResizing || stillReinstalling || stillSnapshotting) return; // nothing persisted changed, just the hint above
     // the page just saved its own metadata: it already shows the result, a reload would flash
     if (savingMeta.value || Date.now() < ignoreLiveUntil) return;
     clearTimeout(liveTimer);
@@ -664,6 +741,9 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
       <button v-if="vmServer && resource.writable" class="btn" @click="openResizeModal">
         Resize
       </button>
+      <button v-if="vmServer && resource.writable" class="btn" @click="openReinstallModal">
+        Reinstall
+      </button>
       <button
         v-if="vmServer && resource.writable"
         class="btn btn-danger"
@@ -701,6 +781,18 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
             <StatusPill
               v-else-if="f.key === 'status' && vmServer && statusResizing"
               label="Resizing…"
+              tone="warn"
+              busy
+            />
+            <StatusPill
+              v-else-if="f.key === 'status' && vmServer && statusReinstalling"
+              label="Reinstalling…"
+              tone="warn"
+              busy
+            />
+            <StatusPill
+              v-else-if="f.key === 'status' && vmServer && statusSnapshotting"
+              label="Snapshotting…"
               tone="warn"
               busy
             />
@@ -1041,6 +1133,59 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
               @click="resizeOnOpenStack"
             >
               {{ resizing ? 'Resizing…' : 'Resize' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div
+        v-if="reinstallModalOpen"
+        class="confirm-overlay"
+        @click.self="closeReinstallModal"
+        @keydown.esc="closeReinstallModal"
+      >
+        <div
+          class="confirm-panel resize-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reinstall-title"
+        >
+          <h3 id="reinstall-title">Reinstall "{{ title }}" on OpenStack</h3>
+          <p class="muted" style="margin-top: -6px">
+            Cloud "{{ vmServer?.cloud }}", region {{ vmServer?.region }}
+          </p>
+          <p class="muted">This wipes the server's root disk and reinstalls the OS.</p>
+
+          <p v-if="imagesLoading" class="muted">Loading images…</p>
+          <p v-else-if="imagesError" class="error">{{ imagesError }}</p>
+          <label v-else class="resize-field">
+            New image
+            <select v-model="selectedImageId">
+              <option value="" disabled>Choose an image…</option>
+              <option v-for="i in images" :key="i.id" :value="i.id">{{ i.name }}</option>
+            </select>
+          </label>
+
+          <p v-if="error" class="error">{{ error }}</p>
+
+          <div class="confirm-actions">
+            <button
+              type="button"
+              class="btn btn-ghost"
+              :disabled="reinstalling"
+              @click="closeReinstallModal"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="btn btn-danger"
+              :disabled="!selectedImage || reinstalling"
+              @click="reinstallOnOpenStack"
+            >
+              {{ reinstalling ? 'Reinstalling…' : 'Reinstall' }}
             </button>
           </div>
         </div>

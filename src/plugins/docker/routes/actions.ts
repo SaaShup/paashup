@@ -9,6 +9,7 @@ import { Repository } from '../../../repository/repository.js';
 import { getTable } from '../../../model/registry.js';
 import { ValidationError } from '../../../errors.js';
 import { splitCredentials } from '../../../webhooks.js';
+import { withAgentDispatcher, dispatchedFetch } from '../tls.js';
 import { T } from '../meta.js';
 import { serializeImage } from '../serialize.js';
 
@@ -20,21 +21,36 @@ const badGateway = (payload: unknown): PluginRouteResult => ({
   body: { success: false, payload },
 });
 
-/** fetch() against the agent, with URL-embedded credentials turned into Basic auth. */
-export function agentFetch(rawUrl: string, init: RequestInit = {}): Promise<Response> {
+/**
+ * fetch() against the agent, with URL-embedded credentials turned into Basic auth. An https
+ * URL is pinned to `ca` (the CA trusted on first use when the host was added) — without it,
+ * an https call is refused by the platform's default trust store, since the agent's CA is
+ * self-signed.
+ */
+export async function agentFetch(
+  rawUrl: string,
+  init: RequestInit = {},
+  ca?: string,
+): Promise<Response> {
   const { url, authHeader } = splitCredentials(rawUrl);
   const headers: Record<string, string> = {
     ...((init.headers as Record<string, string> | undefined) ?? {}),
   };
   if (authHeader && !headers.Authorization) headers.Authorization = authHeader;
-  return fetch(url, { ...init, headers });
+  const opts = await withAgentDispatcher({ ...init, headers }, url, ca);
+  return dispatchedFetch(url, opts);
 }
 
-export async function hostEndpoint(db: Db, hostId: unknown): Promise<string | undefined> {
-  const row = await db.get<{ endpoint: string }>(`SELECT endpoint FROM ${T.host} WHERE id = ?`, [
-    Number(hostId),
-  ]);
-  return row?.endpoint;
+/** A host's agent endpoint and its pinned CA (undefined for a plain http endpoint). */
+export async function hostAgent(
+  db: Db,
+  hostId: unknown,
+): Promise<{ endpoint: string; ca?: string } | undefined> {
+  const row = await db.get<{ endpoint: string; ca_pem: string | null }>(
+    `SELECT endpoint, ca_pem FROM ${T.host} WHERE id = ?`,
+    [Number(hostId)],
+  );
+  return row ? { endpoint: row.endpoint, ca: row.ca_pem ?? undefined } : undefined;
 }
 
 export const actionRoutes: PluginRoute[] = [
@@ -46,15 +62,19 @@ export const actionRoutes: PluginRoute[] = [
       const repo = new Repository<Row>(db, getTable(T.image)!);
       const image = await repo.retrieve(Number(params.id));
       if (!image) return notFound;
-      const endpoint = await hostEndpoint(db, (image as Row).host);
-      if (!endpoint) return notFound;
+      const agent = await hostAgent(db, (image as Row).host);
+      if (!agent) return notFound;
       const data = { ...(await serializeImage(db, image as Row)), force: true };
       try {
-        const resp = await agentFetch(`${endpoint}/api/engine/images`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data }),
-        });
+        const resp = await agentFetch(
+          `${agent.endpoint}/api/engine/images`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data }),
+          },
+          agent.ca,
+        );
         const text = await resp.text();
         if (!resp.ok) return badGateway(text);
         return { status: 200, body: { success: true, payload: text ? JSON.parse(text) : null } };
@@ -71,11 +91,15 @@ export const actionRoutes: PluginRoute[] = [
       const repo = new Repository<Row>(db, getTable(T.container)!);
       const container = await repo.retrieve(Number(params.id));
       if (!container) return notFound;
-      const endpoint = await hostEndpoint(db, (container as Row).host);
+      const agent = await hostAgent(db, (container as Row).host);
       const cid = (container as Row).ContainerID;
-      if (!endpoint) return notFound;
+      if (!agent) return notFound;
       try {
-        const resp = await agentFetch(`${endpoint}/api/engine/containers/${cid}/logs`);
+        const resp = await agentFetch(
+          `${agent.endpoint}/api/engine/containers/${cid}/logs`,
+          {},
+          agent.ca,
+        );
         const text = await resp.text();
         if (!resp.ok) return { status: 502, body: text };
         return { status: 200, body: text };
@@ -96,15 +120,19 @@ export const actionRoutes: PluginRoute[] = [
       const repo = new Repository<Row>(db, getTable(T.container)!);
       const container = await repo.retrieve(Number(params.id));
       if (!container) return notFound;
-      const endpoint = await hostEndpoint(db, (container as Row).host);
+      const agent = await hostAgent(db, (container as Row).host);
       const cid = (container as Row).ContainerID;
-      if (!endpoint) return notFound;
+      if (!agent) return notFound;
       try {
-        const resp = await agentFetch(`${endpoint}/api/engine/containers/${cid}/exec`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cmd }),
-        });
+        const resp = await agentFetch(
+          `${agent.endpoint}/api/engine/containers/${cid}/exec`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cmd }),
+          },
+          agent.ca,
+        );
         const text = await resp.text();
         if (!resp.ok) return { status: 502, body: text };
         return { status: 200, body: text ? JSON.parse(text) : null };

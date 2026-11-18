@@ -18,7 +18,7 @@ import { Repository } from '../../../repository/repository.js';
 import { getTable } from '../../../model/registry.js';
 import { splitCredentials } from '../../../webhooks.js';
 import { T } from '../meta.js';
-import { agentFetch, hostEndpoint } from './actions.js';
+import { agentFetch, hostAgent } from './actions.js';
 
 type Row = Record<string, unknown>;
 
@@ -103,17 +103,20 @@ export const terminalWebSockets: PluginWebSocketRoute[] = [
           const repo = new Repository<Row>(db, getTable(T.container)!);
           const container = await repo.retrieve(Number(params.id));
           if (!container) return client.close(CLOSE_NOT_FOUND, 'Container not found');
-          const endpoint = await hostEndpoint(db, (container as Row).host);
+          const agent = await hostAgent(db, (container as Row).host);
           const cid = (container as Row).ContainerID;
-          if (!endpoint || typeof cid !== 'string' || !cid) {
+          if (!agent || typeof cid !== 'string' || !cid) {
             return client.close(CLOSE_NOT_FOUND, 'Container not created on its host yet');
           }
+          const { endpoint, ca } = agent;
           // 1) ask the agent to open an exec stream for this container
           let path: string;
           try {
-            const resp = await agentFetch(`${endpoint}/api/engine/containers/${cid}/ws`, {
-              method: 'POST',
-            });
+            const resp = await agentFetch(
+              `${endpoint}/api/engine/containers/${cid}/ws`,
+              { method: 'POST' },
+              ca,
+            );
             const text = await resp.text();
             if (!resp.ok) {
               const code =
@@ -134,10 +137,12 @@ export const terminalWebSockets: PluginWebSocketRoute[] = [
             );
           }
           if (client.readyState !== WebSocket.OPEN) return; // browser already left
-          // 2) connect to the stream (Basic auth from the endpoint's credentials, if any)
+          // 2) connect to the stream (Basic auth from the endpoint's credentials, if any;
+          // a wss:// URL is pinned to the host's trusted-on-first-use CA, same as agentFetch)
           const { authHeader } = splitCredentials(endpoint);
           const upstream = new WebSocket(upstreamUrl(endpoint, path, query), {
             headers: authHeader ? { Authorization: authHeader } : {},
+            ...(ca ? { ca, rejectUnauthorized: true } : {}),
           });
           pipe(client, upstream);
         })().catch((err: unknown) => {

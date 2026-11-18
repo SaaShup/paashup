@@ -403,7 +403,7 @@ const volumeMeta: TableMeta = {
       name: 'max_size',
       column: 'max_size',
       tsKind: 'number',
-      nullable: true,
+      nullable: false,
       writable: true,
       required: false,
     },

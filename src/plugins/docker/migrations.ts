@@ -482,3 +482,54 @@ export const CONTAINER_RESOURCE_LIMITS_MIGRATION: PluginMigration = {
   sqlite: resourceLimitsSqlite,
   mariadb: resourceLimitsMariadb,
 };
+
+// The CA certificate pinned for an https agent, trust-on-first-use (see tls.ts). Plain
+// column, not a registered table field: like token_id, it's sensitive and managed in code,
+// never exposed through the generic serializer/CRUD.
+const hostCaPinSqlite = `
+ALTER TABLE plugin_docker_host ADD COLUMN ca_pem TEXT
+`;
+const hostCaPinMariadb = `
+ALTER TABLE plugin_docker_host ADD COLUMN ca_pem TEXT NULL
+`;
+
+export const HOST_CA_PIN_MIGRATION: PluginMigration = {
+  version: '0006_host_ca_pin',
+  sqlite: hostCaPinSqlite,
+  mariadb: hostCaPinMariadb,
+};
+
+// max_size defaults to 0 ("unlimited", the agent's own convention) instead of NULL: a NULL
+// volume, synced back to the agent by the "[Docker] Add/Modify volume" webhook, fails the
+// agent's strict "non-negative integer" check on data it sent paashup moments earlier.
+// SQLite has no ALTER COLUMN, so the table is rebuilt (same columns, max_size NOT NULL
+// DEFAULT 0); existing NULLs are backfilled to 0 first (MariaDB: UPDATE then MODIFY COLUMN).
+const volumeMaxSizeDefaultSqlite = `
+UPDATE plugin_docker_volume SET max_size = 0 WHERE max_size IS NULL;
+
+CREATE TABLE plugin_docker_volume__new (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  host_id INTEGER NOT NULL REFERENCES plugin_docker_host(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  max_size INTEGER NOT NULL DEFAULT 0,
+  driver TEXT NOT NULL DEFAULT 'local',
+  custom_fields TEXT,
+  created TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  last_updated TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  UNIQUE (host_id, name)
+);
+
+INSERT INTO plugin_docker_volume__new SELECT * FROM plugin_docker_volume;
+DROP TABLE plugin_docker_volume;
+ALTER TABLE plugin_docker_volume__new RENAME TO plugin_docker_volume
+`;
+const volumeMaxSizeDefaultMariadb = `
+UPDATE plugin_docker_volume SET max_size = 0 WHERE max_size IS NULL;
+ALTER TABLE plugin_docker_volume MODIFY COLUMN max_size INT NOT NULL DEFAULT 0
+`;
+
+export const VOLUME_MAX_SIZE_DEFAULT_MIGRATION: PluginMigration = {
+  version: '0007_volume_max_size_default',
+  sqlite: volumeMaxSizeDefaultSqlite,
+  mariadb: volumeMaxSizeDefaultMariadb,
+};

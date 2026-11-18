@@ -52,7 +52,7 @@ wants test && stage "test (sqlite)" npm test
 # ---------- security ----------
 if wants security; then
   banner "security"
-  if run npm audit --audit-level=high; then pass "npm-audit"; else fail "npm-audit"; fi
+  if run npm audit --omit=dev --audit-level=high; then pass "npm-audit"; else fail "npm-audit"; fi
   if have trivy; then
     if run trivy fs --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --no-progress .; then
       pass "trivy"; else fail "trivy"; fi

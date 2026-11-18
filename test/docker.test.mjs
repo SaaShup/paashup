@@ -83,6 +83,8 @@ test('plugin loads and registers its migration once', async () => {
       'plugin:docker:0003_host_token',
       'plugin:docker:0004_vm_ssh_key',
       'plugin:docker:0005_container_resource_limits',
+      'plugin:docker:0006_host_ca_pin',
+      'plugin:docker:0007_volume_max_size_default',
     ],
   );
 });
@@ -126,6 +128,7 @@ test('create registry/image/volume/network under the host', async () => {
   const vol = await api('POST', '/api/plugins/docker/volumes/', { host: ids.host, name: 'data' });
   assert.equal(vol.status, 201, JSON.stringify(vol.body));
   assert.equal(vol.body.driver, 'local'); // bare string, not a {value,label} choice
+  assert.equal(vol.body.max_size, 0); // defaults to 0 ("unlimited"), never null
   ids.volume = vol.body.id;
 
   const net = await api('POST', '/api/plugins/docker/networks/', {
@@ -227,6 +230,27 @@ test('container memory_limit/cpu_limit default to 0 (unlimited) and round-trip a
     memory_limit: 0,
     cpu_limit: 0,
   });
+});
+
+test('volume max_size defaults to 0 (never null) and rejects an explicit null', async () => {
+  // a volume created without max_size (asserted above) is 0, not null — round-tripping it
+  // back to the agent as null would fail the agent's "non-negative integer" check
+  const round = await api('PATCH', `/api/plugins/docker/volumes/${ids.volume}/`, { max_size: 500 });
+  assert.equal(round.status, 200, JSON.stringify(round.body));
+  assert.equal(round.body.max_size, 500);
+
+  const got = await api('GET', `/api/plugins/docker/volumes/${ids.volume}/`);
+  assert.equal(got.body.max_size, 500);
+
+  // an explicit null is refused at the API boundary, not silently stored
+  const nulled = await api('PATCH', `/api/plugins/docker/volumes/${ids.volume}/`, {
+    max_size: null,
+  });
+  assert.equal(nulled.status, 400, JSON.stringify(nulled.body));
+  assert.match(nulled.body.max_size[0], /may not be null/i);
+
+  // reset to unlimited for the tests that follow
+  await api('PATCH', `/api/plugins/docker/volumes/${ids.volume}/`, { max_size: 0 });
 });
 
 test('host GET now lists the container under its nested arrays', async () => {

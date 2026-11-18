@@ -278,6 +278,41 @@ export interface WebhookEventContext {
 
 let cache: Webhook[] | null = null;
 let insecureAgent: unknown; // lazily created undici Agent for ssl_verification=false
+const pinnedAgents = new Map<string, unknown>(); // undici Agent per pinned CA, by PEM
+
+export type WebhookCaResolver = (db: Db, url: string) => Promise<string | undefined>;
+const caResolvers: WebhookCaResolver[] = [];
+export function registerWebhookCaResolver(fn: WebhookCaResolver): void {
+  caResolvers.push(fn);
+}
+
+export type WebhookCaFailureHandler = (db: Db, url: string, message: string) => Promise<void>;
+const caFailureHandlers: WebhookCaFailureHandler[] = [];
+export function registerWebhookCaFailureHandler(fn: WebhookCaFailureHandler): void {
+  caFailureHandlers.push(fn);
+}
+
+async function notifyCaFailure(db: Db, url: string, message: string): Promise<void> {
+  for (const handle of caFailureHandlers) {
+    try {
+      await handle(db, url, message);
+    } catch {
+      /* a handler's own failure shouldn't break delivery reporting */
+    }
+  }
+}
+
+async function resolveCa(db: Db, url: string): Promise<string | undefined> {
+  for (const resolve of caResolvers) {
+    try {
+      const ca = await resolve(db, url);
+      if (ca) return ca;
+    } catch {
+      /* a resolver's own lookup failing shouldn't break delivery — just skip it */
+    }
+  }
+  return undefined;
+}
 
 function parseList(v: unknown): string[] {
   if (Array.isArray(v)) return v.map(String);
@@ -488,6 +523,7 @@ export function splitCredentials(rawUrl: string): {
 }
 
 async function deliver(
+  db: Db,
   wh: Webhook,
   body: string,
   ctx: Record<string, unknown>,
@@ -507,6 +543,7 @@ async function deliver(
   // body) — DELETE included, so the agent receives the object it must remove.
   const hasBody = wh.method !== 'GET';
   const opts: RequestInit = { method: wh.method, headers, ...(hasBody ? { body } : {}) };
+  let pinnedCa: string | undefined; // set below when a registered resolver found one for this URL
   if (!wh.sslVerify) {
     try {
       if (!insecureAgent) {
@@ -517,13 +554,39 @@ async function deliver(
     } catch {
       /* undici unavailable: fall back to verified TLS */
     }
+  } else if (targetUrl.startsWith('https:')) {
+    // A self-signed agent CA (Docker plugin) won't verify against the system trust store —
+    // use its pinned CA when a registered resolver has one for this URL.
+    pinnedCa = await resolveCa(db, targetUrl);
+    if (pinnedCa) {
+      const ca = pinnedCa;
+      try {
+        let dispatcher = pinnedAgents.get(ca);
+        if (!dispatcher) {
+          const { Agent } = await import('undici');
+          dispatcher = new Agent({ connect: { ca, rejectUnauthorized: true } });
+          pinnedAgents.set(ca, dispatcher);
+        }
+        opts.dispatcher = dispatcher as RequestInit['dispatcher'];
+      } catch {
+        /* undici unavailable: fall back to verified TLS (will fail against a self-signed cert) */
+      }
+    }
   }
+
+  // Node's global fetch() is backed by its own bundled undici, a different instance from
+  // the `undici` npm dependency — an Agent built from the latter is rejected as a
+  // `dispatcher` by the former (UND_ERR_INVALID_ARG). Once a dispatcher is attached, go
+  // through undici's own fetch instead.
+  const doFetch = opts.dispatcher
+    ? ((await import('undici')).fetch as unknown as typeof fetch)
+    : fetch;
 
   let status: number | null = null;
   let error = '';
   for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
     try {
-      const res = await fetch(targetUrl, {
+      const res = await doFetch(targetUrl, {
         ...opts,
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
@@ -539,6 +602,10 @@ async function deliver(
     }
     if (attempt < MAX_TRIES) await sleep(BACKOFF_MS * 2 ** (attempt - 1)); // exp. backoff
   }
+  // status === null means every attempt failed before getting an HTTP response at all (TLS
+  // handshake, DNS, connection refused…) — as opposed to the target answering with an error
+  // status, which isn't a CA/connectivity problem. Only the former is worth a CA-failure note.
+  if (pinnedCa && status === null) await notifyCaFailure(db, targetUrl, error);
   return { success: false, status, attempts: MAX_TRIES, error, redacted };
 }
 
@@ -592,7 +659,7 @@ export async function dispatchWebhooks(
   await Promise.all(
     targets.map(async (wh) => {
       const body = wh.bodyTemplate ? renderTemplate(wh.bodyTemplate, tctx) : defaultPayload;
-      const r = await deliver(wh, body, tctx);
+      const r = await deliver(db, wh, body, tctx);
       if (!r.success) {
         console.error(
           `[webhook] "${wh.name}" -> ${r.redacted} failed after ${r.attempts}: ${r.error}`,

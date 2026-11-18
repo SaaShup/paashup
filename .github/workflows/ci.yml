@@ -104,9 +104,11 @@ jobs:
           cache: npm
       - run: npm ci
 
-      # 1) Native advisory check — fails on high/critical npm CVEs.
+      # 1) Native advisory check — fails on high/critical npm CVEs in what actually ships
+      # (--omit=dev: lint/build tooling never reaches the running app, and its glob-pattern
+      # inputs come from our own tsconfig/eslint invocations, not untrusted input).
       - name: npm audit
-        run: npm audit --audit-level=high
+        run: npm audit --omit=dev --audit-level=high
 
       # 2) Trivy — broader CVE scan of the dependency tree (lockfile + node_modules).
       - name: Install Trivy

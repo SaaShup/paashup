@@ -14,6 +14,8 @@ import {
   HOST_TOKEN_MIGRATION,
   VM_SSH_KEY_MIGRATION,
   CONTAINER_RESOURCE_LIMITS_MIGRATION,
+  HOST_CA_PIN_MIGRATION,
+  VOLUME_MAX_SIZE_DEFAULT_MIGRATION,
 } from './migrations.js';
 import { readRoutes } from './routes/crud.js';
 import { containerWriteRoutes } from './routes/containers.js';
@@ -33,6 +35,11 @@ import {
   serializeVolume,
 } from './serialize.js';
 import { registerSerializer } from '../../api/serializer.js';
+import { registerWebhookCaResolver, registerWebhookCaFailureHandler } from '../../webhooks.js';
+import { hostCaForUrl, journalCaFailure } from './tls.js';
+
+registerWebhookCaResolver(hostCaForUrl);
+registerWebhookCaFailureHandler(journalCaFailure);
 
 // Use the nested serializers for the generic CRUD response + change/webhook payloads too,
 // so EVERY write (create / single update / bulk update) emits the full entity — matching
@@ -56,6 +63,8 @@ const dockerPlugin: Plugin = {
     HOST_TOKEN_MIGRATION,
     VM_SSH_KEY_MIGRATION,
     CONTAINER_RESOURCE_LIMITS_MIGRATION,
+    HOST_CA_PIN_MIGRATION,
+    VOLUME_MAX_SIZE_DEFAULT_MIGRATION,
   ],
   routes: [
     // GET list/detail overrides that embed the source's nested arrays.

@@ -117,6 +117,10 @@ const NETWORK_STATE = {
   enumLabels: { creating: 'Creating', created: 'Created' },
 } as const;
 const VOLUME_DRIVER = { enum: ['local'], enumLabels: { local: 'local' } } as const;
+const VOLUME_STATE = {
+  enum: ['creating', 'created'],
+  enumLabels: { creating: 'Creating', created: 'Created' },
+} as const;
 
 const hostMeta: TableMeta = {
   model: 'DockerHost',
@@ -416,6 +420,16 @@ const volumeMeta: TableMeta = {
       required: false,
       ...VOLUME_DRIVER,
       plainValue: true, // the Docker agent consumes driver as a bare string
+    },
+    {
+      name: 'state',
+      column: 'state',
+      tsKind: 'string',
+      nullable: false,
+      writable: true,
+      required: false,
+      ...VOLUME_STATE,
+      plainValue: true, // the Docker agent consumes state as a bare string
     },
     ...NETBOX_COLS,
   ],
@@ -758,7 +772,7 @@ export const BRIEF_FIELDS: Record<string, string[]> = {
     'virtual_machine',
   ],
   [T.image]: ['id', 'url', 'display', 'name', 'version', 'size', 'ImageID', 'Digest'],
-  [T.volume]: ['id', 'url', 'display', 'name', 'max_size', 'driver'],
+  [T.volume]: ['id', 'url', 'display', 'name', 'max_size', 'driver', 'state'],
   [T.network]: ['id', 'url', 'display', 'name', 'driver', 'NetworkID', 'state'],
   [T.container]: [
     'id',

@@ -136,6 +136,36 @@ function liveSizeShrinkError(f: FieldDef): string | null {
   return sizeShrinkError(f, values.value[f.name]);
 }
 
+/**
+ * A Docker volume's name is unique per host — checked live against that host's other volumes
+ * (fetched once per host, see `loadSiblingVolumeNames`) so a doomed submit never round-trips
+ * to the server just to bounce back as a generic "Server error (400)".
+ */
+const siblingVolumeNames = ref<string[]>([]);
+async function loadSiblingVolumeNames(): Promise<void> {
+  if (table.value !== 'plugin_docker_volume') return;
+  const host = values.value.host;
+  if (host === '' || host === null || host === undefined) {
+    siblingVolumeNames.value = [];
+    return;
+  }
+  const selfId = isEdit ? (props.object as { id?: number } | null)?.id : undefined;
+  const page = await api.list(props.endpoint, { host_id: String(host), limit: 500 });
+  siblingVolumeNames.value = page.results
+    .filter((o) => (o as { id?: number }).id !== selfId)
+    .map((o) => String((o as { name?: unknown }).name ?? ''));
+}
+function nameDuplicateError(f: FieldDef, v: unknown): string | null {
+  if (table.value !== 'plugin_docker_volume' || f.name !== 'name') return null;
+  const name = String(v ?? '').trim();
+  return name && siblingVolumeNames.value.includes(name)
+    ? 'A volume with this name already exists on this host.'
+    : null;
+}
+function liveNameDuplicateError(f: FieldDef): string | null {
+  return nameDuplicateError(f, values.value[f.name]);
+}
+
 const fileInput = ref<HTMLInputElement | null>(null);
 /** Put an uploaded file's text in the script field (and name the script after it if unnamed). */
 async function loadFile(e: Event): Promise<void> {
@@ -265,6 +295,10 @@ onMounted(async () => {
       () => void loadOptions(f),
     );
   }
+  if (table.value === 'plugin_docker_volume') {
+    await loadSiblingVolumeNames();
+    watch(() => values.value.host, () => void loadSiblingVolumeNames());
+  }
 });
 
 // tags chips editor
@@ -339,6 +373,8 @@ function buildPayload(): Obj | null {
         }
         break;
       default:
+        // already shown live, next to the field (liveNameDuplicateError) — just block the submit
+        if (nameDuplicateError(f, v)) return null;
         out[f.name] = v;
     }
   }
@@ -488,7 +524,8 @@ async function submit() {
               v-model="values[f.name]"
               :maxlength="f.maxLength"
             />
-            <span v-if="liveSizeShrinkError(f)" class="err">{{ liveSizeShrinkError(f) }}</span>
+            <span v-if="liveNameDuplicateError(f)" class="err">{{ liveNameDuplicateError(f) }}</span>
+            <span v-else-if="liveSizeShrinkError(f)" class="err">{{ liveSizeShrinkError(f) }}</span>
             <span v-else-if="fieldErr(f.name)" class="err">{{ fieldErr(f.name) }}</span>
           </div>
         </div>

@@ -533,3 +533,21 @@ export const VOLUME_MAX_SIZE_DEFAULT_MIGRATION: PluginMigration = {
   sqlite: volumeMaxSizeDefaultSqlite,
   mariadb: volumeMaxSizeDefaultMariadb,
 };
+
+// Mirrors Network.state ('creating'/'created'): without it, every volume the agent
+// reports during a full inventory resync is inserted as a brand-new row, re-firing the
+// "[Docker] Add volume" webhook and making the agent try to recreate an already-existing
+// Docker volume. The agent now skips creation when the incoming row already carries
+// state 'created' (sent by its own sync), so this column must exist for that check to work.
+const volumeStateSqlite = `
+ALTER TABLE plugin_docker_volume ADD COLUMN state TEXT NOT NULL DEFAULT 'creating'
+`;
+const volumeStateMariadb = `
+ALTER TABLE plugin_docker_volume ADD COLUMN state VARCHAR(32) NOT NULL DEFAULT 'creating'
+`;
+
+export const VOLUME_STATE_MIGRATION: PluginMigration = {
+  version: '0008_volume_state',
+  sqlite: volumeStateSqlite,
+  mariadb: volumeStateMariadb,
+};

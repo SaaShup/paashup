@@ -17,6 +17,7 @@ import { createToken } from '../../../auth.js';
 import { applyOriginDefaults } from '../../../api/origin.js';
 import { META, T } from '../meta.js';
 import { serializeHost } from '../serialize.js';
+import { pinAgentCa } from '../tls.js';
 
 type Row = Record<string, unknown>;
 type Obj = Record<string, unknown>;
@@ -76,6 +77,7 @@ async function createOneHost(db: Db, body: Row, origin: string): Promise<Obj> {
   const repo = new Repository<Row>(db, meta);
   const created = await repo.create(body);
   const id = Number((created as { id: number }).id);
+  await pinAgentCa(db, id, String((created as { endpoint?: unknown }).endpoint ?? ''));
   await attachHostToken(db, id, String((created as { name?: unknown }).name ?? ''));
   await fireHooks(db, T.host, 'created', id, created); // seeds the default "dockerhub" registry
   const out = await serializeHost(db, (await repo.retrieve(id))!, { withToken: true });
@@ -121,6 +123,8 @@ const updateRoutes: PluginRoute[] = (['PUT', 'PATCH'] as const).map((method): Pl
     // kept: the agent receives them in the webhook and deletes them itself, like on NetBox.
     if (data.operation === 'refresh') data.state = 'refreshing';
     await repo.update(id, data);
+    // A changed endpoint re-pins the CA (trust-on-first-use again) — or clears it for http.
+    if (typeof data.endpoint === 'string') await pinAgentCa(db, id, data.endpoint);
 
     const out = await serializeHost(db, (await repo.retrieve(id))!);
     emitHost(db, 'updated', id, out);

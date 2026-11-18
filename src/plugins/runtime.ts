@@ -98,10 +98,16 @@ export async function applyPluginMigrations(
     const version = `plugin:${name}:${m.version}`;
     if (applied.has(version)) continue;
     const ddl = db.dialect === 'sqlite' ? m.sqlite : m.mariadb;
-    await db.transaction(async (tx) => {
-      for (const stmt of statements(ddl)) await tx.execute(stmt);
-      await tx.execute('INSERT INTO schema_migrations (version) VALUES (?)', [version]);
-    });
+    const sqlite = db.dialect === 'sqlite';
+    if (sqlite) await db.execute('PRAGMA foreign_keys = OFF');
+    try {
+      await db.transaction(async (tx) => {
+        for (const stmt of statements(ddl)) await tx.execute(stmt);
+        await tx.execute('INSERT INTO schema_migrations (version) VALUES (?)', [version]);
+      });
+    } finally {
+      if (sqlite) await db.execute('PRAGMA foreign_keys = ON');
+    }
     done.push(version);
   }
   return done;

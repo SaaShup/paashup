@@ -85,6 +85,7 @@ test('plugin loads and registers its migration once', async () => {
       'plugin:docker:0005_container_resource_limits',
       'plugin:docker:0006_host_ca_pin',
       'plugin:docker:0007_volume_max_size_default',
+      'plugin:docker:0008_volume_state',
     ],
   );
 });

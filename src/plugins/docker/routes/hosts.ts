@@ -3,8 +3,11 @@
 //  - POST: mint a static API token for the host's agent and attach it, so the
 //    "[Docker] Add host" webhook can transmit it. The token is included only in the
 //    create response/webhook (never on plain reads). Also seeds the default registry.
-//  - PUT/PATCH: a refresh (operation="refresh") marks the host "refreshing". Like NetBox,
-//    the agent then clears the stale resources itself (bulk DELETE) and re-sends its inventory.
+//  - PUT/PATCH (single id, and bulk on the bare collection — the agent uses both): a
+//    refresh (operation="refresh") marks the host "refreshing". Like NetBox, the agent
+//    then clears the stale resources itself (bulk DELETE) and re-sends its inventory.
+//    The generic bulk-CRUD path doesn't know either of these, so both shapes are
+//    handled here, sharing updateOneHost().
 //  - DELETE: revoke the host's token so it can't outlive the host.
 import type { Db } from '../../../db/types.js';
 import type { PluginRoute } from '../../../plugins/types.js';
@@ -110,25 +113,63 @@ const createRoute: PluginRoute = {
   },
 };
 
+/**
+ * Apply one update to a host: translate operation="refresh" into state="refreshing"
+ * (the resources it discovered are kept — the agent receives them in the webhook and
+ * deletes them itself, like on NetBox), re-pin the CA on a changed endpoint, then tell
+ * the realtime feed and the webhooks. Undefined when there is no such host.
+ */
+async function updateOneHost(db: Db, id: number, data: Row): Promise<Obj | undefined> {
+  const repo = new Repository<Row>(db, getTable(T.host)!);
+  if (!(await repo.retrieve(id))) return undefined;
+  if (data.operation === 'refresh') data.state = 'refreshing';
+  await repo.update(id, data);
+  // A changed endpoint re-pins the CA (trust-on-first-use again) — or clears it for http.
+  if (typeof data.endpoint === 'string') await pinAgentCa(db, id, data.endpoint);
+
+  const out = await serializeHost(db, (await repo.retrieve(id))!);
+  emitHost(db, 'updated', id, out);
+  await fireHooks(db, T.host, 'updated', id, out); // like the generic CRUD (e.g. VM linking)
+  return out;
+}
+
 const updateRoutes: PluginRoute[] = (['PUT', 'PATCH'] as const).map((method): PluginRoute => ({
   method,
   path: `${META.host.endpoint}{id}/`,
   handler: async ({ db, params, body }) => {
     const id = Number(params.id);
-    const repo = new Repository<Row>(db, getTable(T.host)!);
-    if (!(await repo.retrieve(id))) return { status: 404, body: { detail: 'Not found' } };
+    const out = await updateOneHost(db, id, { ...((body ?? {}) as Row) });
+    return out ? { status: 200, body: out } : { status: 404, body: { detail: 'Not found' } };
+  },
+}));
 
-    const data: Row = { ...((body ?? {}) as Row) };
-    // Asking the host to refresh marks it "refreshing". The resources it discovered are
-    // kept: the agent receives them in the webhook and deletes them itself, like on NetBox.
-    if (data.operation === 'refresh') data.state = 'refreshing';
-    await repo.update(id, data);
-    // A changed endpoint re-pins the CA (trust-on-first-use again) — or clears it for http.
-    if (typeof data.endpoint === 'string') await pinAgentCa(db, id, data.endpoint);
-
-    const out = await serializeHost(db, (await repo.retrieve(id))!);
-    emitHost(db, 'updated', id, out);
-    await fireHooks(db, T.host, 'updated', id, out); // like the generic CRUD (e.g. VM linking)
+/**
+ * Bulk PUT/PATCH on the host collection (NetBox-style: an array of objects, each
+ * carrying its own id — this is how the Docker agent reports back after a refresh,
+ * and how it announces its own version on restart). The generic bulk-CRUD path
+ * doesn't know about "refresh" or the agent's TLS pin, so hosts need their own.
+ */
+const bulkUpdateRoutes: PluginRoute[] = (['PUT', 'PATCH'] as const).map((method): PluginRoute => ({
+  method,
+  path: META.host.endpoint,
+  handler: async ({ db, body }) => {
+    if (!Array.isArray(body)) {
+      return {
+        status: 400,
+        body: { detail: 'Bulk update expects a list of objects (each with an id).' },
+      };
+    }
+    const out: Obj[] = [];
+    for (const item of body as Row[]) {
+      const id = Number(item.id);
+      if (!Number.isFinite(id)) {
+        return { status: 400, body: { detail: 'Each item must include "id".' } };
+      }
+      const data: Row = { ...item };
+      delete data.id;
+      const updated = await updateOneHost(db, id, data);
+      if (updated) out.push(updated);
+    }
     return { status: 200, body: out };
   },
 }));
@@ -172,4 +213,9 @@ const deleteRoute: PluginRoute = {
       : { status: 404, body: { detail: 'Not found' } },
 };
 
-export const hostWriteRoutes: PluginRoute[] = [createRoute, ...updateRoutes, deleteRoute];
+export const hostWriteRoutes: PluginRoute[] = [
+  createRoute,
+  ...updateRoutes,
+  ...bulkUpdateRoutes,
+  deleteRoute,
+];

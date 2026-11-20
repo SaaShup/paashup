@@ -790,6 +790,49 @@ test('host operation=refresh marks state refreshing; the agent clears resources 
   assert.equal((await api('GET', `/api/plugins/docker/images/?host_id=${h.id}`)).body.count, 1);
 });
 
+test('host operation=refresh via bulk PATCH (how the agent announces itself) also marks state refreshing', async () => {
+  // The agent PATCHes the bare collection with an array, not /hosts/{id}/ — this bypasses
+  // the generic bulk-CRUD path, which doesn't know "refresh" (regression: state used to
+  // stay "running", so the agent's own follow-up webhook check never matched and the host
+  // got stuck announcing a refresh that never actually happened).
+  const h = (await api('POST', '/api/plugins/docker/hosts/', { endpoint: 'http://bh', name: 'bh' }))
+    .body;
+
+  const bulk = await api('PATCH', '/api/plugins/docker/hosts/', [
+    { id: h.id, agent_version: '1.2.3-0', operation: 'refresh' },
+  ]);
+  assert.equal(bulk.status, 200, JSON.stringify(bulk.body));
+  assert.equal(bulk.body.length, 1);
+  assert.equal(bulk.body[0].agent_version, '1.2.3-0');
+  assert.equal(bulk.body[0].operation, 'refresh');
+  assert.equal(bulk.body[0].state, 'refreshing'); // the fix: translated even in bulk
+
+  const fetched = await api('GET', `/api/plugins/docker/hosts/${h.id}/`);
+  assert.equal(fetched.body.state, 'refreshing');
+
+  // the agent's completion PATCH (explicit state/operation) still works as before
+  const done = await api('PATCH', '/api/plugins/docker/hosts/', [
+    {
+      id: h.id,
+      docker_api_version: '1.45',
+      agent_version: '1.2.3-0',
+      state: 'running',
+      operation: 'none',
+    },
+  ]);
+  assert.equal(done.body[0].state, 'running');
+  assert.equal(done.body[0].operation, 'none');
+
+  // bulk update rejects a missing id and tolerates an unknown one (NetBox-style leniency)
+  const noId = await api('PATCH', '/api/plugins/docker/hosts/', [{ operation: 'refresh' }]);
+  assert.equal(noId.status, 400);
+  const unknown = await api('PATCH', '/api/plugins/docker/hosts/', [
+    { id: 999999, operation: 'refresh' },
+  ]);
+  assert.equal(unknown.status, 200);
+  assert.equal(unknown.body.length, 0);
+});
+
 test('search images/containers across multiple hosts with same tag', async () => {
   // Create a shared tag
   const tag = (await api('POST', '/api/extras/tags/', { name: 'SHARED', slug: 'shared' })).body;

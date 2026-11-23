@@ -18,6 +18,9 @@ import { Repository } from '../../repository/repository.js';
 import { getTable } from '../../model/registry.js';
 import { Serializer } from '../../api/serializer.js';
 import { broadcast } from '../../realtime.js';
+import { splitCredentials } from '../../webhooks.js';
+import { withAgentDispatcher, dispatchedFetch } from './tls.js';
+import { journalVm } from './journal.js';
 import { META, T } from './meta.js';
 
 type Row = Record<string, unknown>;
@@ -57,7 +60,8 @@ interface AgentReply {
 /** Where and how to reach the agent of a VM. */
 interface Agent {
   url: string;
-  auth: string;
+  auth?: string;
+  ca?: string;
 }
 
 /** OpenSSH fingerprint (`SHA256:<base64, unpadded>`) of a `<type> <base64> [comment]` key. */
@@ -71,8 +75,26 @@ export function fingerprint(publicKey: string): string | null {
 const configured = (): boolean =>
   !!process.env.PB_SSH_AGENT_USER && !!process.env.PB_SSH_AGENT_PASSWORD;
 
-/** The agent of a VM, at its primary IP (IPv4 first). Null without credentials or IP. */
+/**
+ * The agent of a VM: when it's a registered Docker host, its own endpoint (scheme, host,
+ * port and credentials — each host can have its own) with its pinned CA for https, since
+ * the same agent serves SSH key management alongside the Docker engine API. Otherwise, its
+ * primary IP (IPv4 first) on PB_SSH_AGENT_PORT with the PB_SSH_AGENT_USER/PASSWORD
+ * credentials. Null without an agent to reach.
+ */
 async function vmAgent(db: Db, vmId: number): Promise<Agent | null> {
+  const host = await db.get<{ endpoint: string; ca_pem: string | null }>(
+    `SELECT endpoint, ca_pem FROM ${ident(T.host)} WHERE virtual_machine_id = ?`,
+    [vmId],
+  );
+  if (host) {
+    const { url, authHeader } = splitCredentials(host.endpoint);
+    return {
+      url: `${url.replace(/\/$/, '')}/api/ssh-keys`,
+      auth: authHeader,
+      ca: host.ca_pem ?? undefined,
+    };
+  }
   if (!configured()) return null;
   const row = await db.get<{ address: string }>(
     `SELECT a.address FROM virtualization_virtual_machine v
@@ -82,11 +104,11 @@ async function vmAgent(db: Db, vmId: number): Promise<Agent | null> {
   );
   const ip = row ? String(row.address).split('/')[0]! : '';
   if (!ip) return null;
-  const host = ip.includes(':') ? `[${ip}]` : ip;
+  const ipHost = ip.includes(':') ? `[${ip}]` : ip;
   const port = process.env.PB_SSH_AGENT_PORT || '1880';
   const credentials = `${process.env.PB_SSH_AGENT_USER}:${process.env.PB_SSH_AGENT_PASSWORD}`;
   return {
-    url: `http://${host}:${port}/api/ssh-keys`,
+    url: `http://${ipHost}:${port}/api/ssh-keys`,
     auth: `Basic ${Buffer.from(credentials).toString('base64')}`,
   };
 }
@@ -98,15 +120,20 @@ async function agentCall(
   body?: unknown,
   timeout = WRITE_TIMEOUT_MS,
 ): Promise<AgentReply> {
-  const resp = await fetch(agent.url, {
-    method,
-    headers: {
-      Authorization: agent.auth,
-      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+  const opts = await withAgentDispatcher(
+    {
+      method,
+      headers: {
+        ...(agent.auth ? { Authorization: agent.auth } : {}),
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(timeout),
     },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(timeout),
-  });
+    agent.url,
+    agent.ca,
+  );
+  const resp = await dispatchedFetch(agent.url, opts);
   let parsed: Record<string, unknown> = {};
   try {
     parsed = (await resp.json()) as Record<string, unknown>;
@@ -345,17 +372,28 @@ async function readAndStore(
   return r;
 }
 
-/** Re-read the SSH keys of these VMs from their agents, a few at a time. Never throws. */
+/**
+ * Re-read the SSH keys of these VMs from their agents, a few at a time. Never throws; a VM
+ * whose agent can't be reached or answers unexpectedly is logged and left with its old copy.
+ */
 export async function scanVms(db: Db, vmIds: readonly number[]): Promise<void> {
-  if (!configured()) return;
   const queue = [...vmIds];
   const worker = async (): Promise<void> => {
     for (let vmId = queue.shift(); vmId !== undefined; vmId = queue.shift()) {
       try {
         const agent = await vmAgent(db, vmId);
-        if (agent) await serialized(vmId, () => readAndStore(db, vmId, agent, SCAN_TIMEOUT_MS));
-      } catch {
-        /* no agent answering on that VM: nothing to read */
+        if (!agent) continue;
+        const r = await serialized(vmId, () => readAndStore(db, vmId, agent, SCAN_TIMEOUT_MS));
+        const disabled = r.status === 404 && r.body.message === DISABLED_MSG;
+        if (r.status !== 200 && !disabled) {
+          const reason = `agent answered ${r.status} ${message(r)}`;
+          console.warn(`[Docker] SSH key scan of VM ${vmId} failed: ${reason}`);
+          await journalVm(db, vmId, 'danger', `SSH key scan failed: ${reason}`);
+        }
+      } catch (e) {
+        const reason = (e as Error).message;
+        console.warn(`[Docker] SSH key scan of VM ${vmId} failed: ${reason}`);
+        await journalVm(db, vmId, 'danger', `SSH key scan failed: ${reason}`);
       }
     }
   };
@@ -406,10 +444,10 @@ export async function relinkCatalogKey(db: Db, sshKeyId: number): Promise<void> 
 // ---- routes -------------------------------------------------------------------------
 
 const notFound: PluginRouteResult = { status: 404, body: { detail: 'Not found' } };
-const NOT_CONFIGURED: PluginRouteResult = {
-  status: 400,
-  body: { detail: 'Set PB_SSH_AGENT_USER and PB_SSH_AGENT_PASSWORD to manage VM SSH keys.' },
-};
+const NO_AGENT = [
+  'No agent to reach for this VM: register it as a Docker host, or set a primary IP and ' +
+    'PB_SSH_AGENT_USER/PASSWORD.',
+];
 const DISABLED = "SSH key management isn't enabled on this VM's agent.";
 /** What the agent answers when SSH key management is disabled. */
 const DISABLED_MSG = 'Host SSH key management is disabled';
@@ -457,7 +495,6 @@ const createRoute: PluginRoute = {
   method: 'POST',
   path: META.vmSshKey.endpoint,
   handler: async ({ db, body }) => {
-    if (!configured()) return NOT_CONFIGURED;
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
       return { status: 400, body: { detail: 'Add one key at a time.' } };
     }
@@ -468,7 +505,7 @@ const createRoute: PluginRoute = {
     }
     const agent = await vmAgent(db, vmId);
     if (!agent) {
-      return { status: 400, body: { virtual_machine: ['This VM has no primary IP.'] } };
+      return { status: 400, body: { virtual_machine: NO_AGENT } };
     }
 
     const sshKeyId = b.ssh_key == null || b.ssh_key === '' ? null : idOf(b.ssh_key);
@@ -519,10 +556,9 @@ async function removeKey(db: Db, id: number): Promise<PluginRouteResult> {
     [id],
   );
   if (!row) return notFound;
-  if (!configured()) return NOT_CONFIGURED;
   const vmId = Number(row.virtual_machine_id);
   const agent = await vmAgent(db, vmId);
-  if (!agent) return { status: 400, body: { virtual_machine: ['This VM has no primary IP.'] } };
+  if (!agent) return { status: 400, body: { virtual_machine: NO_AGENT } };
   try {
     return await serialized(vmId, async () => {
       const r = await withRevision(agent, async (list) => {

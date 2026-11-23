@@ -1,6 +1,7 @@
 // VM SSH keys: the authorized_keys of each VM, read and changed through the agent at its
-// primary IP (PB_SSH_AGENT_USER / PB_SSH_AGENT_PASSWORD / PB_SSH_AGENT_PORT). A fake agent
-// speaks the agent's /api/ssh-keys (Basic auth, revisions, 409 on a stale one, disabled).
+// primary IP (PB_SSH_AGENT_USER / PB_SSH_AGENT_PASSWORD / PB_SSH_AGENT_PORT), or through its
+// registered Docker host's own endpoint and credentials when it has one. A fake agent speaks
+// the agent's /api/ssh-keys (Basic auth, revisions, 409 on a stale one, disabled).
 // Verifies:
 //   - nothing happens without the agent credentials
 //   - a sync of the VMs' cloud (when added or refreshed) stores each VM's keys, and only for
@@ -11,6 +12,10 @@
 //   - a key is removed from its VM (also when already gone from the file); never edited
 //   - a key added by hand takes over the agent's copy; a deleted one comes back at the sync
 //   - the catalog shows each key's origin and how many VMs have it
+//   - a VM registered as a Docker host is reached at that host's own endpoint and credentials,
+//     not PB_SSH_AGENT_*
+//   - a scan that can't reach a VM's agent leaves its cache as it was and logs a journal entry
+//     on the VM (besides the server console)
 // Run: node --test test/vm-ssh-keys.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -31,6 +36,7 @@ const DB_FILE = join(ROOT, 'test', '.vmsshkeys.sqlite');
 const DEPLOY = '/api/plugins/docker/vm-ssh-keys/';
 const KEYS = '/api/virtualization/ssh-keys/';
 const VMS = '/api/virtualization/virtual-machines/';
+const HOSTS = '/api/plugins/docker/hosts/';
 const DISABLED = 'Host SSH key management is disabled';
 
 let db, apiServer, base, agent;
@@ -62,7 +68,13 @@ const fingerprintOf = (publicKey) =>
 const files = new Map();
 const fileOf = (ip) => {
   if (!files.has(ip))
-    files.set(ip, { keys: [], disabled: false, notAgent: false, staleOnce: false });
+    files.set(ip, {
+      keys: [],
+      disabled: false,
+      notAgent: false,
+      staleOnce: false,
+      auth: 'admin:secret',
+    });
   return files.get(ip);
 };
 const revisionOf = (f) => crypto.createHash('sha256').update(JSON.stringify(f.keys)).digest('hex');
@@ -90,7 +102,7 @@ function startAgent() {
       res.writeHead(200, { 'Content-Type': 'text/html' });
       return res.end('<html>hello</html>');
     }
-    const auth = `Basic ${Buffer.from('admin:secret').toString('base64')}`;
+    const auth = `Basic ${Buffer.from(f.auth).toString('base64')}`;
     if (req.headers.authorization !== auth) return send(401, { message: 'Unauthorized' });
     if (req.url !== '/api/ssh-keys') return send(404, { message: 'Not found' });
     if (f.disabled) return send(404, { message: DISABLED });
@@ -170,6 +182,22 @@ async function vm(name, ip) {
   return v.id;
 }
 
+/** Register a Docker host at `endpoint`, directly linked to `vmId`. Returns the host id. */
+async function createHost(name, endpoint, vmId) {
+  const res = await api('POST', HOSTS, { name, endpoint, virtual_machine: vmId });
+  assert.equal(res.status, 201, JSON.stringify(res.body));
+  return res.body.id;
+}
+
+/** Journal entries on a VM (newest first), straight from the table the UI's Logs read. */
+const journalOf = async (vmId) =>
+  db.query(
+    `SELECT kind, comments FROM extras_journalentry
+      WHERE assigned_object_type = 'virtualization.virtualmachine' AND assigned_object_id = ?
+      ORDER BY id DESC`,
+    [vmId],
+  );
+
 const deploymentsOf = async (vmId) =>
   (await api('GET', `${DEPLOY}?virtual_machine_id=${vmId}&limit=100`)).body.results;
 const catalogKey = async (id) => (await api('GET', `${KEYS}${id}/`)).body;
@@ -208,6 +236,7 @@ let vmA, vmB, vmNoIp; // agents at 127.0.0.1 and 127.0.0.2, and a VM without IP
 let cloudId; // the cloud the three VMs are on
 const A = '127.0.0.1';
 const B = '127.0.0.2';
+const C = '127.0.0.3';
 
 before(async () => {
   await startAgent();
@@ -240,7 +269,7 @@ test('without the agent credentials, nothing is read nor written', async () => {
   const key = (await api('POST', KEYS, { name: 'early', public_key: makeKey('early') })).body;
   const add = await api('POST', DEPLOY, { virtual_machine: vmA, ssh_key: key.id });
   assert.equal(add.status, 400);
-  assert.match(add.body.detail, /PB_SSH_AGENT_USER/);
+  assert.match(add.body.virtual_machine[0], /PB_SSH_AGENT_USER/);
   fileOf(A).keys = [makeKey('unread')];
   await sync();
   await new Promise((r) => setTimeout(r, 200));
@@ -422,4 +451,45 @@ test("a deleted VM's keys go, and the agent keys only it had", async () => {
   assert.equal((await api('DELETE', `${VMS}${vmB}/`)).status, 204);
   assert.equal((await deploymentsOf(vmB)).length, 0);
   assert.equal((await api('GET', `${KEYS}${carol.id}/`)).status, 404);
+});
+
+// ---- a VM registered as a Docker host uses that host's own endpoint and credentials --------
+
+test("a Docker host's own endpoint and credentials are used, not PB_SSH_AGENT_*", async () => {
+  const vmC = await vm('vm-c'); // no IP, no PB_SSH_AGENT_* match possible by itself
+  fileOf(C).auth = 'alice:wonderland'; // different from the global admin:secret
+  const port = agent.address().port;
+  await createHost('h-vm-c', `http://alice:wonderland@${C}:${port}`, vmC);
+
+  const add = await api('POST', DEPLOY, { virtual_machine: vmC, public_key: makeKey('host-cred') });
+  assert.equal(add.status, 201, JSON.stringify(add.body));
+  assert.ok(fileOf(C).keys.some((k) => k.endsWith(' host-cred')));
+
+  // the global credentials alone would have been refused by this agent (proves it's per-host)
+  fileOf(C).auth = 'admin:secret';
+  const wrongCreds = await api('POST', DEPLOY, {
+    virtual_machine: vmC,
+    public_key: makeKey('should-fail'),
+  });
+  assert.equal(wrongCreds.status, 502);
+  fileOf(C).auth = 'alice:wonderland';
+});
+
+// ---- a scan that can't reach a VM's agent is logged, and leaves its cache alone ------------
+
+test("a sync that can't reach a VM's agent logs it on the VM and keeps the old keys", async () => {
+  const vmFail = await vm('vm-fail');
+  // nothing listens here: an immediate connection refusal, not a 4s timeout
+  await createHost('h-vm-fail', 'http://127.0.0.1:1/', vmFail);
+  const cloud = await cloudWith('cloud-fail', vmFail);
+
+  assert.deepEqual(await journalOf(vmFail), []);
+  await sync(cloud);
+  await until(async () => (await journalOf(vmFail)).length > 0, 'a journal entry on vm-fail');
+  const [entry] = await journalOf(vmFail);
+  assert.equal(entry.kind, 'danger');
+  assert.match(entry.comments, /SSH key scan failed/);
+
+  // and a VM whose agent answers fine, on the same sync, is unaffected
+  assert.ok((await deploymentsOf(vmA)).length > 0);
 });

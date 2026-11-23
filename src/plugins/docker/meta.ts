@@ -161,6 +161,8 @@ const hostMeta: TableMeta = {
       required: false,
       ...HOST_STATE,
       plainValue: true, // the Docker agent consumes state as a bare string
+      formDefault: 'created',
+      formReadOnly: true,
     },
     {
       name: 'netbox_base_url',
@@ -180,6 +182,7 @@ const hostMeta: TableMeta = {
       writable: true,
       required: false,
       maxLength: 32,
+      formReadOnly: true,
     },
     {
       name: 'docker_api_version',
@@ -189,6 +192,7 @@ const hostMeta: TableMeta = {
       writable: true,
       required: false,
       maxLength: 32,
+      formReadOnly: true,
     },
     {
       name: 'operation',
@@ -199,9 +203,11 @@ const hostMeta: TableMeta = {
       required: false,
       ...HOST_OPERATION,
       plainValue: true, // the Docker agent consumes operation as a bare string
+      formReadOnly: true,
     },
     // The machine this docker engine runs on — a core Device or VirtualMachine
-    // (mutually exclusive). FK briefs resolve via the shared model registry.
+    // (mutually exclusive). FK briefs resolve via the shared model registry. Writable via
+    // the API (e.g. set during host registration) but not on the user-facing form.
     {
       name: 'device',
       column: 'device_id',
@@ -210,6 +216,7 @@ const hostMeta: TableMeta = {
       writable: true,
       required: false,
       references: 'Device',
+      formHidden: true,
     },
     {
       name: 'virtual_machine',
@@ -349,6 +356,7 @@ const imageMeta: TableMeta = {
       nullable: false,
       writable: true,
       required: false,
+      formReadOnly: true,
     },
     {
       name: 'ImageID',
@@ -368,6 +376,7 @@ const imageMeta: TableMeta = {
       writable: true,
       required: false,
       maxLength: 512,
+      formReadOnly: true,
     },
     ...NETBOX_COLS,
   ],
@@ -420,6 +429,7 @@ const volumeMeta: TableMeta = {
       required: false,
       ...VOLUME_DRIVER,
       plainValue: true, // the Docker agent consumes driver as a bare string
+      formDefault: 'local',
     },
     {
       name: 'state',
@@ -430,6 +440,8 @@ const volumeMeta: TableMeta = {
       required: false,
       ...VOLUME_STATE,
       plainValue: true, // the Docker agent consumes state as a bare string
+      formDefault: 'creating',
+      formReadOnly: true,
     },
     ...NETBOX_COLS,
   ],
@@ -483,6 +495,7 @@ const networkMeta: TableMeta = {
       writable: true,
       required: false,
       maxLength: 128,
+      formReadOnly: true,
     },
     {
       name: 'state',
@@ -493,6 +506,7 @@ const networkMeta: TableMeta = {
       required: false,
       ...NETWORK_STATE,
       plainValue: true, // the Docker agent consumes state as a bare string
+      formReadOnly: true,
     },
     ...NETBOX_COLS,
   ],
@@ -555,6 +569,7 @@ const containerMeta: TableMeta = {
       writable: true,
       required: false,
       maxLength: 1024,
+      formReadOnly: true,
     },
     {
       name: 'ContainerID',
@@ -564,6 +579,7 @@ const containerMeta: TableMeta = {
       writable: true,
       required: false,
       maxLength: 128,
+      formReadOnly: true,
     },
     {
       name: 'operation',
@@ -574,6 +590,8 @@ const containerMeta: TableMeta = {
       required: false,
       ...CONTAINER_OPERATION,
       plainValue: true, // the Docker agent consumes operation as a bare string
+      formDefault: 'create',
+      formReadOnly: true,
     },
     {
       name: 'hostname',
@@ -593,6 +611,7 @@ const containerMeta: TableMeta = {
       required: false,
       ...RESTART_POLICY,
       plainValue: true, // the Docker agent consumes restart_policy as a bare string
+      formDefault: 'unless-stopped',
     },
     {
       name: 'memory_limit',

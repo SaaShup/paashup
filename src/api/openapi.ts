@@ -156,11 +156,15 @@ function writeSchema(meta: TableMeta, patched: boolean): Schema {
   for (const c of meta.columns) {
     if (!c.writable) continue;
     // Vendor hints: `x-form-hidden` omits the field from the UI form (e.g. agent-set
-    // ImageID); `x-default-origin` lets the form prefill it from window.location.origin.
+    // ImageID); `x-default-origin` lets the form prefill it from window.location.origin;
+    // `x-form-readonly` shows the field disabled; `x-form-default` prefills it with a
+    // fixed value on create.
     props[c.name] = {
       ...writeProperty(c),
       ...(c.formHidden ? { 'x-form-hidden': true } : {}),
       ...(c.defaultFromOrigin ? { 'x-default-origin': true } : {}),
+      ...(c.formReadOnly ? { 'x-form-readonly': true } : {}),
+      ...(c.formDefault !== undefined ? { 'x-form-default': c.formDefault } : {}),
     };
     if (!patched && c.required && !c.nullable) required.push(c.name);
   }

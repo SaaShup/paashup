@@ -13,6 +13,7 @@ import { confirmDialog, confirmDialogChecked } from '../composables/confirm.js';
 import IpRangeAddresses from '../components/IpRangeAddresses.vue';
 import { DETAIL_TABLES } from './objectDetail.js';
 import { valueLabel } from '../format.js';
+import { PREFERRED_COLUMNS, HIDDEN_COLUMNS, EXPANDABLE_COLUMNS } from '../listColumns.js';
 
 const PAGE = 50;
 // Log-like tables (journal entries, event/log feeds) read newest-first.
@@ -55,33 +56,6 @@ const filterOptions = ref<FilterOptions>({});
 
 const resource = computed(() => ui.selected!);
 
-/** Columns shown first for tables whose useful fields would otherwise be cut off. */
-const PREFERRED_COLUMNS: Record<string, string[]> = {
-  virtualization_virtual_machine: [
-    'status',
-    'cluster',
-    'virtual_machine_type',
-    'image',
-    'primary_ip4',
-    'vcpus',
-    'memory',
-  ],
-  virtualization_ssh_key: ['name', 'origin', 'deployed_on', 'owner', 'source', 'description'],
-  virtualization_image: ['name', 'source', 'description'],
-  virtualization_init_script: ['name', 'description', 'created'],
-  extras_journalentry: ['created', 'kind', 'assigned_object_type', 'assigned_object', 'comments'],
-};
-// Columns a list leaves out: an init script is listed by name, description and date only.
-const HIDDEN_COLUMNS: Record<string, string[]> = {
-  virtualization_init_script: ['id', 'content', 'variables', 'required_variables', 'last_updated'],
-  // `display` is a meaningless "JournalEntry (123)" fallback here; `assigned_object_id` is
-  // redundant once `assigned_object` resolves the real object name.
-  extras_journalentry: ['display', 'assigned_object_id', 'last_updated'],
-};
-// Journal comments can be long operational messages: show them clipped with a toggle.
-const EXPANDABLE_COLUMNS: Record<string, string[]> = {
-  extras_journalentry: ['comments'],
-};
 const slot = computed(() => (resource.value ? objects.byTable[resource.value.table] : undefined));
 const isVm = computed(() => resource.value?.table === 'virtualization_virtual_machine');
 // The OpenStack server behind each VM of the page (VM id → link): deleting such a VM deletes
@@ -103,6 +77,15 @@ async function loadVmServers() {
 const isVolume = computed(() => resource.value?.table === 'virtualization_virtual_disk');
 const isContainer = computed(() => resource.value?.table === 'plugin_docker_container');
 const isHost = computed(() => resource.value?.table === 'plugin_docker_host');
+const isDockerImage = computed(() => resource.value?.table === 'plugin_docker_image');
+// Docker entities whose real counterpart is removed from the host on delete, and whose
+// "Used by" containers (if any) block the deletion — same confirm message shape for all.
+const DOCKER_USED_BY_NOUN: Record<string, string> = {
+  plugin_docker_image: 'image',
+  plugin_docker_volume: 'volume',
+  plugin_docker_network: 'network',
+};
+const dockerUsedByNoun = computed(() => DOCKER_USED_BY_NOUN[resource.value?.table ?? '']);
 const isJournal = computed(() => resource.value?.table === 'extras_journalentry');
 // Severity (`kind`) and the timestamp range get their own toolbar controls (below); keep
 // them out of ObjectTable's generic per-column header dropdowns to avoid showing both.
@@ -326,6 +309,23 @@ async function del(id: number) {
     });
     if (!ok) return;
   }
+  if (dockerUsedByNoun.value) {
+    const row = slot.value?.items.find((r) => idOf(r) === id) as
+      (Obj & { used_by?: unknown[] }) | undefined;
+    const usedBy = row?.used_by ?? [];
+    const noun = dockerUsedByNoun.value;
+    const ok = await confirmDialog({
+      title: `Delete ${noun}`,
+      message:
+        `Delete "${String(row?.display ?? `#${id}`)}"?\n\nThe real ${noun} is removed from the host — this cannot be undone.` +
+        (usedBy.length
+          ? `\n\nStill used by ${usedBy.length} container(s): deletion will fail until they're removed or recreated with another ${noun}.`
+          : ''),
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
+  }
   error.value = '';
   try {
     await objects.remove(resource.value.table, id);
@@ -419,12 +419,9 @@ function openTo(row: Obj): Route | null {
     ? { view: 'detail', table: resource.value.table, id: idOf(row) }
     : null;
 }
-/** Per-row extra link: a container's detail, or the child list pre-filtered to this row. */
+/** Per-row extra link: the child list pre-filtered to this row (Keycloak hierarchy, IP range). */
 function actionTo(row: Obj): Route | null {
   const id = String(idOf(row));
-  if (isContainer.value) return { view: 'detail', table: resource.value!.table, id: idOf(row) };
-  if (isHost.value)
-    return { view: 'list', table: 'plugin_docker_container', filters: { host: id } };
   if (isKcServer.value)
     return { view: 'list', table: 'plugin_keycloak_realm', filters: { server: id } };
   if (isKcRealm.value)
@@ -436,6 +433,28 @@ function actionTo(row: Obj): Route | null {
 /** Per-row extra button for the rows with no link: IP ranges open their addresses. */
 function onAction(row: Obj) {
   addrRange.value = row;
+}
+/** The "Used by" count's route: the containers list, filtered to just the dependent ones.
+ *  An image is a direct FK on the container (`?image=<id>`); a volume isn't (the link is
+ *  through the mount child table), so it's filtered by the specific container ids instead
+ *  (`?id__in=1,2,3`), built from the row's own `used_by` brief list. */
+function usedByTo(row: Obj): Route | null {
+  const usedBy = (row as { used_by?: unknown[] }).used_by ?? [];
+  if (!Array.isArray(usedBy) || !usedBy.length) return null;
+  if (isDockerImage.value) {
+    return {
+      view: 'list',
+      table: 'plugin_docker_container',
+      filters: { image: String(idOf(row)) },
+    };
+  }
+  const ids = usedBy
+    .map((c) => (c as { id?: unknown }).id)
+    .filter((id): id is number => typeof id === 'number')
+    .map(String);
+  return ids.length
+    ? { view: 'list', table: 'plugin_docker_container', filters: { id__in: ids.join(',') } }
+    : null;
 }
 </script>
 
@@ -536,19 +555,15 @@ function onAction(row: Obj) {
         :hidden="HIDDEN_COLUMNS[resource.table]"
         :editable="resource.writable"
         :extra-action="
-          isContainer
-            ? 'View'
-            : isHost
-              ? 'Containers'
-              : isKcServer
-                ? 'Realms'
-                : isKcRealm
-                  ? 'Clients'
-                  : isKcClient
-                    ? 'Redirect URLs'
-                    : resource.table === 'ipam_iprange'
-                      ? 'IPs'
-                      : undefined
+          isKcServer
+            ? 'Realms'
+            : isKcRealm
+              ? 'Clients'
+              : isKcClient
+                ? 'Redirect URLs'
+                : resource.table === 'ipam_iprange'
+                  ? 'IPs'
+                  : undefined
         "
         :selectable="selectable"
         :selected="selectedIds"
@@ -557,6 +572,7 @@ function onAction(row: Obj) {
         :expandable="EXPANDABLE_COLUMNS[resource.table]"
         :link-to="openTo"
         :action-to="actionTo"
+        :used-by-to="usedByTo"
         @delete="del"
         @edit="edit"
         @action="onAction"

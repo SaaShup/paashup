@@ -32,6 +32,10 @@ export interface FieldDef {
   targetModel?: string;
   /** Prefill an empty value with window.location.origin when creating (x-default-origin). */
   defaultOrigin?: boolean;
+  /** Shown disabled in the form — still submitted, just not user-editable (x-form-readonly). */
+  readOnly?: boolean;
+  /** Prefill an empty value with this fixed value when creating (x-form-default). */
+  formDefault?: string | number | boolean;
 }
 
 function refName(s: any): string | undefined {
@@ -85,6 +89,8 @@ export async function formFields(model: string): Promise<FieldDef[]> {
       choices,
       targetModel,
       defaultOrigin: !!raw['x-default-origin'],
+      readOnly: !!raw['x-form-readonly'],
+      formDefault: raw['x-form-default'],
     });
   }
   return out;

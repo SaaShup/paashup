@@ -62,6 +62,10 @@ interface Agent {
   url: string;
   auth?: string;
   ca?: string;
+  /** From a registered Docker host: a real agent is expected there, so a failure is worth
+   *  logging. The IP/PB_SSH_AGENT_* fallback is tried on every VM whether or not it actually
+   *  runs an agent, so failing there is the common case, not a problem. */
+  viaHost: boolean;
 }
 
 /** OpenSSH fingerprint (`SHA256:<base64, unpadded>`) of a `<type> <base64> [comment]` key. */
@@ -93,6 +97,7 @@ async function vmAgent(db: Db, vmId: number): Promise<Agent | null> {
       url: `${url.replace(/\/$/, '')}/api/ssh-keys`,
       auth: authHeader,
       ca: host.ca_pem ?? undefined,
+      viaHost: true,
     };
   }
   if (!configured()) return null;
@@ -110,6 +115,7 @@ async function vmAgent(db: Db, vmId: number): Promise<Agent | null> {
   return {
     url: `http://${ipHost}:${port}/api/ssh-keys`,
     auth: `Basic ${Buffer.from(credentials).toString('base64')}`,
+    viaHost: false,
   };
 }
 
@@ -373,24 +379,29 @@ async function readAndStore(
 }
 
 /**
- * Re-read the SSH keys of these VMs from their agents, a few at a time. Never throws; a VM
- * whose agent can't be reached or answers unexpectedly is logged and left with its old copy.
+ * Re-read the SSH keys of these VMs from their agents, a few at a time. Never throws. A VM
+ * registered as a Docker host — where an agent is actually expected — that can't be reached
+ * or answers unexpectedly is logged (console + a journal entry on the VM) and left with its
+ * old copy; the IP/PB_SSH_AGENT_* fallback, tried on every other VM whether or not it runs an
+ * agent at all, fails silently since that's the common case there, not a problem.
  */
 export async function scanVms(db: Db, vmIds: readonly number[]): Promise<void> {
   const queue = [...vmIds];
   const worker = async (): Promise<void> => {
     for (let vmId = queue.shift(); vmId !== undefined; vmId = queue.shift()) {
+      let agent: Agent | null = null;
       try {
-        const agent = await vmAgent(db, vmId);
+        agent = await vmAgent(db, vmId);
         if (!agent) continue;
-        const r = await serialized(vmId, () => readAndStore(db, vmId, agent, SCAN_TIMEOUT_MS));
+        const r = await serialized(vmId, () => readAndStore(db, vmId, agent!, SCAN_TIMEOUT_MS));
         const disabled = r.status === 404 && r.body.message === DISABLED_MSG;
-        if (r.status !== 200 && !disabled) {
-          const reason = `agent answered ${r.status} ${message(r)}`;
+        if (agent.viaHost && r.status !== 200 && !disabled) {
+          const reason = `${r.status} ${message(r)}`;
           console.warn(`[Docker] SSH key scan of VM ${vmId} failed: ${reason}`);
           await journalVm(db, vmId, 'danger', `SSH key scan failed: ${reason}`);
         }
       } catch (e) {
+        if (!agent?.viaHost) continue;
         const reason = (e as Error).message;
         console.warn(`[Docker] SSH key scan of VM ${vmId} failed: ${reason}`);
         await journalVm(db, vmId, 'danger', `SSH key scan failed: ${reason}`);

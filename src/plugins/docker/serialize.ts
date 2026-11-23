@@ -53,6 +53,37 @@ async function briefList(
   return full.map((o) => brief(o, table)!);
 }
 
+/** Containers that have a mount row pointing at this volume, as brief objects — the
+ *  reverse of Container.mounts[].volume, joined through the (unregistered) mount table. */
+async function containersByVolume(db: Db, ser: Serializer, volumeId: number): Promise<Obj[]> {
+  const rows = await db.query<Row>(
+    `SELECT DISTINCT container_id FROM ${ident(T.mount)} WHERE volume_id = ? ORDER BY container_id ASC`,
+    [volumeId],
+  );
+  const out: Obj[] = [];
+  for (const r of rows) {
+    const b = await briefOf(db, ser, T.container, r.container_id);
+    if (b) out.push(b);
+  }
+  return out;
+}
+
+/** Containers that have a network_setting row pointing at this network, as brief objects —
+ *  the reverse of Container.network_settings[].network, joined through the (unregistered)
+ *  network_setting table. */
+async function containersByNetwork(db: Db, ser: Serializer, networkId: number): Promise<Obj[]> {
+  const rows = await db.query<Row>(
+    `SELECT DISTINCT container_id FROM ${ident(T.networkSetting)} WHERE network_id = ? ORDER BY container_id ASC`,
+    [networkId],
+  );
+  const out: Obj[] = [];
+  for (const r of rows) {
+    const b = await briefOf(db, ser, T.container, r.container_id);
+    if (b) out.push(b);
+  }
+  return out;
+}
+
 /** Replace the engine's generic FK briefs with the source's exact brief field sets. */
 async function fixFkBriefs(
   db: Db,
@@ -145,6 +176,7 @@ export async function serializeImage(db: Db, row: Row): Promise<Obj> {
     ['registry', T.registry],
   ]);
   base.containers = await briefList(db, ser, T.container, 'image', Number(row.id));
+  base.used_by = base.containers; // containers built from this image — shown as "Used by" in the list
   return base;
 }
 
@@ -170,6 +202,8 @@ export async function serializeVolume(db: Db, row: Row): Promise<Obj> {
     source: r.source,
     read_only: Boolean(r.read_only),
   }));
+  // Containers mounting this volume — shown as "Used by" in the list.
+  base.used_by = await containersByVolume(db, ser, Number(row.id));
   return base;
 }
 
@@ -187,5 +221,7 @@ export async function serializeNetwork(db: Db, row: Row): Promise<Obj> {
     out.push({ id: Number(r.id), network: await briefOf(db, ser, T.network, r.network_id) });
   }
   base.network_settings = out;
+  // Containers attached to this network — shown as "Used by" in the list.
+  base.used_by = await containersByNetwork(db, ser, Number(row.id));
   return base;
 }

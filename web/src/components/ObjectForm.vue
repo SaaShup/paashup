@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { api, ApiError, type Obj } from '../api/client.js';
 import { currentUsername } from '../auth/oidc.js';
-import { formLabel, isSecretField } from '../format.js';
+import { formLabel, isSecretField, fkOptionLabel } from '../format.js';
 import { parseVariables } from '../initScript.js';
 import { useUiStore } from '../stores/ui.js';
 import { formFields, modelEndpoints, getSchemaDoc, type FieldDef } from '../api/schema.js';
@@ -203,6 +203,11 @@ function initValue(f: FieldDef): unknown {
     if (f.defaultOrigin && (v === undefined || v === null || v === '')) {
       return window.location.origin + BASE;
     }
+    // prefill a fixed default (e.g. a volume's driver, preselected to "local") — the user
+    // can still change it unless the field is also read-only.
+    if (f.formDefault !== undefined && (v === undefined || v === null || v === '')) {
+      return f.formDefault;
+    }
   }
   if (f.kind === 'tags') return Array.isArray(v) ? v.map(tagName).filter(Boolean) : [];
   if (f.kind === 'multiselect') return Array.isArray(v) ? [...v] : [];
@@ -221,14 +226,6 @@ function initValue(f: FieldDef): unknown {
 const fkDeps = ref<Record<string, string[]>>({});
 const endpoints = ref<Record<string, string>>({});
 
-/** Option label: the display string, with a `:version` suffix when the row has one
- *  (e.g. Docker images list as "nginx:alpine", not just "nginx"). */
-function optionLabel(o: Obj): string {
-  const row = o as { id: number; display?: unknown; version?: unknown };
-  const d = String(row.display ?? row.id);
-  return row.version ? `${d}:${row.version}` : d;
-}
-
 async function loadOptions(f: FieldDef): Promise<void> {
   const ep = f.targetModel ? endpoints.value[f.targetModel] : undefined;
   if (!ep) return;
@@ -242,10 +239,14 @@ async function loadOptions(f: FieldDef): Promise<void> {
     params[dep] = String(v);
   }
   const page = await api.list(ep, params);
-  options.value[f.name] = page.results.map((o) => ({
-    id: (o as { id: number }).id,
-    display: optionLabel(o as Obj),
-  }));
+  options.value[f.name] = page.results
+    .map((o) => ({
+      id: (o as { id: number }).id,
+      display: fkOptionLabel(o as Obj),
+    }))
+    // group same-named rows together (e.g. every "nginx" version next to each other)
+    // instead of whatever order the API returned them in.
+    .sort((a, b) => a.display.localeCompare(b.display));
   // drop a selection that fell out of the (re-)filtered list
   const sel = values.value[f.name];
   if (sel !== '' && sel != null && !options.value[f.name]!.some((o) => o.id === Number(sel))) {
@@ -318,6 +319,12 @@ function onTagKeydown(e: KeyboardEvent, name: string) {
   if (e.key !== 'Enter' && e.key !== ',') return;
   e.preventDefault(); // Enter adds the chip instead of submitting the form
   addTag(name);
+}
+
+/** Display text for a read-only field (shown as plain text, not an input/select). */
+function readOnlyText(f: FieldDef): string {
+  const v = values.value[f.name];
+  return v === '' || v === null || v === undefined ? '—' : String(v);
 }
 
 function fieldErr(name: string): string {
@@ -420,7 +427,8 @@ async function submit() {
         <div v-for="f in fields" :key="f.name" class="row">
           <label :class="{ req: f.required }">{{ formLabel(table, f.name) }}</label>
           <div class="control">
-            <input v-if="f.kind === 'boolean'" type="checkbox" v-model="values[f.name]" />
+            <span v-if="f.readOnly" class="readonly-value">{{ readOnlyText(f) }}</span>
+            <input v-else-if="f.kind === 'boolean'" type="checkbox" v-model="values[f.name]" />
             <select v-else-if="f.kind === 'select'" v-model="values[f.name]">
               <option value="">—</option>
               <option v-for="c in f.choices" :key="String(c)" :value="c">{{ c }}</option>
@@ -586,7 +594,10 @@ h3 {
 }
 .row {
   display: grid;
-  grid-template-columns: 160px 1fr;
+  /* `minmax(0, 1fr)`, not a bare `1fr`: a grid track's implicit min-width is its content's
+   * min-content size, so a long unbroken value (a container id, a digest…) would keep
+   * forcing this column — and the whole form — wider than the panel otherwise. */
+  grid-template-columns: 160px minmax(0, 1fr);
   gap: 10px;
   align-items: start;
   margin-bottom: 8px;
@@ -741,6 +752,12 @@ button.ghost {
 .hint {
   color: var(--muted);
   font-size: 0.78rem;
+}
+.readonly-value {
+  color: var(--muted);
+  padding: 6px 0;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
 }
 .panel.wide {
   width: 860px;

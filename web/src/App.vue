@@ -39,6 +39,10 @@ const ssoEnabled = ref(false);
 const loginRequired = ref(false);
 const authed = ref(false);
 const username = ref<string | null>(null);
+// `ui.view` defaults to "dashboard" until the real route is applied below (after the OIDC
+// + resources bootstrap) — without this guard, a refresh on any other page would flash the
+// Dashboard for a frame before the actual view takes over.
+const ready = ref(false);
 
 // Mobile: the sidebar is an off-canvas drawer. Close it whenever the active
 // view / resource / plugin page changes (i.e. after the user picks something).
@@ -86,6 +90,7 @@ onMounted(async () => {
   }
   // URL routing
   startRouteSync(ui, watch);
+  ready.value = true;
 });
 </script>
 
@@ -122,18 +127,20 @@ onMounted(async () => {
       <div v-if="sidebarOpen" class="scrim" @click="sidebarOpen = false" />
       <main class="content">
         <div class="page-watermark" aria-hidden="true" />
-        <DashboardView v-if="ui.view === 'dashboard'" />
-        <DocsView v-else-if="ui.view === 'docs'" />
-        <ApiKeysView v-else-if="ui.view === 'api-keys'" />
-        <PluginPageView v-else-if="ui.view === 'plugin-page'" />
-        <HostDetailView
-          v-else-if="ui.view === 'detail' && ui.selected?.table === 'plugin_docker_host'"
-        />
-        <ObjectDetailView
-          v-else-if="ui.view === 'detail' && DETAIL_TABLES.has(ui.selected?.table ?? '')"
-        />
-        <ContainerDetailView v-else-if="ui.view === 'detail'" />
-        <ResourceListView v-else />
+        <template v-if="ready">
+          <DashboardView v-if="ui.view === 'dashboard'" />
+          <DocsView v-else-if="ui.view === 'docs'" />
+          <ApiKeysView v-else-if="ui.view === 'api-keys'" />
+          <PluginPageView v-else-if="ui.view === 'plugin-page'" />
+          <HostDetailView
+            v-else-if="ui.view === 'detail' && ui.selected?.table === 'plugin_docker_host'"
+          />
+          <ObjectDetailView
+            v-else-if="ui.view === 'detail' && DETAIL_TABLES.has(ui.selected?.table ?? '')"
+          />
+          <ContainerDetailView v-else-if="ui.view === 'detail'" />
+          <ResourceListView v-else />
+        </template>
       </main>
     </div>
   </div>

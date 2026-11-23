@@ -50,6 +50,20 @@ export interface ColumnMeta {
    */
   readonly defaultFromOrigin?: boolean;
   /**
+   * Writable via the API but shown disabled in the generated UI create/edit form — the
+   * field is still sent to the server (e.g. prefilled by `formDefault`), just not editable
+   * by the user. Surfaced in the OpenAPI write schema as `x-form-readonly`. Example: a
+   * container's `operation`, locked to "create" on the Add Container form.
+   */
+  readonly formReadOnly?: boolean;
+  /**
+   * Prefill this field with a fixed value when creating, instead of leaving it blank.
+   * Surfaced in the OpenAPI write schema as `x-form-default`. The user can still change it
+   * unless the field is also `formReadOnly`. Example: a volume's `driver`, preselected to
+   * "local".
+   */
+  readonly formDefault?: string | number | boolean;
+  /**
    * For a json column holding an array of object-type strings (e.g. the webhook
    * `object_types` field), render it in the schema as a multi-select whose choices
    * are every object type currently in the registry.

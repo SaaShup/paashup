@@ -410,12 +410,13 @@ test('a disabled agent leaves its VM without keys and refuses additions', async 
   fileOf(B).disabled = false;
 });
 
-test('something else than an agent answering is ignored', async () => {
+test('something else than an agent answering is ignored, and not logged (no Docker host)', async () => {
   fileOf(B).keys = [makeKey('carol')];
   fileOf(B).notAgent = true;
   await sync();
   await new Promise((r) => setTimeout(r, 200));
   assert.equal((await deploymentsOf(vmB)).length, 0);
+  assert.deepEqual(await journalOf(vmB), []); // vm-b has no registered Docker host
   fileOf(B).notAgent = false;
 });
 

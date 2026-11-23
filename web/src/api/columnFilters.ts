@@ -9,6 +9,7 @@
 // filterable as a single exact value (and the server does not coerce booleans).
 import { api, type Obj } from './client.js';
 import { formFields, modelEndpoints } from './schema.js';
+import { fkOptionLabel } from '../format.js';
 
 export interface FilterOption {
   value: string;
@@ -60,7 +61,7 @@ async function compute(model: string, endpoint: string): Promise<FilterOptions> 
           out[f.name] = page.results
             .map((o) => ({
               value: String((o as { id: number }).id),
-              label: String((o as { display?: unknown }).display ?? (o as { id: number }).id),
+              label: fkOptionLabel(o as { id: number; display?: unknown; version?: unknown }),
             }))
             .sort((a, b) => a.label.localeCompare(b.label));
         } catch {

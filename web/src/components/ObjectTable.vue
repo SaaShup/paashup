@@ -31,6 +31,9 @@ const props = defineProps<{
   linkTo?: (row: Obj) => Route | null;
   /** Route of the extra-action link; when it returns null the button emits `action` instead. */
   actionTo?: (row: Obj) => Route | null;
+  /** Route for the "Used by" count (an image's/volume's dependent containers), filtered to
+   *  just those. Null (or no prop) renders the count as plain text. */
+  usedByTo?: (row: Obj) => Route | null;
   /** Long text columns (e.g. a journal entry's comments) shown clipped with a "show more"
    *  toggle instead of stretching the table or wrapping unreadably. */
   expandable?: string[];
@@ -56,8 +59,16 @@ function briefRoute(value: unknown): Route | null {
 }
 
 const idOf = (row: Obj): number => (row as { id: number }).id;
-// Rows that are added and removed but never edited (a VM's SSH key goes through its agent).
-const NO_EDIT_TABLES = new Set(['plugin_docker_vm_ssh_key']);
+// Rows that are added and removed but never edited: a VM's SSH key goes through its agent;
+// a Docker image's/network's/volume's editable fields (name/version/driver/host/registry)
+// are also the agent's matching key, so editing one here just orphans it at the next sync
+// instead of updating anything real.
+const NO_EDIT_TABLES = new Set([
+  'plugin_docker_vm_ssh_key',
+  'plugin_docker_image',
+  'plugin_docker_network',
+  'plugin_docker_volume',
+]);
 const canEdit = computed(() => props.editable && !NO_EDIT_TABLES.has(props.table ?? ''));
 const selectedSet = computed(() => new Set(props.selected ?? []));
 const allSelected = computed(
@@ -86,11 +97,17 @@ const columns = computed(() => {
   return [...front, ...rest].slice(0, 8);
 });
 
-/** The value of a column listed in CLIPPED_COLUMNS (an SSH key…) is cut with an ellipsis instead of
- *  stretching the table; a Copy button puts the full value on the clipboard. */
+/** The value of a column listed in CLIPPED_COLUMNS (an SSH key…) is cut with an ellipsis
+ *  instead of stretching the table; a Copy button puts the full value on the clipboard —
+ *  for an opaque string people copy rather than read. */
 const CLIPPED_COLUMNS = new Set(['public_key']);
 const isLong = (column: string, value: unknown): boolean =>
   CLIPPED_COLUMNS.has(column) && typeof value === 'string' && value.length > 48;
+
+/** Columns whose value wraps onto further lines instead of stretching the table or the
+ *  row's name link sideways — a Docker image digest (a sha256 hash) or a long name/tag. */
+const WRAP_COLUMNS = new Set(['Digest', 'display']);
+const isWrapped = (column: string): boolean => WRAP_COLUMNS.has(column);
 
 // Expandable columns (`expandable` prop): clipped by default, a "Show more" toggle reveals
 // the full text in place instead of stretching every row to the longest comment.
@@ -126,13 +143,22 @@ async function copyValue(value: unknown, key: string): Promise<void> {
   copiedTimer = setTimeout(() => (copied.value = ''), 1500);
 }
 
+/** The "Used by" column (an image's/volume's dependent containers): just the count — the
+ *  full container list can run into the hundreds and would be unreadable inline; the count
+ *  links to the containers list filtered to those (see `usedByTo`). */
+function usedByCount(value: unknown): string {
+  return Array.isArray(value) ? String(value.length) : '0';
+}
+
 /** A cell's text: a masked value for a secret field, else a friendlier label for known raw
  *  values, else with its unit when the column has one (memory, disk…), else as is. */
 const show = (row: Obj, column: string): string =>
-  maskSecret(column, row[column]) ??
-  valueLabel(props.table, column, row[column]) ??
-  formatUnit(props.table, column, row[column]) ??
-  cell(row[column]);
+  column === 'used_by'
+    ? usedByCount(row[column])
+    : (maskSecret(column, row[column]) ??
+      valueLabel(props.table, column, row[column]) ??
+      formatUnit(props.table, column, row[column]) ??
+      cell(row[column]));
 
 function cell(value: unknown): string {
   if (value === null || value === undefined) return '—';
@@ -198,12 +224,19 @@ function cell(value: unknown): string {
         <td
           v-for="c in columns"
           :key="c"
-          :class="{ long: isLong(c, row[c]) || isExpandableLong(c, row[c]) }"
+          :class="{ long: isLong(c, row[c]) || isExpandableLong(c, row[c]), wrap: isWrapped(c) }"
         >
           <RouteLink
             v-if="linkTo && (c === 'display' || c === 'id') && linkTo(row)"
             class="rowlink"
             :to="linkTo(row)!"
+          >
+            {{ show(row, c) }}
+          </RouteLink>
+          <RouteLink
+            v-else-if="c === 'used_by' && usedByTo && usedByTo(row)"
+            class="rowlink"
+            :to="usedByTo(row)!"
           >
             {{ show(row, c) }}
           </RouteLink>
@@ -241,15 +274,6 @@ function cell(value: unknown): string {
               {{ extraAction }}
             </button>
           </template>
-          <a
-            v-if="(row as any).url"
-            class="api"
-            :href="(row as any).url"
-            target="_blank"
-            rel="noopener"
-            title="Open this object's API endpoint"
-            >API</a
-          >
           <button v-if="canEdit" class="edit" title="Edit" @click="emit('edit', row)">✎</button>
           <button
             v-if="editable"
@@ -290,6 +314,11 @@ table {
 }
 td.long {
   max-width: 320px;
+}
+td.wrap {
+  max-width: 260px;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .clip {
   display: flex;
@@ -430,7 +459,6 @@ tbody tr.tone-row-ok:hover,
 tbody tr.tone-row-info:hover {
   filter: brightness(0.98);
 }
-.api,
 .extra {
   text-decoration: none;
   font-size: 0.72rem;
@@ -443,7 +471,6 @@ tbody tr.tone-row-info:hover {
   cursor: pointer;
   background: var(--bg);
 }
-.api:hover,
 .extra:hover {
   background: var(--surface-2);
 }

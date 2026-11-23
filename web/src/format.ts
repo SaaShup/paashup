@@ -36,6 +36,9 @@ const LABELS: Record<string, Record<string, string>> = {
   virtualization_virtual_machine: { disk: 'root disk' },
   // it's paashup's own public URL (used by the agent to reach back), not NetBox's
   plugin_docker_host: { netbox_base_url: 'paashup URL' },
+  plugin_docker_image: { used_by: 'Used by' },
+  plugin_docker_volume: { used_by: 'Used by' },
+  plugin_docker_network: { used_by: 'Used by' },
   extras_journalentry: {
     assigned_object_type: 'source',
     assigned_object: 'object',
@@ -109,6 +112,15 @@ export function formLabel(table: string | undefined, field: string): string {
 /** The header of a list column: the field name, or its special label (`disk` → "root disk"). */
 export const columnLabel = (table: string | undefined, field: string): string =>
   (table && LABELS[table]?.[field]) || field;
+
+/** An FK row's label: its display string, with a `:version` suffix when it has one (e.g. a
+ *  Docker image reads "nginx:alpine", not just "nginx") — used by both the FK picker in a
+ *  create/edit form and a column's header filter dropdown, so the two stay consistent and
+ *  same-named rows (different image versions, say) are told apart in either place. */
+export function fkOptionLabel(o: { id?: unknown; display?: unknown; version?: unknown }): string {
+  const d = String(o.display ?? o.id);
+  return o.version ? `${d}:${o.version}` : d;
+}
 
 /** A choice field as the API serializes it: `{ value, label }`. */
 export function choiceOf(value: unknown): { value: string; label: string } | null {

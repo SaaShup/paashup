@@ -13,6 +13,7 @@ import ObjectTable from '../components/ObjectTable.vue';
 import ObjectForm from '../components/ObjectForm.vue';
 import { confirmDialog } from '../composables/confirm.js';
 import { briefTarget } from './objectDetail.js';
+import { PREFERRED_COLUMNS, HIDDEN_COLUMNS } from '../listColumns.js';
 
 // The host's sub-resources, shown one categorised section each. Containers come first
 // (the primary thing operators look at), then images/volumes/networks; registries lead.
@@ -176,6 +177,24 @@ function containerTo(row: Obj): Route | null {
     ? { view: 'detail', table: containerResource.value.table, id: (row as { id: number }).id }
     : null;
 }
+/** The "Used by" count's route in the Images/Volumes sections — same filtering as the
+ *  top-level lists (see ResourceListView's `usedByTo`). */
+function usedByTo(categoryTable: string, row: Obj): Route | null {
+  const usedBy = (row as { used_by?: unknown[] }).used_by ?? [];
+  if (!Array.isArray(usedBy) || !usedBy.length) return null;
+  if (categoryTable === 'plugin_docker_image') {
+    return {
+      view: 'list',
+      table: CONTAINER_TABLE,
+      filters: { image: String((row as { id: number }).id) },
+    };
+  }
+  const ids = usedBy
+    .map((c) => (c as { id?: unknown }).id)
+    .filter((id): id is number => typeof id === 'number')
+    .map(String);
+  return ids.length ? { view: 'list', table: CONTAINER_TABLE, filters: { id__in: ids.join(',') } } : null;
+}
 
 // ---- container selection + bulk ops ----
 function toggleSel(p: { id: number; checked: boolean }) {
@@ -281,7 +300,10 @@ async function bulkOp(op: string) {
             :items="items[c.table] ?? []"
             :table="c.table"
             :editable="c.resource.writable"
+            :preferred="PREFERRED_COLUMNS[c.table]"
+            :hidden="HIDDEN_COLUMNS[c.table]"
             :link-to="c.table === CONTAINER_TABLE ? containerTo : undefined"
+            :used-by-to="(row) => usedByTo(c.table, row)"
             :selectable="c.table === CONTAINER_TABLE"
             :selected="selected"
             @edit="(row) => edit(c.resource, row)"

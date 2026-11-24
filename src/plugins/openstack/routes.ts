@@ -19,6 +19,7 @@
 //   POST   /servers/{vm_id}/reinstall/   rebuild the server from another image, { image_id }
 //   POST   /servers/{vm_id}/snapshot/    snapshot the server into a new image, { name }
 //   GET|PUT /servers/{vm_id}/metadata/   read / edit the metadata of the server behind a VM
+//   GET    /servers/{vm_id}/console/     a one-time noVNC console URL (the browser opens it directly)
 import type { Db } from '../../db/types.js';
 import type { PluginRoute } from '../../plugins/types.js';
 import { Repository } from '../../repository/repository.js';
@@ -40,6 +41,7 @@ import { isSyncing, purgeCloud, syncCloud } from './sync.js';
 import {
   addDataVolume,
   deleteVm,
+  getServerConsole,
   launchServer,
   listLinks,
   listVolumeLinks,
@@ -567,6 +569,19 @@ const detachCloudVolumeRoute: PluginRoute = {
   },
 };
 
+const getConsoleRoute: PluginRoute = {
+  method: 'GET',
+  path: `${OPENSTACK_API}/servers/{vm_id}/console/`,
+  handler: async ({ db, params }) => {
+    try {
+      return { status: 200, body: await getServerConsole(db, Number(params.vm_id)) };
+    } catch (e) {
+      if (e instanceof OpenStackError) return fail(e);
+      throw e;
+    }
+  },
+};
+
 const getMetadataRoute: PluginRoute = {
   method: 'GET',
   path: `${OPENSTACK_API}/servers/{vm_id}/metadata/`,
@@ -595,6 +610,7 @@ const putMetadataRoute: PluginRoute = {
 };
 
 export const cloudRoutes: PluginRoute[] = [
+  getConsoleRoute,
   getMetadataRoute,
   putMetadataRoute,
   addDataVolumeRoute,

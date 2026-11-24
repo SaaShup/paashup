@@ -26,6 +26,7 @@ import {
   getImageState,
   getServerMetadata,
   getServerState,
+  getVncConsole,
   getVolumeInfo,
   getVolumeState,
   rebootServer,
@@ -607,6 +608,15 @@ async function serverOfVm(db: Db, vmId: number): Promise<{ link: Link; cloud: Cl
   const cloud = await db.get<CloudRow>(`SELECT * FROM ${T.cloud} WHERE id = ?`, [link.cloud_id]);
   if (!cloud) throw new ApiError(404, 'The OpenStack cloud of this VM is gone.');
   return { link, cloud };
+}
+
+/** A one-time URL to the noVNC console of the server behind a VM. */
+export async function getServerConsole(
+  db: Db,
+  vmId: number,
+): Promise<{ type: string; url: string }> {
+  const { link, cloud } = await serverOfVm(db, vmId);
+  return getVncConsole(cloud, link.region, link.server_id);
 }
 
 /** The metadata column as an object: JSON text, or already parsed, or null when empty. */

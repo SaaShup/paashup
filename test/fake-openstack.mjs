@@ -35,6 +35,7 @@ export const region = (extra = {}) => ({
   failResize: null, // a message: a resized server ends in ERROR with this fault
   rebuildReads: 1, // how many times a rebuilding server is read as REBUILD before ACTIVE
   failRebuild: null, // a message: a rebuilt server ends in ERROR with this fault
+  noVncConsole: false, // os-getVNCConsole 400s "Unavailable console type" (e.g. OVH's serial console)
   down: false, // the whole compute API answers 500
   glanceDown: false,
   volumesDown: false,
@@ -248,6 +249,18 @@ export async function startFakeOpenStack() {
             found.status = 'ACTIVE';
             r.reverted = [...(r.reverted ?? []), found.id];
             return send(202, {});
+          }
+          if (body['os-getVNCConsole']) {
+            if (r.noVncConsole) {
+              return send(400, { badRequest: { message: 'Unavailable console type' } });
+            }
+            r.vncConsoled = [...(r.vncConsoled ?? []), found.id];
+            return send(200, {
+              console: {
+                type: 'novnc',
+                url: `https://novnc.example/vnc_auto.html?token=${found.id}-tok`,
+              },
+            });
           }
           return send(400, { badRequest: { message: 'unsupported action' } });
         }

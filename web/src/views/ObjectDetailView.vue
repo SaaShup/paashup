@@ -12,6 +12,7 @@ import { fieldLabel, formatUnit, maskSecret, pillFor } from '../format.js';
 import StatusPill from '../components/StatusPill.vue';
 import KeyValueEditor from '../components/KeyValueEditor.vue';
 import SshKeyDeployments from '../components/SshKeyDeployments.vue';
+import OpenStackConsole from '../components/OpenStackConsole.vue';
 import { fromPairs, toPairs, type Pair } from '../keyValue.js';
 import { useConnectionStore } from '../stores/connection.js';
 import { isValidDefault, setDefault } from '../initScript.js';
@@ -49,6 +50,10 @@ const rebootMenuEl = ref<HTMLElement | null>(null);
 // Set from a transient `_rebooting` hint on the live feed (never persisted): shown on the
 // VM's status pill while OpenStack is still rebooting it.
 const statusRebooting = ref(false);
+
+// ---- tab: Details (properties + collections) / Console, shown only for an OpenStack VM ----
+type DetailTab = 'details' | 'console';
+const tab = ref<DetailTab>('details');
 
 const resizing = ref(false);
 const resizeModalOpen = ref(false);
@@ -124,7 +129,10 @@ async function load(quiet = false): Promise<void> {
   error.value = '';
   try {
     obj.value = await api.retrieve<Obj>(r.endpoint, id);
-    if (!quiet) vmServer.value = null;
+    if (!quiet) {
+      vmServer.value = null;
+      tab.value = 'details';
+    }
     await loadVmServer(r.table, id);
     if (!quiet) {
       lists.value = {};
@@ -767,7 +775,29 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
     <p v-if="notice" class="muted">{{ notice }}</p>
     <p v-if="loading" class="muted">Loading…</p>
 
+    <nav v-if="vmServer && obj && !loading" class="tabs" role="tablist">
+      <button
+        role="tab"
+        class="tab"
+        :class="{ active: tab === 'details' }"
+        :aria-selected="tab === 'details'"
+        @click="tab = 'details'"
+      >
+        Details
+      </button>
+      <button
+        role="tab"
+        class="tab"
+        :class="{ active: tab === 'console' }"
+        :aria-selected="tab === 'console'"
+        @click="tab = 'console'"
+      >
+        Recovery
+      </button>
+    </nav>
+
     <template v-if="obj && !loading">
+      <div v-show="tab === 'details'">
       <section class="card props">
         <div v-for="f in fields" :key="f.key" class="prop">
           <span class="k">{{ f.label }}</span>
@@ -1022,6 +1052,8 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
           />
         </div>
       </section>
+      </div>
+      <OpenStackConsole v-if="vmServer" v-show="tab === 'console'" :vm-id="ui.detailId" :active="tab === 'console'" />
     </template>
 
     <ObjectForm
@@ -1191,6 +1223,7 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
         </div>
       </div>
     </Teleport>
+
   </div>
 </template>
 
@@ -1217,6 +1250,31 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
 }
 .ok {
   color: var(--ok);
+}
+/* tabs */
+.tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+.tab {
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.tab:hover {
+  color: var(--text);
+}
+.tab.active {
+  color: var(--primary-d);
+  border-bottom-color: var(--primary);
+  font-weight: 600;
 }
 .props {
   display: grid;

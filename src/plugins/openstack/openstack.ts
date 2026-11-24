@@ -648,6 +648,35 @@ export async function rebootServer(
 }
 
 /**
+ * Ask Nova for a one-time URL to the server's noVNC console: a self-contained HTML page
+ * (served by nova-novncproxy, embedding its own noVNC client) with a short-lived token baked
+ * in, meant to be opened directly or embedded in an iframe — same URL Horizon's own "Instance
+ * Console" tab uses. (Most providers, including OVH, only enable the VNC console, not the
+ * serial one: `os-getSerialConsole` 400s with "Unavailable console type" there.)
+ */
+export async function getVncConsole(
+  c: CloudConfig,
+  region: string,
+  id: string,
+): Promise<{ type: string; url: string }> {
+  const body = await send(
+    c,
+    region,
+    'compute',
+    'POST',
+    `/servers/${encodeURIComponent(id)}/action`,
+    {
+      'os-getVNCConsole': { type: 'novnc' },
+    },
+  );
+  const console = body.console as { type?: unknown; url?: unknown } | undefined;
+  if (!console?.url || typeof console.url !== 'string') {
+    throw new OpenStackError('OpenStack did not return a console URL');
+  }
+  return { type: typeof console.type === 'string' ? console.type : 'novnc', url: console.url };
+}
+
+/**
  * Rename a server on OpenStack. This only changes the Nova display name (what
  * `openstack server list` shows) — it never touches the guest OS's own hostname.
  */

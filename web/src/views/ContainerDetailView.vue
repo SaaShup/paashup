@@ -394,6 +394,7 @@ async function onSaved() {
         :ws-path="actionPath('ws')"
         :container-id="containerId"
         :active="tab === 'terminal'"
+        :command-options="['sh', 'bash', 'ash']"
       />
     </template>
 

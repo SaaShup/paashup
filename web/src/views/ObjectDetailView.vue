@@ -13,6 +13,7 @@ import StatusPill from '../components/StatusPill.vue';
 import KeyValueEditor from '../components/KeyValueEditor.vue';
 import SshKeyDeployments from '../components/SshKeyDeployments.vue';
 import OpenStackConsole from '../components/OpenStackConsole.vue';
+import ContainerTerminal from '../components/ContainerTerminal.vue';
 import { fromPairs, toPairs, type Pair } from '../keyValue.js';
 import { useConnectionStore } from '../stores/connection.js';
 import { isValidDefault, setDefault } from '../initScript.js';
@@ -51,9 +52,16 @@ const rebootMenuEl = ref<HTMLElement | null>(null);
 // VM's status pill while OpenStack is still rebooting it.
 const statusRebooting = ref(false);
 
-// ---- tab: Details (properties + collections) / Console, shown only for an OpenStack VM ----
-type DetailTab = 'details' | 'console';
+// ---- tab: Details (properties + collections) / Console / SSH, shown only for an OpenStack VM ----
+type DetailTab = 'details' | 'console' | 'ssh';
 const tab = ref<DetailTab>('details');
+// Gates the SSH terminal's "connect" button; the VM needs a primary IP to be reachable.
+// paashup's own SSH key (serviceAccount.ts) still needs to be deployed to it for a session
+// to actually authenticate — a plain connection failure otherwise. The login account itself
+// isn't asked here: the backend resolves it from what the agent reported managing.
+const vmAddress = computed(
+  () => (obj.value?.primary_ip4 ?? obj.value?.primary_ip6 ?? null) as unknown as string | null,
+);
 
 const resizing = ref(false);
 const resizeModalOpen = ref(false);
@@ -775,7 +783,11 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
     <p v-if="notice" class="muted">{{ notice }}</p>
     <p v-if="loading" class="muted">Loading…</p>
 
-    <nav v-if="vmServer && obj && !loading" class="tabs" role="tablist">
+    <nav
+      v-if="(vmServer || resource?.table === 'virtualization_virtual_machine') && obj && !loading"
+      class="tabs"
+      role="tablist"
+    >
       <button
         role="tab"
         class="tab"
@@ -786,6 +798,7 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
         Details
       </button>
       <button
+        v-if="vmServer"
         role="tab"
         class="tab"
         :class="{ active: tab === 'console' }"
@@ -794,266 +807,290 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
       >
         Recovery
       </button>
+      <button
+        v-if="resource?.table === 'virtualization_virtual_machine'"
+        role="tab"
+        class="tab"
+        :class="{ active: tab === 'ssh' }"
+        :aria-selected="tab === 'ssh'"
+        @click="tab = 'ssh'"
+      >
+        SSH
+      </button>
     </nav>
 
     <template v-if="obj && !loading">
       <div v-show="tab === 'details'">
-      <section class="card props">
-        <div v-for="f in fields" :key="f.key" class="prop">
-          <span class="k">{{ f.label }}</span>
-          <span class="v">
-            <StatusPill
-              v-if="f.key === 'status' && vmServer && statusRebooting"
-              label="Rebooting…"
-              tone="warn"
-              busy
-            />
-            <StatusPill
-              v-else-if="f.key === 'status' && vmServer && statusResizing"
-              label="Resizing…"
-              tone="warn"
-              busy
-            />
-            <StatusPill
-              v-else-if="f.key === 'status' && vmServer && statusReinstalling"
-              label="Reinstalling…"
-              tone="warn"
-              busy
-            />
-            <StatusPill
-              v-else-if="f.key === 'status' && vmServer && statusSnapshotting"
-              label="Snapshotting…"
-              tone="warn"
-              busy
-            />
-            <StatusPill v-else-if="f.pill" v-bind="f.pill" />
-            <RouteLink v-else-if="f.to" class="rowlink" :to="f.to">{{ f.text }}</RouteLink>
-            <template v-else>{{ f.text }}</template>
-          </span>
-        </div>
-      </section>
+        <section class="card props">
+          <div v-for="f in fields" :key="f.key" class="prop">
+            <span class="k">{{ f.label }}</span>
+            <span class="v">
+              <StatusPill
+                v-if="f.key === 'status' && vmServer && statusRebooting"
+                label="Rebooting…"
+                tone="warn"
+                busy
+              />
+              <StatusPill
+                v-else-if="f.key === 'status' && vmServer && statusResizing"
+                label="Resizing…"
+                tone="warn"
+                busy
+              />
+              <StatusPill
+                v-else-if="f.key === 'status' && vmServer && statusReinstalling"
+                label="Reinstalling…"
+                tone="warn"
+                busy
+              />
+              <StatusPill
+                v-else-if="f.key === 'status' && vmServer && statusSnapshotting"
+                label="Snapshotting…"
+                tone="warn"
+                busy
+              />
+              <StatusPill v-else-if="f.pill" v-bind="f.pill" />
+              <RouteLink v-else-if="f.to" class="rowlink" :to="f.to">{{ f.text }}</RouteLink>
+              <template v-else>{{ f.text }}</template>
+            </span>
+          </div>
+        </section>
 
-      <section v-if="vmServer" class="card cat">
-        <div class="cat-head">
-          <h3>
-            Metadata <span class="n">{{ metaRows.length }}</span>
-          </h3>
-          <span class="spacer" />
-          <template v-if="resource.writable">
-            <button class="btn btn-ghost sm" @click="metaRows.push({ key: '', value: '' })">
-              + Add
-            </button>
-            <button
-              class="btn btn-ok sm"
-              :disabled="!metaDirty || savingMeta"
-              @click="saveMetadata"
-            >
-              {{ savingMeta ? 'Saving…' : 'Save' }}
-            </button>
-            <button
-              class="btn btn-ghost sm"
-              :disabled="!metaDirty || savingMeta"
-              @click="discardMetadata"
-            >
-              Discard
-            </button>
-          </template>
-        </div>
-        <p v-if="metaError" class="error">{{ metaError }}</p>
-        <KeyValueEditor v-if="resource.writable" v-model="metaRows" no-add />
-        <table v-else-if="metaRows.length" class="meta-ro">
-          <tr v-for="p in metaRows" :key="p.key">
-            <td>
-              <code>{{ p.key }}</code>
-            </td>
-            <td>{{ p.value }}</td>
-          </tr>
-        </table>
-      </section>
-
-      <section v-if="config?.script" class="term">
-        <div class="term-bar">
-          <span class="dot r" /><span class="dot y" /><span class="dot g" />
-          <span class="term-title">{{ title }}</span>
-          <span class="term-meta">
-            {{ (termEditing ? termDraft : scriptText).split('\n').length }} lines
-          </span>
-          <template v-if="resource.writable">
-            <button v-if="!termEditing" class="term-btn" @click="editText">Edit</button>
-            <template v-else>
-              <button class="term-btn" :disabled="savingText" @click="termEditing = false">
-                Cancel
+        <section v-if="vmServer" class="card cat">
+          <div class="cat-head">
+            <h3>
+              Metadata <span class="n">{{ metaRows.length }}</span>
+            </h3>
+            <span class="spacer" />
+            <template v-if="resource.writable">
+              <button class="btn btn-ghost sm" @click="metaRows.push({ key: '', value: '' })">
+                + Add
               </button>
-              <button class="term-btn primary" :disabled="savingText" @click="saveText">
-                {{ savingText ? 'Saving…' : 'Save' }}
+              <button
+                class="btn btn-ok sm"
+                :disabled="!metaDirty || savingMeta"
+                @click="saveMetadata"
+              >
+                {{ savingMeta ? 'Saving…' : 'Save' }}
+              </button>
+              <button
+                class="btn btn-ghost sm"
+                :disabled="!metaDirty || savingMeta"
+                @click="discardMetadata"
+              >
+                Discard
               </button>
             </template>
-          </template>
-        </div>
-        <textarea
-          v-if="termEditing"
-          v-model="termDraft"
-          class="term-body term-edit"
-          spellcheck="false"
-          :rows="Math.max(termDraft.replace(/\n$/, '').split('\n').length, 1)"
-          wrap="off"
-        />
-        <pre v-else class="term-body">{{ scriptText }}</pre>
-      </section>
-
-      <section v-if="config?.script" class="card cat">
-        <div class="cat-head">
-          <h3>
-            Variables <span class="n">{{ scriptVars.length }}</span>
-          </h3>
-        </div>
-        <p v-if="!scriptVars.length" class="muted empty">
-          No variable: the script is sent as it is.
-        </p>
-        <div v-else class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>name</th>
-                <th>default value</th>
-                <th>first in the VM form</th>
-                <th>secret</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="v in scriptVars" :key="v.name">
-                <td>
-                  <code>{{ v.name }}</code>
-                </td>
-                <td>
-                  <input
-                    v-if="draft[v.name]"
-                    v-model="draft[v.name]!.default"
-                    class="var-input"
-                    :disabled="!resource.writable"
-                    spellcheck="false"
-                  />
-                </td>
-                <td>
-                  <input
-                    v-if="draft[v.name]"
-                    v-model="draft[v.name]!.featured"
-                    type="checkbox"
-                    :disabled="!resource.writable"
-                  />
-                </td>
-                <td>
-                  <input
-                    v-if="draft[v.name]"
-                    v-model="draft[v.name]!.secret"
-                    type="checkbox"
-                    :disabled="!resource.writable"
-                  />
-                </td>
-              </tr>
-            </tbody>
+          </div>
+          <p v-if="metaError" class="error">{{ metaError }}</p>
+          <KeyValueEditor v-if="resource.writable" v-model="metaRows" no-add />
+          <table v-else-if="metaRows.length" class="meta-ro">
+            <tr v-for="p in metaRows" :key="p.key">
+              <td>
+                <code>{{ p.key }}</code>
+              </td>
+              <td>{{ p.value }}</td>
+            </tr>
           </table>
-        </div>
-        <p v-if="badDefault" class="error">
-          The default of {{ badDefault.name }} has unbalanced braces.
-        </p>
-        <div v-if="resource.writable && scriptVars.length" class="var-actions">
-          <button class="btn btn-ghost" :disabled="!varsDirty || savingVars" @click="resetVars">
-            Reset
-          </button>
-          <button
-            class="btn"
-            :disabled="!varsDirty || savingVars || !!badDefault"
-            @click="saveVars"
-          >
-            {{ savingVars ? 'Saving…' : 'Save' }}
-          </button>
-        </div>
-      </section>
+        </section>
 
-      <section v-if="config?.regionStatus" class="card cat">
-        <div class="cat-head">
-          <h3>
-            Regions <span class="n">{{ regionStatus.length }}</span>
-          </h3>
-        </div>
-        <p v-if="!regionStatus.length" class="muted">No region synchronised yet</p>
-        <div v-else class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>region</th>
-                <th>cluster</th>
-                <th>VMs</th>
-                <th>last synced</th>
-                <th>status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="r in regionStatus" :key="String(r.name)">
-                <td>{{ r.name }}</td>
-                <td>
-                  <RouteLink v-if="clusterTo(r)" class="rowlink" :to="clusterTo(r)!">
-                    {{ r.cluster }}
-                  </RouteLink>
-                  <template v-else>{{ r.cluster ?? '—' }}</template>
-                </td>
-                <td>{{ r.servers }}</td>
-                <td>{{ when(r.last_synced) }}</td>
-                <td>
-                  <span v-if="r.error" class="error" :title="String(r.error)">
-                    ✗ {{ r.error }}
-                  </span>
-                  <span v-else class="ok">✓ OK</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- an SSH key of the catalog: the VMs it is on, deployed / removed through their agent -->
-      <SshKeyDeployments
-        v-if="resource.table === 'virtualization_ssh_key' && ui.detailId != null"
-        :ssh-key-id="ui.detailId"
-      />
-      <!-- a VM: its SSH keys, added / removed through its agent -->
-      <SshKeyDeployments
-        v-if="resource.table === 'virtualization_virtual_machine' && ui.detailId != null"
-        :vm-id="ui.detailId"
-      />
-
-      <section v-for="s in sections" :key="s.title" class="cat card">
-        <div class="cat-head">
-          <h3>
-            {{ s.title }}
-            <span class="n">{{ (lists[s.title] ?? []).length }}</span>
-          </h3>
-        </div>
-        <p v-if="!(lists[s.title] ?? []).length" class="muted empty">{{ s.empty }}</p>
-        <div v-else class="table-wrap">
-          <ObjectTable
-            :items="lists[s.title] ?? []"
-            :table="s.table"
-            :link-to="linkTo(s.table)"
-            :preferred="
-              s.table === 'virtualization_virtual_machine'
-                ? [
-                    'status',
-                    'cluster',
-                    'virtual_machine_type',
-                    'image',
-                    'primary_ip4',
-                    'vcpus',
-                    'memory',
-                  ]
-                : undefined
-            "
+        <section v-if="config?.script" class="term">
+          <div class="term-bar">
+            <span class="dot r" /><span class="dot y" /><span class="dot g" />
+            <span class="term-title">{{ title }}</span>
+            <span class="term-meta">
+              {{ (termEditing ? termDraft : scriptText).split('\n').length }} lines
+            </span>
+            <template v-if="resource.writable">
+              <button v-if="!termEditing" class="term-btn" @click="editText">Edit</button>
+              <template v-else>
+                <button class="term-btn" :disabled="savingText" @click="termEditing = false">
+                  Cancel
+                </button>
+                <button class="term-btn primary" :disabled="savingText" @click="saveText">
+                  {{ savingText ? 'Saving…' : 'Save' }}
+                </button>
+              </template>
+            </template>
+          </div>
+          <textarea
+            v-if="termEditing"
+            v-model="termDraft"
+            class="term-body term-edit"
+            spellcheck="false"
+            :rows="Math.max(termDraft.replace(/\n$/, '').split('\n').length, 1)"
+            wrap="off"
           />
-        </div>
-      </section>
+          <pre v-else class="term-body">{{ scriptText }}</pre>
+        </section>
+
+        <section v-if="config?.script" class="card cat">
+          <div class="cat-head">
+            <h3>
+              Variables <span class="n">{{ scriptVars.length }}</span>
+            </h3>
+          </div>
+          <p v-if="!scriptVars.length" class="muted empty">
+            No variable: the script is sent as it is.
+          </p>
+          <div v-else class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>name</th>
+                  <th>default value</th>
+                  <th>first in the VM form</th>
+                  <th>secret</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="v in scriptVars" :key="v.name">
+                  <td>
+                    <code>{{ v.name }}</code>
+                  </td>
+                  <td>
+                    <input
+                      v-if="draft[v.name]"
+                      v-model="draft[v.name]!.default"
+                      class="var-input"
+                      :disabled="!resource.writable"
+                      spellcheck="false"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      v-if="draft[v.name]"
+                      v-model="draft[v.name]!.featured"
+                      type="checkbox"
+                      :disabled="!resource.writable"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      v-if="draft[v.name]"
+                      v-model="draft[v.name]!.secret"
+                      type="checkbox"
+                      :disabled="!resource.writable"
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-if="badDefault" class="error">
+            The default of {{ badDefault.name }} has unbalanced braces.
+          </p>
+          <div v-if="resource.writable && scriptVars.length" class="var-actions">
+            <button class="btn btn-ghost" :disabled="!varsDirty || savingVars" @click="resetVars">
+              Reset
+            </button>
+            <button
+              class="btn"
+              :disabled="!varsDirty || savingVars || !!badDefault"
+              @click="saveVars"
+            >
+              {{ savingVars ? 'Saving…' : 'Save' }}
+            </button>
+          </div>
+        </section>
+
+        <section v-if="config?.regionStatus" class="card cat">
+          <div class="cat-head">
+            <h3>
+              Regions <span class="n">{{ regionStatus.length }}</span>
+            </h3>
+          </div>
+          <p v-if="!regionStatus.length" class="muted">No region synchronised yet</p>
+          <div v-else class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>region</th>
+                  <th>cluster</th>
+                  <th>VMs</th>
+                  <th>last synced</th>
+                  <th>status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in regionStatus" :key="String(r.name)">
+                  <td>{{ r.name }}</td>
+                  <td>
+                    <RouteLink v-if="clusterTo(r)" class="rowlink" :to="clusterTo(r)!">
+                      {{ r.cluster }}
+                    </RouteLink>
+                    <template v-else>{{ r.cluster ?? '—' }}</template>
+                  </td>
+                  <td>{{ r.servers }}</td>
+                  <td>{{ when(r.last_synced) }}</td>
+                  <td>
+                    <span v-if="r.error" class="error" :title="String(r.error)">
+                      ✗ {{ r.error }}
+                    </span>
+                    <span v-else class="ok">✓ OK</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- an SSH key of the catalog: the VMs it is on, deployed / removed through their agent -->
+        <SshKeyDeployments
+          v-if="resource.table === 'virtualization_ssh_key' && ui.detailId != null"
+          :ssh-key-id="ui.detailId"
+        />
+        <!-- a VM: its SSH keys, added / removed through its agent -->
+        <SshKeyDeployments
+          v-if="resource.table === 'virtualization_virtual_machine' && ui.detailId != null"
+          :vm-id="ui.detailId"
+        />
+
+        <section v-for="s in sections" :key="s.title" class="cat card">
+          <div class="cat-head">
+            <h3>
+              {{ s.title }}
+              <span class="n">{{ (lists[s.title] ?? []).length }}</span>
+            </h3>
+          </div>
+          <p v-if="!(lists[s.title] ?? []).length" class="muted empty">{{ s.empty }}</p>
+          <div v-else class="table-wrap">
+            <ObjectTable
+              :items="lists[s.title] ?? []"
+              :table="s.table"
+              :link-to="linkTo(s.table)"
+              :preferred="
+                s.table === 'virtualization_virtual_machine'
+                  ? [
+                      'status',
+                      'cluster',
+                      'virtual_machine_type',
+                      'image',
+                      'primary_ip4',
+                      'vcpus',
+                      'memory',
+                    ]
+                  : undefined
+              "
+            />
+          </div>
+        </section>
       </div>
-      <OpenStackConsole v-if="vmServer" v-show="tab === 'console'" :vm-id="ui.detailId" :active="tab === 'console'" />
+      <OpenStackConsole
+        v-if="vmServer"
+        v-show="tab === 'console'"
+        :vm-id="ui.detailId"
+        :active="tab === 'console'"
+      />
+      <ContainerTerminal
+        v-if="resource?.table === 'virtualization_virtual_machine'"
+        v-show="tab === 'ssh'"
+        :ws-path="`/api/plugins/docker/virtual-machines/${ui.detailId}/ssh/`"
+        :container-id="vmAddress"
+        :active="tab === 'ssh'"
+        default-command=""
+        empty-message="No primary IP set on this VM — the SSH terminal is unavailable."
+      />
     </template>
 
     <ObjectForm
@@ -1223,7 +1260,6 @@ const when = (v: unknown): string => (v ? new Date(String(v)).toLocaleString() :
         </div>
       </div>
     </Teleport>
-
   </div>
 </template>
 

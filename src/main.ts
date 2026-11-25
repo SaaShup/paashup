@@ -10,6 +10,7 @@ import { loadPlugins, loadedPlugins } from './plugins/runtime.js';
 import { discoverPluginSpecifiers } from './plugins/discovery.js';
 import { ensureWebhooks } from './webhooks.js';
 import { ensureSeedToken } from './auth.js';
+import { ensureServiceAccountKey } from './serviceAccount.js';
 import { refreshServiceLinkIcons } from './service-links.js';
 import { closeRealtime } from './realtime.js';
 import type { Plugin } from './plugins/types.js';
@@ -84,6 +85,15 @@ try {
   console.warn(
     `PB_SEED_TOKEN: could not seed token — have migrations run? ${(e as Error).message}`,
   );
+}
+
+// paashup's own SSH identity (idempotent), used to open the in-browser VM terminal once its
+// public half is deployed to a VM. Requires PB_ENCRYPTION_KEY to store the private half.
+try {
+  const key = await ensureServiceAccountKey(db);
+  if (key.created) console.log('generated the paashup SSH service-account key');
+} catch (e) {
+  console.warn(`SSH service-account key: could not ensure it exists — ${(e as Error).message}`);
 }
 
 // Best-effort: resolve favicons for any pinned service link missing one. Never

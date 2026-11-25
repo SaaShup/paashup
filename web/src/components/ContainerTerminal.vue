@@ -12,14 +12,28 @@ import {
   toggleFullscreen,
 } from '../xterm.js';
 
-const props = defineProps<{
-  /** paashup WebSocket path, e.g. /api/plugins/docker/containers/1/ws/ (null → no container). */
-  wsPath: string | null;
-  /** Docker ContainerID; null until the agent has created the container. */
-  containerId: string | null;
-  /** Whether the panel is currently shown (drives lazy connect + refit). */
-  active: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    /** paashup WebSocket path, e.g. /api/plugins/docker/containers/1/ws/ (null → no container). */
+    wsPath: string | null;
+    /** Docker ContainerID (or any truthy "ready to connect" marker, e.g. a VM's IP); null when
+     *  there's nothing to connect to yet. */
+    containerId: string | null;
+    /** Whether the panel is currently shown (drives lazy connect + refit). */
+    active: boolean;
+    /** Shown instead of the pane while `containerId` is null. */
+    emptyMessage?: string;
+    /** Initial value of the command sent; a blank value sends no `command` param at all
+     *  (the backend then decides what "no command" means — e.g. a real interactive shell
+     *  over SSH, vs. a container's own "sh" fallback). */
+    defaultCommand?: string;
+    /** The process to exec in a container varies by image (sh-only, no bash, distroless…),
+     *  so Docker gets a picker of likely candidates; omitted entirely for SSH, which always
+     *  opens the account's own login shell — there's nothing to pick. */
+    commandOptions?: string[];
+  }>(),
+  { defaultCommand: 'sh' },
+);
 
 const MSG = {
   stdin: 0,
@@ -38,7 +52,7 @@ type Status = 'idle' | 'connecting' | 'open' | 'closed';
 
 const root = ref<HTMLElement | null>(null);
 const pane = ref<HTMLElement | null>(null);
-const shell = ref('sh');
+const shell = ref(props.defaultCommand);
 const status = ref<Status>('idle');
 const notice = ref(''); // why the session ended, shown under the pane
 const fullscreen = ref(false);
@@ -72,7 +86,8 @@ function wsUrl(): string {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const u = new URL(`${proto}://${location.host}${BASE}${props.wsPath}`);
   u.searchParams.set('tty', 'true');
-  u.searchParams.set('command', shell.value.trim() || 'sh');
+  const cmd = shell.value.trim();
+  if (cmd) u.searchParams.set('command', cmd);
   return withCredential(u.toString());
 }
 
@@ -229,16 +244,11 @@ onUnmounted(() => {
       Terminal
       <span v-if="statusText" class="status" :class="status">{{ statusText }}</span>
       <span class="spacer" />
-      <label class="shell">
+      <label v-if="commandOptions?.length" class="shell">
         <span>Shell</span>
-        <input
-          v-model="shell"
-          type="text"
-          class="shell-input"
-          spellcheck="false"
-          :disabled="status === 'connecting'"
-          @keydown.enter="connect"
-        />
+        <select v-model="shell" class="shell-input" :disabled="status === 'connecting'">
+          <option v-for="opt in commandOptions" :key="opt" :value="opt">{{ opt }}</option>
+        </select>
       </label>
       <button
         class="btn btn-ghost sm"
@@ -257,7 +267,7 @@ onUnmounted(() => {
       </button>
     </h4>
     <p v-if="!containerId" class="empty">
-      Not created on the host yet (no container ID) — the terminal is unavailable.
+      {{ emptyMessage ?? 'Not created on the host yet (no container ID) — the terminal is unavailable.' }}
     </p>
     <p v-else-if="xtermMissing" class="error">
       The terminal library (xterm.js) could not be loaded from the CDN.

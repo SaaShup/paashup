@@ -328,21 +328,36 @@ describe('ContainerTerminal', () => {
     expect(button().text()).toBe('Reconnect');
   });
 
-  it('the shell field is editable once connected, and used on the next connect', async () => {
-    const w = mount(ContainerTerminal, { props: props() });
+  it('the shell picker is editable once connected, and used on the next connect', async () => {
+    const w = mount(ContainerTerminal, {
+      props: { ...props(), commandOptions: ['sh', 'bash', 'ash'] },
+    });
     await flushPromises();
     FakeSocket.instances[0]!.open();
     await flushPromises();
 
-    const shellInput = w.find('.shell-input');
-    expect(shellInput.attributes('disabled')).toBeUndefined(); // not locked while open
+    const shellSelect = w.find('.shell-input');
+    expect(shellSelect.attributes('disabled')).toBeUndefined(); // not locked while open
 
-    await shellInput.setValue('bash');
+    await shellSelect.setValue('bash');
     await w.findAll('button').find((b) => b.text() === 'Restart')!.trigger('click');
     await flushPromises();
 
     const url = new URL(FakeSocket.instances[1]!.url);
     expect(url.searchParams.get('command')).toBe('bash');
+  });
+
+  it('omits the shell picker entirely when no commandOptions are given (e.g. a VM SSH terminal)', async () => {
+    const w = mount(ContainerTerminal, { props: props() });
+    await flushPromises();
+    expect(w.find('.shell-input').exists()).toBe(false);
+  });
+
+  it('a blank defaultCommand sends no `command` param at all', async () => {
+    mount(ContainerTerminal, { props: { ...props(), defaultCommand: '' } });
+    await flushPromises();
+    const url = new URL(FakeSocket.instances[0]!.url);
+    expect(url.searchParams.has('command')).toBe(false);
   });
 
   it('disconnects the socket and disposes the terminal on unmount', async () => {

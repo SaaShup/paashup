@@ -24,6 +24,7 @@ import { imageWriteRoutes } from './routes/images.js';
 import { hostWriteRoutes } from './routes/hosts.js';
 import { actionRoutes } from './routes/actions.js';
 import { terminalWebSockets } from './routes/terminal.js';
+import { sshTerminalWebSockets } from './routes/ssh-terminal.js';
 import { serializeCatalogKey, sshKeyRoutes } from './sshkeys.js';
 import { hooks } from './hooks.js';
 import { DOCKER_WEBHOOKS } from './webhooks.js';
@@ -87,8 +88,9 @@ const dockerPlugin: Plugin = {
     // VM SSH keys: added/removed through the agent, the stored copy re-read after.
     ...sshKeyRoutes,
   ],
-  // Interactive container terminal: browser ⇄ paashup ⇄ agent exec stream.
-  websockets: terminalWebSockets,
+  // Interactive container terminal (browser ⇄ paashup ⇄ agent exec stream) and VM SSH
+  // terminal (browser ⇄ paashup ⇄ ssh2 ⇄ VM, with paashup's own service-account key).
+  websockets: [...terminalWebSockets, ...sshTerminalWebSockets],
   hooks,
   // Default agent-integration webhooks, created at startup if missing.
   seedWebhooks: DOCKER_WEBHOOKS,

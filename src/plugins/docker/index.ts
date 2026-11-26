@@ -17,6 +17,7 @@ import {
   HOST_CA_PIN_MIGRATION,
   VOLUME_MAX_SIZE_DEFAULT_MIGRATION,
   VOLUME_STATE_MIGRATION,
+  NETWORK_SUBNET_MIGRATION,
 } from './migrations.js';
 import { readRoutes } from './routes/crud.js';
 import { containerWriteRoutes } from './routes/containers.js';
@@ -68,6 +69,7 @@ const dockerPlugin: Plugin = {
     HOST_CA_PIN_MIGRATION,
     VOLUME_MAX_SIZE_DEFAULT_MIGRATION,
     VOLUME_STATE_MIGRATION,
+    NETWORK_SUBNET_MIGRATION,
   ],
   routes: [
     // GET list/detail overrides that embed the source's nested arrays.

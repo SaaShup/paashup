@@ -86,6 +86,7 @@ test('plugin loads and registers its migration once', async () => {
       'plugin:docker:0006_host_ca_pin',
       'plugin:docker:0007_volume_max_size_default',
       'plugin:docker:0008_volume_state',
+      'plugin:docker:0009_network_subnet',
     ],
   );
 });
@@ -617,6 +618,35 @@ test('Network driver accepts "none"', async () => {
   assert.ok(bad.body.driver);
 });
 
+test('Network subnet round-trips, defaults to null, and is embedded in a container network brief', async () => {
+  const withSubnet = await api('POST', '/api/plugins/docker/networks/', {
+    host: ids.host,
+    name: 'subnetted',
+    driver: 'bridge',
+    subnet: '172.30.0.0/16',
+  });
+  assert.equal(withSubnet.status, 201, JSON.stringify(withSubnet.body));
+  assert.equal(withSubnet.body.subnet, '172.30.0.0/16');
+  const got = await api('GET', `/api/plugins/docker/networks/${withSubnet.body.id}/`);
+  assert.equal(got.body.subnet, '172.30.0.0/16'); // persisted, not just echoed
+
+  const noSubnet = await api('POST', '/api/plugins/docker/networks/', {
+    host: ids.host,
+    name: 'no-subnet',
+  });
+  assert.equal(noSubnet.status, 201, JSON.stringify(noSubnet.body));
+  assert.equal(noSubnet.body.subnet, null); // never required — host/none networks have none
+
+  const c = await api('POST', '/api/plugins/docker/containers/', {
+    host: ids.host,
+    image: ids.image,
+    name: 'subnet-net-container',
+    network_settings: [{ network: withSubnet.body.id }],
+  });
+  assert.equal(c.status, 201, JSON.stringify(c.body));
+  assert.equal(c.body.network_settings[0].network.subnet, '172.30.0.0/16');
+});
+
 test('Container network brief has driver as a bare string, as the agent checks it for host mode', async () => {
   const net = await api('POST', '/api/plugins/docker/networks/', {
     host: ids.host,
@@ -728,6 +758,14 @@ test('docker resources appear in the OpenAPI schema', async () => {
     const names = schema.body.paths[ep].get.parameters.map((p) => p.name);
     for (const w of want) assert.ok(names.includes(w), `${ep} missing filter param ${w}`);
   }
+  // a network's driver is only ever creatable as "bridge" (Docker refuses to create a
+  // second "host"/"none" network) — the write schema locks the form to it, though the
+  // enum itself still lists every driver the read side can report (discovered rows)
+  const networkDriver = schema.body.components.schemas.DockerNetworkRequest.properties.driver;
+  assert.equal(networkDriver['x-form-readonly'], true);
+  assert.equal(networkDriver['x-form-default'], 'bridge');
+  assert.deepEqual(networkDriver.enum, ['bridge', 'host', 'none']);
+  assert.ok(schema.body.components.schemas.DockerNetworkRequest.properties.subnet);
 });
 
 test('host operation=refresh marks state refreshing; the agent clears resources via bulk DELETE', async () => {

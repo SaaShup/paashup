@@ -551,3 +551,20 @@ export const VOLUME_STATE_MIGRATION: PluginMigration = {
   sqlite: volumeStateSqlite,
   mariadb: volumeStateMariadb,
 };
+
+// The IP range (CIDR) requested for the network, ported from the agent's
+// feat/network-range: a user can set it on create so the agent passes it to Docker as
+// IPAM.Config[0].Subnet, and the agent reports back the Subnet Docker actually assigned
+// (from the engine's IPAM.Config) on every sync, whether or not one was requested.
+const networkSubnetSqlite = `
+ALTER TABLE plugin_docker_network ADD COLUMN subnet TEXT
+`;
+const networkSubnetMariadb = `
+ALTER TABLE plugin_docker_network ADD COLUMN subnet VARCHAR(64) NULL
+`;
+
+export const NETWORK_SUBNET_MIGRATION: PluginMigration = {
+  version: '0009_network_subnet',
+  sqlite: networkSubnetSqlite,
+  mariadb: networkSubnetMariadb,
+};

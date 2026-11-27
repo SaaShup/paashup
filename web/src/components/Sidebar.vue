@@ -42,68 +42,72 @@ const groupOpen = (section: string, label: string) => !!ui.expandedGroups[`${sec
 <template>
   <aside class="sidebar">
     <div class="nav-scroll">
-    <RouteLink
-      class="nav-item top"
-      :class="{ active: ui.view === 'dashboard' }"
-      :to="{ view: 'dashboard' }"
-    >
-      <span class="ico">▦</span> Dashboard
-    </RouteLink>
-    <RouteLink class="nav-item top" :class="{ active: ui.view === 'docs' }" :to="{ view: 'docs' }">
-      <span class="ico">📖</span> Docs
-    </RouteLink>
-    <RouteLink
-      class="nav-item top"
-      :class="{ active: ui.view === 'api-keys' }"
-      :to="{ view: 'api-keys' }"
-    >
-      <span class="ico">🔑</span> API keys
-    </RouteLink>
+      <RouteLink
+        class="nav-item top"
+        :class="{ active: ui.view === 'dashboard' }"
+        :to="{ view: 'dashboard' }"
+      >
+        <span class="ico">▦</span> Dashboard
+      </RouteLink>
+      <RouteLink
+        class="nav-item top"
+        :class="{ active: ui.view === 'docs' }"
+        :to="{ view: 'docs' }"
+      >
+        <span class="ico">📖</span> Docs
+      </RouteLink>
+      <RouteLink
+        class="nav-item top"
+        :class="{ active: ui.view === 'api-keys' }"
+        :to="{ view: 'api-keys' }"
+      >
+        <span class="ico">🔑</span> API keys
+      </RouteLink>
 
-    <div v-for="sec in ui.grouped" :key="sec.section" class="group">
-      <button class="group-head" @click="ui.toggleSection(sec.section)">
-        <span class="caret">{{ sectionOpen(sec.section) ? '▾' : '▸' }}</span>
-        {{ sectionLabel(sec.section) }}
-      </button>
+      <div v-for="sec in ui.grouped" :key="sec.section" class="group">
+        <button class="group-head" @click="ui.toggleSection(sec.section)">
+          <span class="caret">{{ sectionOpen(sec.section) ? '▾' : '▸' }}</span>
+          {{ sectionLabel(sec.section) }}
+        </button>
 
-      <div v-show="sectionOpen(sec.section)" class="links">
-        <template v-for="g in sec.groups" :key="g.label">
-          <!-- functional sub-group: collapsible header -->
-          <template v-if="g.label">
-            <button class="subhead" @click="ui.toggleGroup(sec.section, g.label)">
-              <span class="caret sm">{{ groupOpen(sec.section, g.label) ? '▾' : '▸' }}</span>
-              {{ g.label }}
-            </button>
-            <RouteLink
-              v-for="it in g.items"
-              v-show="groupOpen(sec.section, g.label)"
-              :key="itemKey(it)"
-              class="nav-item deep"
-              :class="{ active: pageActive(it) || resActive(it) }"
-              :to="itemRoute(it)"
-            >
-              <span v-if="isPage(it)" class="ico sm">{{ pageIcon(it) }}</span>
-              <span class="label">{{ it.label }}</span>
-              <span v-if="countOf(it) !== null" class="count">{{ countOf(it) }}</span>
-            </RouteLink>
+        <div v-show="sectionOpen(sec.section)" class="links">
+          <template v-for="g in sec.groups" :key="g.label">
+            <!-- functional sub-group: collapsible header -->
+            <template v-if="g.label">
+              <button class="subhead" @click="ui.toggleGroup(sec.section, g.label)">
+                <span class="caret sm">{{ groupOpen(sec.section, g.label) ? '▾' : '▸' }}</span>
+                {{ g.label }}
+              </button>
+              <RouteLink
+                v-for="it in g.items"
+                v-show="groupOpen(sec.section, g.label)"
+                :key="itemKey(it)"
+                class="nav-item deep"
+                :class="{ active: pageActive(it) || resActive(it) }"
+                :to="itemRoute(it)"
+              >
+                <span v-if="isPage(it)" class="ico sm">{{ pageIcon(it) }}</span>
+                <span class="label">{{ it.label }}</span>
+                <span v-if="countOf(it) !== null" class="count">{{ countOf(it) }}</span>
+              </RouteLink>
+            </template>
+            <!-- section without sub-groups: items directly -->
+            <template v-else>
+              <RouteLink
+                v-for="it in g.items"
+                :key="itemKey(it)"
+                class="nav-item"
+                :class="{ active: pageActive(it) || resActive(it) }"
+                :to="itemRoute(it)"
+              >
+                <span v-if="isPage(it)" class="ico sm">{{ pageIcon(it) }}</span>
+                <span class="label">{{ it.label }}</span>
+                <span v-if="countOf(it) !== null" class="count">{{ countOf(it) }}</span>
+              </RouteLink>
+            </template>
           </template>
-          <!-- section without sub-groups: items directly -->
-          <template v-else>
-            <RouteLink
-              v-for="it in g.items"
-              :key="itemKey(it)"
-              class="nav-item"
-              :class="{ active: pageActive(it) || resActive(it) }"
-              :to="itemRoute(it)"
-            >
-              <span v-if="isPage(it)" class="ico sm">{{ pageIcon(it) }}</span>
-              <span class="label">{{ it.label }}</span>
-              <span v-if="countOf(it) !== null" class="count">{{ countOf(it) }}</span>
-            </RouteLink>
-          </template>
-        </template>
+        </div>
       </div>
-    </div>
     </div>
 
     <div class="theme-switch" role="radiogroup" aria-label="Colour theme">
@@ -121,6 +125,16 @@ const groupOpen = (section: string, label: string) => !!ui.expandedGroups[`${sec
       >
         <span aria-hidden="true">{{ t.icon }}</span>
       </button>
+      <span class="spacer" />
+      <RouteLink
+        class="theme-btn config-btn"
+        :class="{ active: ui.view === 'config' }"
+        :to="{ view: 'config' }"
+        aria-label="Config"
+        title="Config"
+      >
+        <span aria-hidden="true">⚙️</span>
+      </RouteLink>
     </div>
   </aside>
 </template>
@@ -143,9 +157,17 @@ const groupOpen = (section: string, label: string) => !!ui.expandedGroups[`${sec
 .theme-switch {
   flex: 0 0 auto;
   display: flex;
+  align-items: center;
   gap: 8px;
   padding: 10px;
   border-top: 1px solid var(--border);
+}
+.theme-switch .spacer {
+  flex: 1;
+}
+.config-btn {
+  text-decoration: none;
+  color: inherit;
 }
 .theme-btn {
   display: flex;

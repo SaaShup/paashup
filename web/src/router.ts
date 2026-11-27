@@ -7,12 +7,13 @@ export type Route =
   | { view: 'dashboard' }
   | { view: 'docs' }
   | { view: 'api-keys' }
+  | { view: 'config' }
   | { view: 'list'; table: string; filters?: Record<string, string> }
   | { view: 'detail'; table: string; id: number }
   | { view: 'plugin-page'; plugin: string; label: string };
 
 /** First path segments that are views of their own, never table names. */
-const RESERVED = new Set(['docs', 'api-keys', 'plugin']);
+const RESERVED = new Set(['docs', 'api-keys', 'app-settings', 'plugin']);
 
 /** The route describing the store's current view, or null when it can't be expressed. */
 export function routeOf(ui: UiStore): Route | null {
@@ -20,6 +21,7 @@ export function routeOf(ui: UiStore): Route | null {
     case 'dashboard':
     case 'docs':
     case 'api-keys':
+    case 'config':
       return { view: ui.view };
     case 'plugin-page':
       return ui.pluginPage
@@ -45,6 +47,10 @@ export function routePath(route: Route): string {
       return '/docs';
     case 'api-keys':
       return '/api-keys';
+    case 'config':
+      // Deliberately not "/config": that's a plausible reverse-proxy mount prefix
+      // (PathPrefix('/config')), which would otherwise double up with BASE to "/config/config".
+      return '/app-settings';
     case 'plugin-page':
       return `/plugin/${encodeURIComponent(route.plugin)}/${encodeURIComponent(route.label)}`;
     case 'list': {
@@ -80,6 +86,8 @@ export function parseRoute(s: string, search = ''): Route | null {
       return { view: 'docs' };
     case 'api-keys':
       return { view: 'api-keys' };
+    case 'app-settings':
+      return { view: 'config' };
     case 'plugin': {
       const b = parts[2] ?? '';
       return a && b ? { view: 'plugin-page', plugin: a, label: b } : null;
@@ -111,10 +119,11 @@ export function applyRoute(ui: UiStore, route: Route | null): void {
     case 'api-keys':
       ui.openApiKeys();
       return;
+    case 'config':
+      ui.openConfig();
+      return;
     case 'plugin-page': {
-      const item = ui.pluginMenus.find(
-        (p) => p.plugin === route.plugin && p.label === route.label,
-      );
+      const item = ui.pluginMenus.find((p) => p.plugin === route.plugin && p.label === route.label);
       if (item) ui.openPluginPage(item);
       return;
     }

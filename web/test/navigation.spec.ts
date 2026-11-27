@@ -44,8 +44,8 @@ describe('sidebar', () => {
       .find((s) => s.section === section)
       ?.groups.flatMap((g) => g.items.map((i) => i.label)) ?? [];
 
-  it('keeps only Regions and Sites of DCIM', () => {
-    expect(labelsOf('dcim').sort()).toEqual(['Regions', 'Sites']);
+  it('shows all of DCIM by default (an admin can hide chapters via Settings)', () => {
+    expect(labelsOf('dcim').sort()).toEqual(['Devices', 'Racks', 'Regions', 'Sites']);
   });
 
   it('lists images and SSH keys under Virtualization, in their own groups', () => {

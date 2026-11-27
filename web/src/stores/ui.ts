@@ -6,12 +6,20 @@ import type { ChangeEvent } from '../websocket/events.js';
 import {
   subgroupsFor,
   sectionRank,
+  sectionLabel,
   effectiveSection,
   isHiddenSection,
   isHiddenResource,
   sectionOf,
   type SubGroupView,
 } from '../groups.js';
+
+/** The admin-configured sidebar menu layout (GET/PUT /api/settings/). */
+export interface MenuSettings {
+  hidden_sections: string[];
+  hidden_groups: string[];
+  section_order: string[];
+}
 
 /** Core tables the OpenStack sync writes to (their counts/lists must be refreshed after it). */
 export const OPENSTACK_SYNCED_TABLES = [
@@ -41,6 +49,19 @@ export function bulkChangedTables(e: ChangeEvent): string[] {
   return finished || e.event === 'deleted' ? OPENSTACK_SYNCED_TABLES : [];
 }
 
+/** A section's sort rank: its position in `order` if listed there, else its built-in
+ *  `sectionRank` pushed after every explicitly ordered section. */
+function rankOf(order: string[], section: string): number {
+  const i = order.indexOf(section);
+  return i === -1 ? order.length + sectionRank(section) : i;
+}
+
+/** Order two sections by the admin's custom `order` (falling back to the built-in order
+ *  for any section it doesn't mention), then alphabetically. */
+function compareSections(order: string[], a: string, b: string): number {
+  return rankOf(order, a) - rankOf(order, b) || a.localeCompare(b);
+}
+
 /** UI navigation state: which view is shown, the resource catalog, group collapse. */
 export const useUiStore = defineStore('ui', {
   state: () => ({
@@ -48,7 +69,8 @@ export const useUiStore = defineStore('ui', {
     /** Plugin-contributed sidebar entries (each opens a plugin page in a frame). */
     pluginMenus: [] as PluginMenuItem[],
     pluginPage: null as PluginMenuItem | null,
-    view: 'dashboard' as 'dashboard' | 'list' | 'detail' | 'docs' | 'plugin-page' | 'api-keys',
+    view: 'dashboard' as
+      'dashboard' | 'list' | 'detail' | 'docs' | 'plugin-page' | 'api-keys' | 'config',
     selected: null as Resource | null,
     /** Object id being shown in the read-only detail view (with `selected` as its resource). */
     detailId: null as number | null,
@@ -59,13 +81,20 @@ export const useUiStore = defineStore('ui', {
     expandedGroups: {} as Record<string, boolean>,
     /** Record count per table (sidebar item badges); kept live via the change-feed. */
     counts: {} as Record<string, number>,
+    /** Sidebar sections an admin has hidden app-wide (from GET /api/settings/). */
+    hiddenSections: [] as string[],
+    /** Sub-groups (within a section) hidden app-wide, keyed `${section}::${label}`. */
+    hiddenGroups: [] as string[],
+    /** Admin-chosen section display order (section ids); unlisted sections fall back
+     *  to the built-in order, after every listed one. */
+    sectionOrder: [] as string[],
   }),
   getters: {
-    /** Sections → functional sub-groups → resources. */
+    /** Sections → functional sub-groups → resources, honoring the admin's hide/reorder. */
     grouped(state): { section: string; groups: SubGroupView[] }[] {
       const by = new Map<string, Resource[]>();
       for (const r of state.resources) {
-        if (isHiddenSection(r.section) || isHiddenResource(r)) continue; // e.g. vpn, wireless, most of dcim
+        if (isHiddenSection(r.section) || isHiddenResource(r)) continue; // e.g. vpn, wireless
         // promote configured plugins (e.g. docker) to their own top-level section
         const sec = sectionOf(r);
         (by.get(sec) ?? by.set(sec, []).get(sec)!).push(r);
@@ -78,10 +107,37 @@ export const useUiStore = defineStore('ui', {
         if (!by.has(sec)) by.set(sec, []);
       }
       return [...by.entries()]
-        .sort((a, b) => sectionRank(a[0]) - sectionRank(b[0]) || a[0].localeCompare(b[0]))
+        .filter(([section]) => !state.hiddenSections.includes(section))
+        .sort((a, b) => compareSections(state.sectionOrder, a[0], b[0]))
         .map(([section, items]) => ({
           section,
-          groups: subgroupsFor(section, items, pagesBySection.get(section) ?? []),
+          groups: subgroupsFor(section, items, pagesBySection.get(section) ?? []).filter(
+            (g) => !g.label || !state.hiddenGroups.includes(`${section}::${g.label}`),
+          ),
+        }));
+    },
+    /** Every section (and its sub-groups) an admin could hide/reorder, for Config → Settings. */
+    allSections(state): { id: string; label: string; groups: string[] }[] {
+      const by = new Map<string, Resource[]>();
+      for (const r of state.resources) {
+        if (isHiddenSection(r.section) || isHiddenResource(r)) continue;
+        const sec = sectionOf(r);
+        (by.get(sec) ?? by.set(sec, []).get(sec)!).push(r);
+      }
+      const pagesBySection = new Map<string, typeof state.pluginMenus>();
+      for (const p of state.pluginMenus) {
+        const sec = effectiveSection('plugins', p.plugin);
+        (pagesBySection.get(sec) ?? pagesBySection.set(sec, []).get(sec)!).push(p);
+        if (!by.has(sec)) by.set(sec, []);
+      }
+      return [...by.keys()]
+        .sort((a, b) => compareSections(state.sectionOrder, a, b))
+        .map((id) => ({
+          id,
+          label: sectionLabel(id),
+          groups: subgroupsFor(id, by.get(id) ?? [], pagesBySection.get(id) ?? [])
+            .map((g) => g.label)
+            .filter(Boolean),
         }));
     },
   },
@@ -108,6 +164,31 @@ export const useUiStore = defineStore('ui', {
     openApiKeys() {
       this.view = 'api-keys';
       this.selected = null;
+    },
+    openConfig() {
+      this.view = 'config';
+      this.selected = null;
+    },
+    /** Load the admin-configured menu layout (silently ignored if it fails — e.g. not yet
+     *  authenticated); the sidebar just shows everything, in the built-in order, until
+     *  this resolves. */
+    async loadSettings() {
+      try {
+        const s = await api.get<MenuSettings>('/api/settings/');
+        this.hiddenSections = s.hidden_sections;
+        this.hiddenGroups = s.hidden_groups;
+        this.sectionOrder = s.section_order;
+      } catch {
+        /* keep defaults */
+      }
+    },
+    /** Persist the admin's chosen menu layout (requires a read-write token). Any field left
+     *  out is kept as it was on the server. */
+    async saveMenuSettings(patch: Partial<MenuSettings>) {
+      const s = await api.put<MenuSettings>('/api/settings/', patch as Record<string, unknown>);
+      this.hiddenSections = s.hidden_sections;
+      this.hiddenGroups = s.hidden_groups;
+      this.sectionOrder = s.section_order;
     },
     openResource(r: Resource) {
       this.view = 'list';

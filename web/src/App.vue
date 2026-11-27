@@ -25,6 +25,7 @@ import ObjectDetailView from './views/ObjectDetailView.vue';
 import { DETAIL_TABLES } from './views/objectDetail.js';
 import DocsView from './views/DocsView.vue';
 import ApiKeysView from './views/ApiKeysView.vue';
+import ConfigView from './views/ConfigView.vue';
 import PluginPageView from './views/PluginPageView.vue';
 import LoginView from './views/LoginView.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
@@ -85,6 +86,7 @@ onMounted(async () => {
     const resources = await loadResources();
     ui.setResources(resources);
     ui.setPluginMenus(await discoverPluginMenus(resources)); // plugin-contributed sidebar pages
+    await ui.loadSettings(); // admin-hidden sections
   } catch {
     /* backend not up yet */
   }
@@ -131,6 +133,7 @@ onMounted(async () => {
           <DashboardView v-if="ui.view === 'dashboard'" />
           <DocsView v-else-if="ui.view === 'docs'" />
           <ApiKeysView v-else-if="ui.view === 'api-keys'" />
+          <ConfigView v-else-if="ui.view === 'config'" />
           <PluginPageView v-else-if="ui.view === 'plugin-page'" />
           <HostDetailView
             v-else-if="ui.view === 'detail' && ui.selected?.table === 'plugin_docker_host'"

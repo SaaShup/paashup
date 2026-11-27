@@ -39,6 +39,8 @@ export const HIDDEN_COLUMNS: Record<string, string[]> = {
   // `created` of the three timestamp/derived columns stays.
   plugin_docker_network: ['id', 'name', 'NetworkID', 'network_settings', 'last_updated'],
   plugin_docker_container: ['id', 'name', 'ContainerID'],
+  // `display` is already a cluster's `name`, shown as the clickable name link.
+  virtualization_cluster: ['name'],
 };
 
 // Journal comments can be long operational messages: show them clipped with a toggle.

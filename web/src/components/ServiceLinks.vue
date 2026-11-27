@@ -11,6 +11,7 @@ interface ServiceLink {
   icon_url: string | null;
   auto_icon_url: string | null;
   pinned: boolean;
+  position: number;
 }
 
 const ENDPOINT = '/api/extras/service-links/';
@@ -86,7 +87,9 @@ async function load() {
     const page = await api.list<ServiceLink>(ENDPOINT, { limit: 100 });
     links.value = page.results
       .filter((l) => l.pinned)
-      .sort((a, b) => a.label.localeCompare(b.label));
+      // every link starts at position 0 until dragged, so fall back to alphabetical
+      // for ties — once an admin reorders them, `position` breaks the tie instead.
+      .sort((a, b) => a.position - b.position || a.label.localeCompare(b.label));
   } catch (e) {
     error.value = errText(e, 'Failed to load services.');
   } finally {
@@ -154,6 +157,56 @@ async function unpin(l: ServiceLink) {
   }
 }
 
+// Drag-and-drop reorder: drag a card's handle; `overIndex` tracks where it would land —
+// hovering a card's left half targets landing before it, its right half after it (so even
+// the last card offers an "after" position, with the trailing drop-end zone as backup).
+// Persisted immediately (like every other change here) via each moved link's `position`.
+const dragIndex = ref<number | null>(null);
+const overIndex = ref<number | null>(null);
+
+function onDragStart(i: number, e: DragEvent) {
+  dragIndex.value = i;
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(i)); // Firefox needs real data to drag
+  }
+}
+function onDragOverCard(i: number, e: DragEvent) {
+  if (dragIndex.value === null) return;
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  overIndex.value = e.clientX < rect.left + rect.width / 2 ? i : i + 1;
+}
+async function onDrop() {
+  const from = dragIndex.value;
+  const to = overIndex.value;
+  dragIndex.value = null;
+  overIndex.value = null;
+  if (from === null || to === null) return;
+  // `to` counts positions as if `from` were already removed from in front of it.
+  const insertAt = from < to ? to - 1 : to;
+  if (insertAt === from) return; // dropped back where it started
+  const moved = links.value[from]!;
+  links.value.splice(from, 1);
+  links.value.splice(insertAt, 0, moved);
+
+  // Renumber contiguously by new array index; only PATCH the links whose position
+  // actually moved (dragging within a long list otherwise touches every row after it).
+  const toSave = links.value.filter((l, idx) => l.position !== idx);
+  toSave.forEach((l) => {
+    l.position = links.value.indexOf(l);
+  });
+  try {
+    await Promise.all(toSave.map((l) => api.update(ENDPOINT, l.id, { position: l.position })));
+  } catch (e) {
+    error.value = errText(e, 'Could not save the new order.');
+    await load();
+  }
+}
+function onDragEnd() {
+  dragIndex.value = null;
+  overIndex.value = null;
+}
+
 async function addCustom() {
   addAttempted.value = true;
   if (!newLabel.value.trim() || !newUrl.value.trim()) return;
@@ -219,10 +272,16 @@ onMounted(async () => {
 
     <div class="link-grid">
       <div
-        v-for="l in links"
+        v-for="(l, i) in links"
         :key="l.id"
         class="link-card"
-        :class="{ editing: editingId === l.id }"
+        :class="{
+          editing: editingId === l.id,
+          dragging: dragIndex === i,
+          'drag-over': overIndex === i && dragIndex !== i,
+        }"
+        @dragover.prevent="onDragOverCard(i, $event)"
+        @drop.prevent="onDrop()"
       >
         <template v-if="editingId === l.id">
           <input
@@ -242,6 +301,15 @@ onMounted(async () => {
           </div>
         </template>
         <template v-else>
+          <span
+            class="drag-handle"
+            draggable="true"
+            aria-label="Drag to reorder"
+            title="Drag to reorder"
+            @dragstart="onDragStart(i, $event)"
+            @dragend="onDragEnd"
+            >⠿</span
+          >
           <a
             v-if="effectiveUrl(l)"
             :href="effectiveUrl(l)!"
@@ -256,9 +324,18 @@ onMounted(async () => {
               class="link-icon"
               @error="onIconError"
             />
+            <span v-else class="link-icon fallback" aria-hidden="true">🌐</span>
             <span class="link-label">{{ l.label }}</span>
           </a>
           <div v-else class="link-main muted">
+            <img
+              v-if="effectiveIcon(l)"
+              :src="effectiveIcon(l)!"
+              alt=""
+              class="link-icon"
+              @error="onIconError"
+            />
+            <span v-else class="link-icon fallback" aria-hidden="true">🌐</span>
             <span class="link-label">{{ l.label }}</span>
             <span class="no-url">no URL yet</span>
           </div>
@@ -268,6 +345,17 @@ onMounted(async () => {
           </div>
         </template>
       </div>
+      <!-- A generous backup target for "after the last card" — the last card's own right
+           half already does this too, but this forgives a slightly-off drop. Styled as an
+           invisible extra grid slot (not a full-width bar) so its indicator is the same
+           vertical line as every other card, not a line break to a new row. -->
+      <div
+        v-if="links.length"
+        class="link-card drop-end"
+        :class="{ 'drag-over': overIndex === links.length }"
+        @dragover.prevent="overIndex = links.length"
+        @drop.prevent="onDrop()"
+      ></div>
       <p v-if="!links.length && !loading" class="muted empty-state">
         No pinned services yet — add one with "+ Add link".
       </p>
@@ -358,6 +446,42 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
 }
+.link-card.dragging {
+  opacity: 0.4;
+}
+/* A line in the gap before the card, not a highlight on the card itself — the card's
+ * own border makes an inset outline hard to notice next to it. */
+.link-card.drag-over::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  left: -9px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--primary);
+}
+/* An invisible extra grid slot, same footprint as a real card, so dropping past the last
+ * one is easy to land — and its indicator (inherited above) is the same vertical line as
+ * every other card, not a line break to a new row. */
+.drop-end {
+  border-color: transparent;
+  box-shadow: none;
+  background: transparent;
+}
+.drag-handle {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  cursor: grab;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  user-select: none;
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
 .link-card.editing {
   grid-column: span 2;
   align-items: stretch;
@@ -404,6 +528,15 @@ onMounted(async () => {
   border-radius: 8px;
   flex: none;
   object-fit: contain;
+}
+/* Same box as a real icon, so a link without one still lines up with the rest. */
+.link-icon.fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  line-height: 1;
+  background: var(--surface);
 }
 .link-label {
   font-weight: 600;

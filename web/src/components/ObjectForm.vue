@@ -11,6 +11,12 @@ import {
   VOLUME_LIMIT_PRESETS,
   type LimitPreset,
 } from '../views/containerDetail.js';
+import {
+  SUBNET_PRESETS,
+  isValidSubnet,
+  subnetFamily,
+  type SubnetPreset,
+} from '../views/networkDetail.js';
 import { BASE } from '../base.js';
 
 const props = defineProps<{
@@ -89,6 +95,96 @@ function customHint(f: FieldDef): string {
   if (f.name === 'memory_limit') return 'In bytes — 0 or at least 6291456 (6 MiB).';
   if (f.name === 'max_size') return 'In MiB — 0 for unlimited, or a whole number of MiB.';
   return 'In CPU cores — 0 or a positive number (fractions allowed, e.g. 0.3).';
+}
+
+/**
+ * A network's `subnet`: a select of popular private ranges (filtered to those not already
+ * used by another network on the same host) plus "Other (IPv4)…" / "Other (IPv6)…", which
+ * reveal a free-entry text input shaped (placeholder, validation) to the chosen family —
+ * Docker itself doesn't care about the format beyond "a valid CIDR", so this is purely a
+ * form-side convenience/guardrail, not a server-enforced rule.
+ */
+const CUSTOM_V4 = '__custom_v4__';
+const CUSTOM_V6 = '__custom_v6__';
+const subnetMode = ref<Record<string, string>>({});
+function isSubnetField(f: FieldDef): boolean {
+  return table.value === 'plugin_docker_network' && f.name === 'subnet';
+}
+// `host`/`none` networks share the host's stack or have none at all — Docker never
+// assigns them an IPAM subnet, so asking for one is meaningless.
+const NO_SUBNET_DRIVERS = new Set(['host', 'none']);
+function shouldShowField(f: FieldDef): boolean {
+  return !isSubnetField(f) || !NO_SUBNET_DRIVERS.has(String(values.value.driver ?? ''));
+}
+function initSubnetMode(f: FieldDef) {
+  const v = String(values.value[f.name] ?? '').trim();
+  if (!v) {
+    subnetMode.value[f.name] = '';
+  } else if (SUBNET_PRESETS.some((p) => p.value === v)) {
+    subnetMode.value[f.name] = v;
+  } else {
+    subnetMode.value[f.name] = subnetFamily(v) === 6 ? CUSTOM_V6 : CUSTOM_V4;
+  }
+}
+function onSubnetModeChange(f: FieldDef, raw: string) {
+  subnetMode.value[f.name] = raw;
+  if (raw === CUSTOM_V4 || raw === CUSTOM_V6) {
+    const fam = raw === CUSTOM_V6 ? 6 : 4;
+    if (subnetFamily(String(values.value[f.name] ?? '')) !== fam) values.value[f.name] = '';
+  } else {
+    values.value[f.name] = raw; // '' ("let Docker choose") or a preset CIDR
+  }
+}
+function subnetCustomDisplay(f: FieldDef): string {
+  return String(values.value[f.name] ?? '');
+}
+function onSubnetCustomInput(f: FieldDef, raw: string) {
+  values.value[f.name] = raw;
+}
+/** This host's networks' subnets, excluding this one — both to grey out used presets and
+ *  to catch a free-typed duplicate before it round-trips just to bounce off Docker. */
+const siblingNetworkSubnets = ref<string[]>([]);
+async function loadSiblingNetworkSubnets(): Promise<void> {
+  if (table.value !== 'plugin_docker_network') return;
+  const host = values.value.host;
+  if (host === '' || host === null || host === undefined) {
+    siblingNetworkSubnets.value = [];
+    return;
+  }
+  const selfId = isEdit ? (props.object as { id?: number } | null)?.id : undefined;
+  const page = await api.list(props.endpoint, { host_id: String(host), limit: 500 });
+  siblingNetworkSubnets.value = page.results
+    .filter((o) => (o as { id?: number }).id !== selfId)
+    .map((o) => String((o as { subnet?: unknown }).subnet ?? '').trim())
+    .filter(Boolean);
+}
+function availableSubnetPresets(): SubnetPreset[] {
+  return SUBNET_PRESETS.filter((p) => !siblingNetworkSubnets.value.includes(p.value));
+}
+function subnetFormatError(f: FieldDef): string | null {
+  if (!isSubnetField(f)) return null;
+  const mode = subnetMode.value[f.name];
+  if (mode !== CUSTOM_V4 && mode !== CUSTOM_V6) return null; // a preset is always valid
+  const v = String(values.value[f.name] ?? '').trim();
+  if (!v) return null;
+  const fam = mode === CUSTOM_V6 ? 6 : 4;
+  if (!isValidSubnet(v) || subnetFamily(v) !== fam) {
+    return `Must be a valid IPv${fam} network address (CIDR) with no host bits set, e.g. ${fam === 6 ? 'fd00:1::/64' : '172.30.0.0/16'} — not ${fam === 6 ? 'fd00:1::1/64' : '172.30.0.1/16'}.`;
+  }
+  return null;
+}
+function liveSubnetFormatError(f: FieldDef): string | null {
+  return subnetFormatError(f);
+}
+function subnetDuplicateError(f: FieldDef): string | null {
+  if (!isSubnetField(f)) return null;
+  const v = String(values.value[f.name] ?? '').trim();
+  return v && siblingNetworkSubnets.value.includes(v)
+    ? 'This subnet is already used by another network on this host.'
+    : null;
+}
+function liveSubnetDuplicateError(f: FieldDef): string | null {
+  return subnetDuplicateError(f);
 }
 /**
  * Mirrors the agent's own `resourceLimits()` check (mapping.js) so a bad value is caught
@@ -267,6 +363,7 @@ onMounted(async () => {
   fields.value = await formFields(props.model);
   for (const f of fields.value) values.value[f.name] = initValue(f);
   for (const f of fields.value) if (limitPresets(f)) initLimit(f);
+  for (const f of fields.value) if (isSubnetField(f)) initSubnetMode(f);
   // load FK picker options (dependent ones filtered by their sibling's value)
   endpoints.value = await modelEndpoints();
   const doc = await getSchemaDoc();
@@ -299,6 +396,21 @@ onMounted(async () => {
   if (table.value === 'plugin_docker_volume') {
     await loadSiblingVolumeNames();
     watch(() => values.value.host, () => void loadSiblingVolumeNames());
+  }
+  if (table.value === 'plugin_docker_network') {
+    await loadSiblingNetworkSubnets();
+    watch(() => values.value.host, () => void loadSiblingNetworkSubnets());
+    // switching to a driver that can't have a subnet clears any value already entered,
+    // so a hidden, stale subnet never gets silently submitted
+    watch(
+      () => values.value.driver,
+      (driver) => {
+        if (NO_SUBNET_DRIVERS.has(String(driver ?? ''))) {
+          values.value.subnet = '';
+          subnetMode.value.subnet = '';
+        }
+      },
+    );
   }
 });
 
@@ -380,8 +492,10 @@ function buildPayload(): Obj | null {
         }
         break;
       default:
-        // already shown live, next to the field (liveNameDuplicateError) — just block the submit
+        // already shown live, next to the field (liveNameDuplicateError/liveSubnetFormatError/
+        // liveSubnetDuplicateError) — just block the submit
         if (nameDuplicateError(f, v)) return null;
+        if (subnetFormatError(f) || subnetDuplicateError(f)) return null;
         out[f.name] = v;
     }
   }
@@ -424,7 +538,7 @@ async function submit() {
       <h3>{{ isEdit ? 'Edit' : 'Add' }} {{ model }}</h3>
       <p v-if="general" class="general">{{ general }}</p>
       <form @submit.prevent="submit">
-        <div v-for="f in fields" :key="f.name" class="row">
+        <div v-for="f in fields" v-show="shouldShowField(f)" :key="f.name" class="row">
           <label :class="{ req: f.required }">{{ formLabel(table, f.name) }}</label>
           <div class="control">
             <span v-if="f.readOnly" class="readonly-value">{{ readOnlyText(f) }}</span>
@@ -526,6 +640,27 @@ async function submit() {
                 <span v-else class="hint">{{ customHint(f) }}</span>
               </template>
             </div>
+            <div v-else-if="isSubnetField(f)" class="limit">
+              <select
+                :value="subnetMode[f.name]"
+                @change="onSubnetModeChange(f, ($event.target as HTMLSelectElement).value)"
+              >
+                <option value="">Auto</option>
+                <option v-for="p in availableSubnetPresets()" :key="p.value" :value="p.value">
+                  {{ p.value }} (IPv{{ p.family }})
+                </option>
+                <option :value="CUSTOM_V4">Other (IPv4)…</option>
+                <option :value="CUSTOM_V6">Other (IPv6)…</option>
+              </select>
+              <input
+                v-if="subnetMode[f.name] === CUSTOM_V4 || subnetMode[f.name] === CUSTOM_V6"
+                type="text"
+                :class="{ invalid: liveSubnetFormatError(f) || liveSubnetDuplicateError(f) }"
+                :value="subnetCustomDisplay(f)"
+                @input="onSubnetCustomInput(f, ($event.target as HTMLInputElement).value)"
+                :placeholder="subnetMode[f.name] === CUSTOM_V6 ? 'fd00:1::/64' : '172.30.0.0/16'"
+              />
+            </div>
             <input
               v-else
               :type="f.kind === 'number' ? 'number' : isSecretField(f.name) ? 'password' : 'text'"
@@ -534,7 +669,15 @@ async function submit() {
             />
             <span v-if="liveNameDuplicateError(f)" class="err">{{ liveNameDuplicateError(f) }}</span>
             <span v-else-if="liveSizeShrinkError(f)" class="err">{{ liveSizeShrinkError(f) }}</span>
+            <span v-else-if="liveSubnetFormatError(f)" class="err">{{ liveSubnetFormatError(f) }}</span>
+            <span v-else-if="liveSubnetDuplicateError(f)" class="err">{{ liveSubnetDuplicateError(f) }}</span>
             <span v-else-if="fieldErr(f.name)" class="err">{{ fieldErr(f.name) }}</span>
+            <span
+              v-else-if="isSubnetField(f) && (subnetMode[f.name] === CUSTOM_V4 || subnetMode[f.name] === CUSTOM_V6)"
+              class="hint"
+            >
+              {{ subnetMode[f.name] === CUSTOM_V6 ? 'An IPv6 CIDR, e.g. fd00:1::/64.' : 'An IPv4 CIDR, e.g. 172.30.0.0/16.' }}
+            </span>
           </div>
         </div>
         <div v-if="isScript" class="row">

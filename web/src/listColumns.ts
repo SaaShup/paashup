@@ -18,7 +18,7 @@ export const PREFERRED_COLUMNS: Record<string, string[]> = {
   extras_journalentry: ['created', 'kind', 'assigned_object_type', 'assigned_object', 'comments'],
   plugin_docker_image: ['version', 'size', 'used_by'],
   plugin_docker_volume: ['driver', 'max_size', 'used_by'],
-  plugin_docker_network: ['driver', 'used_by'],
+  plugin_docker_network: ['driver', 'subnet', 'used_by'],
 };
 
 // Columns a list leaves out: an init script is listed by name, description and date only.

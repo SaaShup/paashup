@@ -486,6 +486,12 @@ const networkMeta: TableMeta = {
       required: false,
       ...NETWORK_DRIVER,
       plainValue: true,
+      // `host`/`none` are Docker's built-in singleton networks — discovered, never created
+      // (`docker network create -d host/none` always fails: "only one instance ... is
+      // allowed"). The enum stays for those read-only discovered rows; the create/edit form
+      // just locks the field to the one driver you can actually create: bridge.
+      formReadOnly: true,
+      formDefault: 'bridge',
     },
     {
       name: 'NetworkID',
@@ -496,6 +502,15 @@ const networkMeta: TableMeta = {
       required: false,
       maxLength: 128,
       formReadOnly: true,
+    },
+    {
+      name: 'subnet',
+      column: 'subnet',
+      tsKind: 'string',
+      nullable: true,
+      writable: true,
+      required: false,
+      maxLength: 64,
     },
     {
       name: 'state',
@@ -792,7 +807,7 @@ export const BRIEF_FIELDS: Record<string, string[]> = {
   ],
   [T.image]: ['id', 'url', 'display', 'name', 'version', 'size', 'ImageID', 'Digest'],
   [T.volume]: ['id', 'url', 'display', 'name', 'max_size', 'driver', 'state'],
-  [T.network]: ['id', 'url', 'display', 'name', 'driver', 'NetworkID', 'state'],
+  [T.network]: ['id', 'url', 'display', 'name', 'driver', 'NetworkID', 'subnet', 'state'],
   [T.container]: [
     'id',
     'url',
